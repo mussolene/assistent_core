@@ -13,6 +13,50 @@ from assistant.models.gateway import ModelGateway
 
 logger = logging.getLogger(__name__)
 
+
+def _format_model_error_for_user(exc: Exception) -> str:
+    """Превращает исключение от модели в короткое сообщение для пользователя (без HTML и сырых тел ответов)."""
+    err = str(exc).strip().lower()
+    raw = str(exc).strip()
+    # Сырой HTML или длинный ответ — не показывать пользователю
+    if "<html" in err or "<!doctype" in err or (raw.startswith("<") and ">" in raw):
+        if "403" in err or "forbidden" in err:
+            return (
+                "Сервер модели вернул 403 (доступ запрещён). "
+                "Проверьте API ключ, URL и права доступа к сервису модели."
+            )
+        if "404" in err or "not found" in err:
+            return "Сервер модели не найден (404). Проверьте OPENAI_BASE_URL в настройках."
+        if "500" in err or "502" in err or "503" in err:
+            return "Сервер модели временно недоступен (ошибка 5xx). Попробуйте позже."
+        return "Сервер модели вернул ошибку. Проверьте настройки и доступность сервиса."
+    # Обычный текст ошибки
+    if "403" in err or "forbidden" in err:
+        return (
+            "Сервер модели вернул 403 (доступ запрещён). "
+            "Проверьте API ключ, URL и права доступа к сервису модели."
+        )
+    if "404" in err or "not found" in err:
+        return "Сервер модели не найден (404). Проверьте OPENAI_BASE_URL в настройках."
+    if "500" in err or "502" in err or "503" in err or "internal server error" in err or "bad gateway" in err:
+        return "Сервер модели временно недоступен (ошибка 5xx). Попробуйте позже."
+    if "connection" in err or "connect" in err or "refused" in err:
+        return (
+            "Модель недоступна. Убедитесь, что Ollama запущена на хосте и в .env задан "
+            "OPENAI_BASE_URL (например http://host.docker.internal:11434/v1 для Docker)."
+        )
+    if "400" in err or "bad request" in err:
+        return (
+            "Ошибка 400 от сервера модели. Проверьте в настройках: имя модели совпадает с загруженной "
+            "(например в LM Studio), URL заканчивается на /v1 для OpenAI-совместимого API или включён «LM Studio native»."
+        )
+    # Короткая ошибка — можно показать первую строку (без переносов), но не длиннее ~120 символов
+    one_line = raw.replace("\n", " ").replace("\r", " ").strip()
+    if len(one_line) > 120:
+        one_line = one_line[:117] + "..."
+    return f"Ошибка модели: {one_line}" if one_line else "Ошибка модели. Проверьте настройки и логи."
+
+
 SYSTEM_PROMPT = """You are a helpful personal assistant. You can use tools when needed.
 When you need to read a file, run a command, or search memory, respond with a JSON block like:
 {"tool_calls": [{"name": "filesystem", "params": {"action": "read", "path": "/path/to/file"}}]}
@@ -96,19 +140,7 @@ class AssistantAgent(BaseAgent):
             logger.exception("model generate failed: %s", e)
             if stream_cb:
                 await stream_cb("", done=True)
-            err_msg = str(e).lower()
-            if "connection" in err_msg or "connect" in err_msg or "refused" in err_msg:
-                user_msg = (
-                    "Модель недоступна. Убедитесь, что Ollama запущена на хосте и в .env задан "
-                    "OPENAI_BASE_URL (например http://host.docker.internal:11434/v1 для Docker)."
-                )
-            elif "400" in err_msg or "bad request" in err_msg:
-                user_msg = (
-                    "Ошибка 400 от сервера модели. Проверьте в настройках: имя модели совпадает с загруженной "
-                    "(например в LM Studio), URL заканчивается на /v1 для OpenAI-совместимого API или включён «LM Studio native»."
-                )
-            else:
-                user_msg = f"Ошибка модели: {e}"
+            user_msg = _format_model_error_for_user(e)
             return AgentResult(success=True, output_text=user_msg, error=str(e))
         if context.text and not context.tool_results:
             await self._memory.append_message(context.user_id, "assistant", text)

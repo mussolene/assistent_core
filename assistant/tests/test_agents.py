@@ -4,11 +4,42 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from assistant.agents.assistant import AssistantAgent
+from assistant.agents.assistant import AssistantAgent, _format_model_error_for_user
 from assistant.agents.base import TaskContext
 from assistant.agents.tool_agent import ToolAgent
 from assistant.skills.registry import SkillRegistry
 from assistant.skills.runner import SandboxRunner
+
+
+def test_format_model_error_403_html():
+    """HTML 403 ответ подменяется на короткое сообщение."""
+    exc = Exception(
+        "<html>\n<head><title>403 Forbidden</title></head>\n"
+        "<body><center><h1>403 Forbidden</h1></center></body>\n</html>"
+    )
+    msg = _format_model_error_for_user(exc)
+    assert "403" in msg
+    assert "доступ запрещён" in msg or "forbidden" in msg.lower()
+    assert "<html" not in msg and "<body" not in msg
+
+
+def test_format_model_error_403_plain():
+    exc = Exception("403 Forbidden")
+    msg = _format_model_error_for_user(exc)
+    assert "403" in msg and "доступ" in msg
+
+
+def test_format_model_error_404_and_5xx():
+    assert "404" in _format_model_error_for_user(Exception("404 Not Found"))
+    assert "5xx" in _format_model_error_for_user(Exception("502 Bad Gateway"))
+    assert "5xx" in _format_model_error_for_user(Exception("503 Service Unavailable"))
+
+
+def test_format_model_error_long_text_truncated():
+    long_msg = "Error: " + "x" * 200
+    msg = _format_model_error_for_user(Exception(long_msg))
+    assert msg.startswith("Ошибка модели:")
+    assert len(msg) <= 140
 
 
 def test_assistant_agent_init_requires_exactly_one():
