@@ -74,9 +74,4 @@ jobs:
         run: ruff check assistant/
 
       - name: Check imports
-        run: python -c "
-          from assistant.config import get_config
-          from assistant.core.events import IncomingMessage
-          from assistant.security.command_whitelist import CommandWhitelist
-          from assistant.channels.telegram import sanitize_text
-          print('Imports OK')"
+        run: python -c "from assistant.config import get_config; from assistant.core.events import IncomingMessage; from assistant.security.command_whitelist import CommandWhitelist; from assistant.channels.telegram import sanitize_text; print('Imports OK')"
