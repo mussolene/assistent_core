@@ -1,0 +1,101 @@
+name: Build and Push Docker images
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (core)
+        id: meta-core
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/assistant-core
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=
+
+      - name: Build and push assistant-core
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: assistant/docker/Dockerfile.core
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-core.outputs.tags }}
+          labels: ${{ steps.meta-core.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract metadata (telegram-adapter)
+        id: meta-telegram
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/telegram-adapter
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=
+
+      - name: Build and push telegram-adapter
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: assistant/docker/Dockerfile.telegram
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-telegram.outputs.tags }}
+          labels: ${{ steps.meta-telegram.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract metadata (dashboard)
+        id: meta-dashboard
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/dashboard
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=
+
+      - name: Build and push dashboard
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: assistant/docker/Dockerfile.dashboard
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-dashboard.outputs.tags }}
+          labels: ${{ steps.meta-dashboard.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
