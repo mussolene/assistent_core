@@ -40,6 +40,7 @@ BOT_COMMANDS = [
     {"command": "reasoning", "description": "Включить режим рассуждений"},
     {"command": "settings", "description": "Ссылка на настройки"},
     {"command": "channels", "description": "Ссылка на дашборд (каналы)"},
+    {"command": "dev", "description": "Обратная связь для агента (MCP)"},
 ]
 
 
@@ -378,6 +379,44 @@ async def run_telegram_adapter() -> None:
                                 )
                         except Exception as e:
                             logger.debug("sendMessage settings/channels: %s", e)
+                        continue
+                    # Ответ на запрос подтверждения от MCP/агента
+                    try:
+                        from assistant.core.notify import consume_pending_confirmation
+                        if consume_pending_confirmation(chat_id, text):
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={"chat_id": chat_id, "text": "Принято."},
+                                    timeout=5.0,
+                                )
+                            continue
+                    except Exception as e:
+                        logger.debug("consume_pending_confirmation: %s", e)
+                    # /dev <текст> — обратная связь для агента (MCP)
+                    if text == "/dev":
+                        try:
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={"chat_id": chat_id, "text": "Напишите: /dev ваш текст или пожелания для агента."},
+                                    timeout=5.0,
+                                )
+                        except Exception:
+                            pass
+                        continue
+                    if text.startswith("/dev "):
+                        try:
+                            from assistant.core.notify import push_dev_feedback
+                            push_dev_feedback(chat_id, text[5:].strip())
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={"chat_id": chat_id, "text": "Передано агенту."},
+                                    timeout=5.0,
+                                )
+                        except Exception as e:
+                            logger.debug("push_dev_feedback: %s", e)
                         continue
                     reasoning = "/reasoning" in text or "reasoning" in text.lower()
                     if reasoning:

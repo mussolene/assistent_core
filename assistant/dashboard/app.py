@@ -377,6 +377,11 @@ _TELEGRAM_BODY = """
     <p class="hint">Пусто — разрешить всех (только для разработки).</p>
   </div>
   <div class="card">
+    <label for="dev_chat_id">Chat ID для MCP/агента (уведомления, confirm)</label>
+    <input id="dev_chat_id" name="telegram_dev_chat_id" type="text" value="{{ config.get('TELEGRAM_DEV_CHAT_ID', '') }}" placeholder="123456789">
+    <p class="hint">Куда слать сообщения от MCP-сервера (notify, ask_confirmation). Для личных чатов = User ID. Пусто — первый из разрешённых.</p>
+  </div>
+  <div class="card">
     <label>Быстрая привязка</label>
     <p class="hint">Сгенерируйте код. Отправьте боту в Telegram: /start КОД или /pair КОД — пользователь будет добавлен в разрешённые без глобального режима pairing.</p>
     <button type="button" class="btn btn-secondary" onclick="genPairingCode()">Сгенерировать код</button>
@@ -443,6 +448,7 @@ def save_telegram():
     set_config_in_redis_sync(redis_url, "TELEGRAM_BOT_TOKEN", token)
     set_config_in_redis_sync(redis_url, "TELEGRAM_ALLOWED_USER_IDS", user_ids if user_ids else [])
     set_config_in_redis_sync(redis_url, PAIRING_MODE_KEY, "true" if pairing else "false")
+    set_config_in_redis_sync(redis_url, "TELEGRAM_DEV_CHAT_ID", (request.form.get("telegram_dev_chat_id") or "").strip())
     flash("Сохранено. Настройки применяются автоматически.", "success")
     return redirect(url_for("index"))
 

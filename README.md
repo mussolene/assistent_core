@@ -14,6 +14,7 @@
 - **Навыки (skills)** — песочница для файловой системы, whitelist для shell, **git** (clone, read, commit, push, MR/PR через GitLab/GitHub API), vector RAG, заглушка MCP — см. [docs/GIT_SKILL.md](docs/GIT_SKILL.md)
 - **Безопасность** — контейнеры без root, лимиты ресурсов, whitelist команд, аудит, whitelist пользователей Telegram, rate limiting
 - **Web Dashboard** — настройка Telegram (токен, pairing), проверка подключения к модели, MCP-скиллы, мониторинг Redis
+- **MCP-сервер для агента** — проект можно подключить в Cursor как MCP: уведомления в Telegram, запрос confirm/reject, обратная связь через `/dev` ([docs/MCP_DEV_SERVER.md](docs/MCP_DEV_SERVER.md))
 
 ## Быстрый старт
 
