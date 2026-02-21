@@ -28,14 +28,17 @@
 ```bash
 git clone https://github.com/YOUR_USERNAME/assistent_core.git
 cd assistent_core
+# Включите BuildKit для кэша pip (меньше скачиваний при пересборке)
+export DOCKER_BUILDKIT=1
 docker compose up --build
 ```
 
 1. Откройте **http://localhost:8080** — Web Dashboard (вкладки: Telegram, Модель, MCP, Мониторинг).
-2. В разделе Telegram введите токен бота; можно включить **Pairing** и отправить боту в Telegram команду `/start` — ваш ID добавится в разрешённые. Либо укажите User ID вручную и нажмите «Сохранить».
-3. В разделе Модель укажите URL API и имя модели, при необходимости нажмите «Проверить подключение». Сохраните и перезапустите: `docker compose restart assistant-core`.
-4. Перезапустите Telegram-адаптер при смене токена: `docker compose restart telegram-adapter`.
-5. Запустите Ollama на хосте и при необходимости создайте `.env` с `OPENAI_BASE_URL=http://host.docker.internal:11434/v1` (для Docker на Mac/Windows хост доступен по этому адресу). Если бот отвечает «Модель недоступна» — проверьте, что Ollama запущена и URL доступен из контейнера.
+2. В разделе Telegram введите токен бота; можно включить **Pairing** или сгенерировать код быстрой привязки. Сохраните.
+3. В разделе Модель укажите URL API и имя модели, нажмите «Проверить подключение» и «Сохранить». Настройки модели применяются автоматически, перезапуск не нужен.
+4. Запустите Ollama (или LM Studio) на хосте; при необходимости задайте в `.env` переменную `OPENAI_BASE_URL` (для Docker на Mac/Windows часто `http://host.docker.internal:11434/v1`). Если бот отвечает «Модель недоступна» — проверьте доступность URL из контейнера.
+
+**Кэш при пересборке:** при `DOCKER_BUILDKIT=1` образы кэшируют слой установки зависимостей (`docker/requirements.txt`). После изменения только кода пересборка почти не скачивает пакеты. Файл `.dockerignore` уменьшает контекст сборки (исключены venv, .git, тесты и т.д.).
 
 Подробная настройка и запуск без Docker — в [assistant/README.md](assistant/README.md).
 

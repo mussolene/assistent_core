@@ -48,24 +48,30 @@ async def run_core(config: "assistant.config.loader.Config") -> None:
     await memory.connect()
 
     from assistant.dashboard.config_store import get_config_from_redis
-    redis_cfg = await get_config_from_redis(config.redis.url)
-    openai_base_url = (redis_cfg.get("OPENAI_BASE_URL") or "").strip() or config.model.openai_base_url
-    model_name = (redis_cfg.get("MODEL_NAME") or "").strip() or config.model.name
-    fallback_name = (redis_cfg.get("MODEL_FALLBACK_NAME") or "").strip() or config.model.fallback_name
-    cloud_fallback = (redis_cfg.get("CLOUD_FALLBACK_ENABLED") or "").lower() in ("true", "1", "yes")
-    openai_api_key = (redis_cfg.get("OPENAI_API_KEY") or "").strip() or config.model.openai_api_key or "ollama"
-    use_lm_studio_native = (redis_cfg.get("LM_STUDIO_NATIVE") or "").lower() in ("true", "1", "yes")
 
-    model_gateway = ModelGateway(
-        provider=config.model.provider,
-        model_name=model_name,
-        fallback_name=fallback_name or None,
-        cloud_fallback_enabled=cloud_fallback,
-        reasoning_suffix=config.model.reasoning_model_suffix,
-        openai_base_url=openai_base_url,
-        openai_api_key=openai_api_key,
-        use_lm_studio_native=use_lm_studio_native,
-    )
+    async def get_gateway() -> ModelGateway:
+        """Build gateway from current Redis config. Settings apply without restart."""
+        redis_cfg = await get_config_from_redis(config.redis.url)
+        openai_base_url = (redis_cfg.get("OPENAI_BASE_URL") or "").strip() or config.model.openai_base_url
+        model_name = (redis_cfg.get("MODEL_NAME") or "").strip() or config.model.name
+        fallback_name = (redis_cfg.get("MODEL_FALLBACK_NAME") or "").strip() or config.model.fallback_name
+        cloud_fallback = (redis_cfg.get("CLOUD_FALLBACK_ENABLED") or "").lower() in ("true", "1", "yes")
+        openai_api_key = (redis_cfg.get("OPENAI_API_KEY") or "").strip() or config.model.openai_api_key or "ollama"
+        use_lm_studio_native = (redis_cfg.get("LM_STUDIO_NATIVE") or "").lower() in ("true", "1", "yes")
+        # OpenAI-compat base URL must end with /v1 for chat/completions path
+        if not use_lm_studio_native and openai_base_url and not openai_base_url.rstrip("/").endswith("/v1"):
+            openai_base_url = openai_base_url.rstrip("/") + "/v1"
+        return ModelGateway(
+            provider=config.model.provider,
+            model_name=model_name,
+            fallback_name=fallback_name or None,
+            cloud_fallback_enabled=cloud_fallback,
+            reasoning_suffix=config.model.reasoning_model_suffix,
+            openai_base_url=openai_base_url,
+            openai_api_key=openai_api_key,
+            use_lm_studio_native=use_lm_studio_native,
+        )
+
     skills = SkillRegistry()
     skills.register(FilesystemSkill(workspace_dir=config.sandbox.workspace_dir))
     skills.register(ShellSkill(
@@ -85,7 +91,7 @@ async def run_core(config: "assistant.config.loader.Config") -> None:
     skills.register(McpAdapterSkill())
     runner = SandboxRunner()
     agent_registry = AgentRegistry()
-    agent_registry.register("assistant", AssistantAgent(model_gateway, memory))
+    agent_registry.register("assistant", AssistantAgent(gateway_factory=get_gateway, memory=memory))
     agent_registry.register("tool", ToolAgent(skills, runner, memory))
     orchestrator = Orchestrator(config=config, bus=bus)
     orchestrator.set_agent_registry(agent_registry)

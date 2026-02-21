@@ -1,0 +1,40 @@
+# Git and env
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv
+.venv
+env
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+.eggs
+dist
+build
+
+# IDE and OS
+.idea
+.vscode
+*.swp
+.DS_Store
+
+# Docs and tests (not needed in runtime images)
+docs/
+*.md
+!assistant/README.md
+
+# CI
+.github
+
+# Optional: exclude tests to shrink context (images still work)
+# assistant/tests

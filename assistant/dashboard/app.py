@@ -427,7 +427,7 @@ def save_telegram():
     set_config_in_redis_sync(redis_url, "TELEGRAM_BOT_TOKEN", token)
     set_config_in_redis_sync(redis_url, "TELEGRAM_ALLOWED_USER_IDS", user_ids if user_ids else [])
     set_config_in_redis_sync(redis_url, PAIRING_MODE_KEY, "true" if pairing else "false")
-    flash("Сохранено. При смене токена перезапустите telegram-adapter.", "success")
+    flash("Сохранено. Настройки применяются автоматически.", "success")
     return redirect(url_for("index"))
 
 
@@ -502,7 +502,7 @@ def save_model():
     set_config_in_redis_sync(redis_url, "CLOUD_FALLBACK_ENABLED", "true" if request.form.get("cloud_fallback_enabled") == "1" else "false")
     set_config_in_redis_sync(redis_url, "LM_STUDIO_NATIVE", "true" if request.form.get("lm_studio_native") == "1" else "false")
     set_config_in_redis_sync(redis_url, "OPENAI_API_KEY", (request.form.get("openai_api_key") or "").strip())
-    flash("Сохранено. Перезапустите assistant-core при смене модели.", "success")
+    flash("Сохранено. Настройки модели применяются автоматически.", "success")
     return redirect(url_for("model"))
 
 
@@ -639,6 +639,16 @@ def _model_check_hint(err_text: str) -> str:
     return err_text
 
 
+def _normalize_base_url(base_url: str, for_lm_studio_native: bool) -> str:
+    """OpenAI-compat base URL must end with /v1. LM Studio native uses root (no /v1)."""
+    u = (base_url or "").strip().rstrip("/") or "http://localhost:11434"
+    if for_lm_studio_native:
+        return u[:-3] if u.endswith("/v1") else u
+    if not u.endswith("/v1"):
+        u = u + "/v1"
+    return u
+
+
 @app.route("/api/test-model", methods=["POST"])
 def api_test_model():
     redis_url = get_redis_url()
@@ -646,12 +656,26 @@ def api_test_model():
     base_url = (cfg.get("OPENAI_BASE_URL") or "").strip() or "http://localhost:11434/v1"
     model_name = (cfg.get("MODEL_NAME") or "").strip() or "llama3.2"
     api_key = (cfg.get("OPENAI_API_KEY") or "").strip() or "ollama"
+    use_lm_studio_native = (cfg.get("LM_STUDIO_NATIVE") or "").lower() in ("true", "1", "yes")
 
     async def _check():
+        if use_lm_studio_native:
+            from assistant.models import lm_studio
+            try:
+                out = await lm_studio.generate_lm_studio(
+                    base_url or "http://localhost:1234",
+                    model_name,
+                    "Hi",
+                    api_key=api_key,
+                )
+                return True if (out and out.strip()) else "Empty response"
+            except Exception as e:
+                return _model_check_hint(str(e))
+        normalized_base = _normalize_base_url(base_url, for_lm_studio_native=False)
         from openai import AsyncOpenAI
         http_client = httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=8.0))
         client = AsyncOpenAI(
-            base_url=base_url,
+            base_url=normalized_base,
             api_key=api_key,
             http_client=http_client,
         )

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from assistant.agents.base import AgentResult, BaseAgent, TaskContext
 from assistant.memory.manager import MemoryManager
@@ -21,15 +21,25 @@ Keep answers concise. Do not make up file contents or command output."""
 
 
 class AssistantAgent(BaseAgent):
-    """Calls model with context; returns text or tool_calls."""
+    """Calls model with context; returns text or tool_calls. Gateway can be fixed or from factory (config applied on each request)."""
 
     def __init__(
         self,
-        model_gateway: ModelGateway,
-        memory: MemoryManager,
+        model_gateway: ModelGateway | None = None,
+        memory: MemoryManager | None = None,
+        gateway_factory: Callable[[], Awaitable[ModelGateway]] | None = None,
     ) -> None:
         self._model = model_gateway
         self._memory = memory
+        self._gateway_factory = gateway_factory
+        if (model_gateway is None and gateway_factory is None) or (model_gateway is not None and gateway_factory is not None):
+            raise ValueError("Provide exactly one of model_gateway or gateway_factory")
+
+    async def _get_gateway(self) -> ModelGateway:
+        if self._gateway_factory:
+            return await self._gateway_factory()
+        assert self._model is not None
+        return self._model
 
     async def handle(self, context: TaskContext) -> AgentResult:
         messages = await self._memory.get_context_for_user(
@@ -52,9 +62,10 @@ class AssistantAgent(BaseAgent):
         prompt_parts.append(f"User: {user_content}")
         full_prompt = "\n\n".join(prompt_parts)
         stream_cb = context.metadata.get("stream_callback")
+        model = await self._get_gateway()
         try:
             if stream_cb:
-                stream = self._model.generate(
+                stream = model.generate(
                     full_prompt,
                     stream=True,
                     reasoning=context.reasoning_requested,
@@ -68,14 +79,14 @@ class AssistantAgent(BaseAgent):
                     await stream_cb("", done=True)
                     text = full
                 else:
-                    text = await self._model.generate(
+                    text = await model.generate(
                         full_prompt,
                         stream=False,
                         reasoning=context.reasoning_requested,
                         system=SYSTEM_PROMPT,
                     )
             else:
-                text = await self._model.generate(
+                text = await model.generate(
                     full_prompt,
                     stream=False,
                     reasoning=context.reasoning_requested,
@@ -90,6 +101,11 @@ class AssistantAgent(BaseAgent):
                 user_msg = (
                     "Модель недоступна. Убедитесь, что Ollama запущена на хосте и в .env задан "
                     "OPENAI_BASE_URL (например http://host.docker.internal:11434/v1 для Docker)."
+                )
+            elif "400" in err_msg or "bad request" in err_msg:
+                user_msg = (
+                    "Ошибка 400 от сервера модели. Проверьте в настройках: имя модели совпадает с загруженной "
+                    "(например в LM Studio), URL заканчивается на /v1 для OpenAI-совместимого API или включён «LM Studio native»."
                 )
             else:
                 user_msg = f"Ошибка модели: {e}"

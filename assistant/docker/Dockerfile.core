@@ -1,12 +1,21 @@
+# syntax=docker/dockerfile:1
+# Use BuildKit for cache mounts: DOCKER_BUILDKIT=1 docker compose build
 FROM python:3.11-slim
 
 RUN groupadd -r -g 1000 app && useradd -r -u 1000 -g app -m -d /app app
 WORKDIR /app
 ENV HOME=/app
 
-COPY pyproject.toml ./
-COPY assistant ./assistant
-RUN pip install --no-cache-dir -e .
+# 1) Install deps from requirements.txt — layer cached until requirements change
+COPY docker/requirements.txt /app/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r /app/requirements.txt
+
+# 2) Copy app and install package only (--no-deps); re-runs only when code changes
+COPY pyproject.toml /app/
+COPY assistant /app/assistant
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -e . --no-deps
 
 USER app
 ENV PYTHONUNBUFFERED=1
