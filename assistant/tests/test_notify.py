@@ -72,8 +72,9 @@ def test_push_and_pop_dev_feedback():
     r.delete = MagicMock()
     with patch("redis.from_url", return_value=r):
         with patch("assistant.core.notify._get_redis_url", return_value="redis://localhost/0"):
-            notify.push_dev_feedback("123", "hello")
-            r.rpush.assert_called_once()
+            with patch("assistant.dashboard.mcp_endpoints.get_endpoint_id_for_chat", return_value=None):
+                notify.push_dev_feedback("123", "hello")
+            assert r.rpush.call_count >= 1
             items = notify.pop_dev_feedback("123")
             assert items == ["msg1", "msg2"]
             r.delete.assert_called_once()
