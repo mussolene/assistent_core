@@ -12,7 +12,7 @@ from typing import Optional, Set
 import httpx
 
 from assistant.core.bus import EventBus
-from assistant.core.events import IncomingMessage, OutgoingReply, StreamToken
+from assistant.core.events import ChannelKind, IncomingMessage, OutgoingReply, StreamToken
 from assistant.core.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -212,6 +212,8 @@ async def run_telegram_adapter() -> None:
     typing_task: asyncio.Task | None = None
 
     async def on_stream(payload: StreamToken) -> None:
+        if payload.channel != ChannelKind.TELEGRAM:
+            return
         async with pending_lock:
             pending_chats.discard(payload.chat_id)
         async with stream_lock:
@@ -241,6 +243,8 @@ async def run_telegram_adapter() -> None:
             await _flush_stream(payload.task_id, force=False)
 
     async def on_outgoing(payload: OutgoingReply) -> None:
+        if payload.channel != ChannelKind.TELEGRAM:
+            return
         async with pending_lock:
             pending_chats.discard(payload.chat_id)
         was_streaming = False

@@ -9,7 +9,13 @@ from pydantic import BaseModel, Field
 
 
 class ChannelKind(str, Enum):
+    """Поддерживаемые каналы связи. Каждый адаптер подписывается на свои события по channel."""
+
     TELEGRAM = "telegram"
+    SLACK = "slack"
+    WEB = "web"  # чат в браузере (дашборд/фронт)
+    EMAIL = "email"
+    # iMessage/WhatsApp — нет публичного API; возможны мосты (см. docs/CHANNELS_AND_FRONTEND.md)
 
 
 class IncomingMessage(BaseModel):
@@ -49,7 +55,7 @@ class AgentResult(BaseModel):
 
 
 class OutgoingReply(BaseModel):
-    """Send a reply back to the channel (e.g. Telegram)."""
+    """Send a reply back to the channel. Adapters filter by channel."""
 
     task_id: str
     chat_id: str
@@ -57,12 +63,15 @@ class OutgoingReply(BaseModel):
     text: str = ""
     done: bool = Field(default=True, description="True when reply is complete (streaming)")
     reasoning_requested: bool = False
+    channel: ChannelKind = Field(default=ChannelKind.TELEGRAM, description="Target channel for routing")
 
 
 class StreamToken(BaseModel):
-    """Single token for streaming reply."""
+    """Single token for streaming reply. Adapters filter by channel."""
 
     task_id: str
     chat_id: str
-    token: str
+    message_id: str = Field(default="", description="Optional; for threading")
+    token: str = ""
     done: bool = False
+    channel: ChannelKind = Field(default=ChannelKind.TELEGRAM, description="Target channel for routing")

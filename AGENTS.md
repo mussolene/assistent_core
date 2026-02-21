@@ -106,11 +106,11 @@ generate(prompt, stream=False, reasoning=False)
 
 ## 5. Channel Layer
 
-Первый канал:
+Реализован: **Telegram** (long polling, streaming, whitelist, pairing).
 
-Telegram Bot API
+В событиях задан тип канала (`ChannelKind`); оркестратор и адаптеры маршрутизируют по нему. Готовы к добавлению: **Slack**, **Web** (чат в браузере), **Email**; iMessage/WhatsApp — через мосты или официальные API (ограничения см. в документе).
 
-Требования:
+Требования к каналу:
 
 * streaming ответа
 * режим reasoning (отдельный флаг)
@@ -118,11 +118,7 @@ Telegram Bot API
 * multi-user support
 * ACL
 
-Архитектура позволяет добавить:
-
-* CLI
-* Web UI
-* REST API
+**Расширение каналов и фронтенд:** см. [docs/CHANNELS_AND_FRONTEND.md](docs/CHANNELS_AND_FRONTEND.md) — как добавить Slack/Web/Email, варианты «красивого» фронта (улучшение Flask-дашборда или отдельное SPA).
 
 ---
 

@@ -78,6 +78,7 @@ class Orchestrator:
                         message_id=payload.message_id,
                         text=result.error or "Error",
                         done=True,
+                        channel=payload.channel,
                     )
                 )
                 break
@@ -111,6 +112,7 @@ class Orchestrator:
                         message_id=payload.message_id,
                         text=last_output,
                         done=True,
+                        channel=payload.channel,
                     )
                 )
                 break
@@ -122,6 +124,7 @@ class Orchestrator:
                     message_id=payload.message_id,
                     text=last_output,
                     done=True,
+                    channel=payload.channel,
                 )
             )
 
@@ -137,9 +140,11 @@ class Orchestrator:
         if state == "assistant" and stream:
             chat_id = task_data.get("chat_id", payload.chat_id)
 
+            ch = payload.channel
+
             async def _stream_cb(tok: str, done: bool = False) -> None:
                 await self._bus.publish_stream_token(
-                    StreamToken(task_id=task_id, chat_id=chat_id, token=tok, done=done)
+                    StreamToken(task_id=task_id, chat_id=chat_id, token=tok, done=done, channel=ch)
                 )
 
             stream_callback = _stream_cb
