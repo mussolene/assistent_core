@@ -182,7 +182,7 @@ def test_get_current_user_none_without_cookie():
     app = Flask(__name__)
     with app.test_request_context():
         with patch("assistant.dashboard.auth.request") as m:
-            m.cookies.get.return_value = None
+            m.cookies.get = lambda key: None
             r = MagicMock()
             user = get_current_user(r)
     assert user is None
@@ -195,7 +195,7 @@ def test_get_current_user_none_when_session_invalid():
     app = Flask(__name__)
     with app.test_request_context():
         with patch("assistant.dashboard.auth.request") as m:
-            m.cookies.get.return_value = "fake_sid"
+            m.cookies.get = lambda key: "fake_sid" if key == SESSION_COOKIE_NAME else None
             r = MagicMock()
             r.get = MagicMock(return_value=None)
             user = get_current_user(r)
@@ -210,7 +210,7 @@ def test_get_current_user_returns_user_when_valid():
     app = Flask(__name__)
     with app.test_request_context():
         with patch("assistant.dashboard.auth.request") as m:
-            m.cookies.get.return_value = "valid_sid"
+            m.cookies.get = lambda key: "valid_sid" if key == SESSION_COOKIE_NAME else None
             r = MagicMock()
             def redis_get(k):
                 if k == SESSION_PREFIX + "valid_sid":
