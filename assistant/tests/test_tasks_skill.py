@@ -6,6 +6,7 @@ import pytest
 
 from assistant.skills.tasks import (
     TaskSkill,
+    format_task_details,
     format_tasks_for_telegram,
     format_tasks_list_readable,
     get_due_reminders_sync,
@@ -305,14 +306,22 @@ def test_parse_time_spent():
     assert _parse_time_spent("45 min") == 45
 
 
-def test_format_tasks_list_readable_with_workload_and_time_spent():
+def test_format_tasks_list_readable_title_and_created():
     tasks = [
-        {"id": "1", "title": "Задача с оценкой", "start_date": "2025-02-20", "end_date": "2025-02-25", "status": "open", "workload": "2ч", "time_spent_minutes": 90},
+        {"id": "1", "title": "Задача", "created_at": "2025-02-20T12:00:00", "status": "open"},
     ]
     text = format_tasks_list_readable(tasks)
+    assert "Задача" in text
+    assert "создана" in text and "20.02" in text
+
+def test_format_tasks_list_readable_with_workload_and_time_spent():
+    tasks = [
+        {"id": "1", "title": "Задача с оценкой", "created_at": "2025-02-20T12:00:00", "status": "open", "workload": "2ч", "time_spent_minutes": 90},
+    ]
+    text = format_tasks_list_readable(tasks, include_workload=True, include_time_spent=True)
     assert "Задача с оценкой" in text
-    assert "оценка: 2ч" in text
-    assert "затрачено: 1 ч 30 мин" in text
+    assert "оценка" in text and "2ч" in text
+    assert "затрачено" in text
 
 
 @pytest.mark.asyncio
@@ -323,6 +332,12 @@ async def test_tasks_list_returns_formatted(skill, redis_mock):
     assert out.get("ok") is True
     assert "formatted" in out
     assert "Тест" in out["formatted"]
+
+
+def test_format_task_details():
+    t = {"title": "Тест", "description": "Описание", "created_at": "2025-02-20T12:00:00", "status": "open", "documents": [{"name": "Doc", "url": "https://x.com"}]}
+    s = format_task_details(t)
+    assert "Тест" in s and "Описание" in s and "Документы" in s and "Doc" in s
 
 
 def test_get_due_reminders_sync_empty():

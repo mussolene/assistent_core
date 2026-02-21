@@ -181,6 +181,39 @@ def _human_date(iso_date: str | None) -> str:
         return iso_date[:10]
 
 
+def format_task_details(task: dict[str, Any]) -> str:
+    """Форматирует одну задачу для показа деталей: заголовок, описание, даты, документы, ссылки."""
+    title = (task.get("title") or "Без названия").replace("\n", " ")
+    desc = (task.get("description") or "").strip()
+    created = (task.get("created_at") or "")[:10]
+    start = _human_date(task.get("start_date"))
+    end = _human_date(task.get("end_date"))
+    status = task.get("status") or "open"
+    workload = (task.get("workload") or task.get("estimate") or "").strip()
+    lines = [f"**{title}**", f"Статус: {status}. Создана: {created}."]
+    if start or end:
+        lines.append(f"Срок: {start or '—'} – {end or '—'}.")
+    if workload:
+        lines.append(f"Оценка: {workload}.")
+    if desc:
+        lines.append("", "Описание:", desc)
+    docs = task.get("documents") or []
+    if docs:
+        lines.append("", "Документы:")
+        for d in docs:
+            name = d.get("name") or d.get("url") or "—"
+            url = d.get("url", "")
+            lines.append(f"  • {name}" + (f" — {url}" if url else ""))
+    links = task.get("links") or []
+    if links:
+        lines.append("", "Ссылки:")
+        for ln in links:
+            name = ln.get("name") or ln.get("url") or "—"
+            url = ln.get("url", "")
+            lines.append(f"  • {name}" + (f" — {url}" if url else ""))
+    return "\n".join(lines)
+
+
 def _format_task_created_reply(task: dict[str, Any]) -> str:
     """Краткое сообщение пользователю после создания задачи: название, срок, оценка."""
     title = (task.get("title") or "Без названия").replace("\n", " ")[:80]
@@ -196,40 +229,31 @@ def _format_task_created_reply(task: dict[str, Any]) -> str:
 
 
 def format_tasks_list_readable(
-    tasks: list[dict[str, Any]], include_workload: bool = True, include_time_spent: bool = True
+    tasks: list[dict[str, Any]],
+    include_workload: bool = False,
+    include_time_spent: bool = False,
+    include_created: bool = True,
 ) -> str:
     """
-    Форматирует список задач для ответа пользователю: заголовки, актуальные даты, оценка загрузки, затраченное время.
-    Возвращает одну строку текста (Markdown), без кнопок.
+    Форматирует список задач: заголовок и дата создания (обязательно), опционально срок/оценка/затрачено.
+    Нумерация 1-based для ссылок «первая задача», «вторая» и т.д.
     """
     if not tasks:
         return "Нет задач."
     lines = []
     for i, t in enumerate(tasks, 1):
         title = (t.get("title") or "Без названия").replace("\n", " ")[:60]
-        start = _human_date(t.get("start_date"))
-        end = _human_date(t.get("end_date"))
+        created = _human_date((t.get("created_at") or "")[:10] if t.get("created_at") else None)
+        created_str = f" — создана {created}" if created else ""
         status = t.get("status") or "open"
-        workload = (t.get("workload") or t.get("estimate") or "").strip() if include_workload else ""
-        time_spent = (t.get("time_spent") or t.get("time_spent_minutes")) if include_time_spent else None
-        if time_spent is not None and time_spent != "":
-            if isinstance(time_spent, int):
-                if time_spent >= 60:
-                    time_str = f"{time_spent // 60} ч {time_spent % 60} мин"
-                else:
-                    time_str = f"{time_spent} мин"
-            else:
-                time_str = str(time_spent)
-        else:
-            time_str = ""
-        date_part = f" {start}–{end}" if (start or end) else ""
-        extra = []
-        if workload:
-            extra.append(f"оценка: {workload}")
-        if time_str:
-            extra.append(f"затрачено: {time_str}")
-        extra_str = " | " + ", ".join(extra) if extra else ""
-        lines.append(f"{i}. **{title}**{date_part} [{status}]{extra_str}")
+        parts = [f"{i}. **{title}**{created_str} [{status}]"]
+        if include_workload and (t.get("workload") or t.get("estimate")):
+            parts.append(f" оценка: {(t.get('workload') or t.get('estimate') or '').strip()}")
+        if include_time_spent and (t.get("time_spent_minutes") or t.get("time_spent")):
+            mins = t.get("time_spent_minutes")
+            if mins is not None:
+                parts.append(f" затрачено: {mins // 60} ч {mins % 60} мин" if mins >= 60 else f" затрачено: {mins} мин")
+        lines.append("".join(parts))
     return "Задачи:\n\n" + "\n".join(lines)
 
 
@@ -250,15 +274,12 @@ def format_tasks_for_telegram(
     keyboard = []
     for i, t in enumerate(tasks[:max_items]):
         title = (t.get("title") or "Без названия").replace("\n", " ")[:50]
-        start = _human_date(t.get("start_date"))
-        end = _human_date(t.get("end_date"))
+        created = _human_date((t.get("created_at") or "")[:10] if t.get("created_at") else None)
+        created_str = f" ({created})" if created else ""
         status = t.get("status") or "open"
-        date_str = f" {start}–{end}" if (start or end) else ""
-        workload = (t.get("workload") or t.get("estimate") or "").strip()
-        extra = f" | {workload}" if workload else ""
-        lines.append(f"{i + 1}. **{title}**{date_str} [{status}]{extra}")
+        lines.append(f"{i + 1}. **{title}**{created_str} [{status}]")
         tid = t.get("id", "")
-        btn_label = f"{i + 1}. {title[:35]}"
+        btn_label = f"{i + 1}. {title[:30]}{created_str}"
         if action != "view":
             action_label = {"delete": "Удалить", "update": "Правка", "add_document": "Документ", "add_link": "Ссылка", "done": "✓"}.get(action, action)
             btn_label = f"{action_label}: {title[:28]}"
@@ -562,7 +583,7 @@ class TaskSkill(BaseSkill):
         task = await _load_task(client, task_id)
         if not task or not _check_owner(task, user_id):
             return {"ok": False, "error": "Задача не найдена или доступ запрещён"}
-        return {"ok": True, "task": task}
+        return {"ok": True, "task": task, "formatted_details": format_task_details(task)}
 
     async def _add_document(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         task_id = (params.get("task_id") or params.get("id") or "").strip()
