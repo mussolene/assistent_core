@@ -79,10 +79,124 @@ def _check_owner(task: dict[str, Any], user_id: str) -> bool:
     return (task or {}).get("user_id") == user_id
 
 
-def format_tasks_for_telegram(tasks: list[dict[str, Any]], max_items: int = 20) -> tuple[str, list]:
+# Нормализация имени действия (модель может вернуть listtasks вместо list_tasks)
+ACTION_ALIASES = {
+    "listtasks": "list_tasks",
+    "createtask": "create_task",
+    "deletetask": "delete_task",
+    "updatetask": "update_task",
+    "gettask": "get_task",
+    "searchtasks": "search_tasks",
+    "adddocument": "add_document",
+    "addlink": "add_link",
+    "setreminder": "set_reminder",
+    "getduereminders": "get_due_reminders",
+    "formatfortelegram": "format_for_telegram",
+}
+
+
+def _normalize_action(action: str) -> str:
+    a = (action or "").strip().lower().replace(" ", "")
+    return ACTION_ALIASES.get(a, action.strip().lower() if action else "")
+
+
+def _date_to_ordinal(iso_date: str | None) -> int | None:
+    """ISO date YYYY-MM-DD -> дни с эпохи (для вычисления сдвига)."""
+    if not iso_date or len(iso_date) < 10:
+        return None
+    try:
+        d = datetime.fromisoformat(iso_date[:10] + "T12:00:00+00:00")
+        return d.toordinal()
+    except ValueError:
+        return None
+
+
+def _ordinal_to_date(ordinal: int) -> str:
+    """Дни с эпохи -> YYYY-MM-DD."""
+    from datetime import date
+    return date.fromordinal(ordinal).isoformat()
+
+
+def _parse_time_spent(value: Any) -> int | None:
+    """Парсит затраченное время: число (минуты), строка типа '2h', '30 min', '1.5 часа' -> минуты."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float):
+        return int(value * 60) if value >= 0 else None  # часы -> минуты
+    s = str(value).strip().lower()
+    if not s:
+        return None
+    import re
+    # "2h", "2 ч", "2 hours", "30 min", "30 мин", "1.5 часа"
+    m = re.match(r"^(\d+(?:[.,]\d+)?)\s*(h|ч|hour|hours|час|часа|часов)?\s*$", s.replace(" ", ""))
+    if not m:
+        m = re.match(r"^(\d+(?:[.,]\d+)?)\s*(m|min|мин|minute|minutes)?", s)
+    if m:
+        num = float(m.group(1).replace(",", "."))
+        unit = (m.group(2) or "").strip()
+        if unit in ("h", "ч", "hour", "hours", "час", "часа", "часов"):
+            return int(num * 60)
+        return int(num)
+    return None
+
+
+def _human_date(iso_date: str | None) -> str:
+    """Преобразует ISO дату (YYYY-MM-DD) в короткий человекопонятный вид (дд.мм или «пн 3 мар»)."""
+    if not iso_date or len(iso_date) < 10:
+        return ""
+    try:
+        d = datetime.fromisoformat(iso_date[:10] + "T12:00:00+00:00")
+        return d.strftime("%d.%m")  # 25.02
+    except ValueError:
+        return iso_date[:10]
+
+
+def format_tasks_list_readable(
+    tasks: list[dict[str, Any]], include_workload: bool = True, include_time_spent: bool = True
+) -> str:
+    """
+    Форматирует список задач для ответа пользователю: заголовки, актуальные даты, оценка загрузки, затраченное время.
+    Возвращает одну строку текста (Markdown), без кнопок.
+    """
+    if not tasks:
+        return "Нет задач."
+    lines = []
+    for i, t in enumerate(tasks, 1):
+        title = (t.get("title") or "Без названия").replace("\n", " ")[:60]
+        start = _human_date(t.get("start_date"))
+        end = _human_date(t.get("end_date"))
+        status = t.get("status") or "open"
+        workload = (t.get("workload") or t.get("estimate") or "").strip() if include_workload else ""
+        time_spent = (t.get("time_spent") or t.get("time_spent_minutes")) if include_time_spent else None
+        if time_spent is not None and time_spent != "":
+            if isinstance(time_spent, int):
+                if time_spent >= 60:
+                    time_str = f"{time_spent // 60} ч {time_spent % 60} мин"
+                else:
+                    time_str = f"{time_spent} мин"
+            else:
+                time_str = str(time_spent)
+        else:
+            time_str = ""
+        date_part = f" {start}–{end}" if (start or end) else ""
+        extra = []
+        if workload:
+            extra.append(f"оценка: {workload}")
+        if time_str:
+            extra.append(f"затрачено: {time_str}")
+        extra_str = " | " + ", ".join(extra) if extra else ""
+        lines.append(f"{i}. **{title}**{date_part} [{status}]{extra_str}")
+    return "Задачи:\n\n" + "\n".join(lines)
+
+
+def format_tasks_for_telegram(
+    tasks: list[dict[str, Any]], max_items: int = 20, action: str = "view"
+) -> tuple[str, list]:
     """
     Форматирует список задач для отправки в Telegram: текст сообщения и inline_keyboard.
-    Возвращает (text, inline_keyboard rows). Каждая кнопка — callback_data task:view:{id}.
+    action: view | delete | update | add_document | add_link — подставляется в callback_data task:{action}:{id}.
     """
     if not tasks:
         return "Нет задач.", []
@@ -90,18 +204,33 @@ def format_tasks_for_telegram(tasks: list[dict[str, Any]], max_items: int = 20) 
     keyboard = []
     for i, t in enumerate(tasks[:max_items]):
         title = (t.get("title") or "Без названия").replace("\n", " ")[:50]
-        start = t.get("start_date") or ""
-        end = t.get("end_date") or ""
+        start = _human_date(t.get("start_date"))
+        end = _human_date(t.get("end_date"))
         status = t.get("status") or "open"
-        date_str = ""
-        if start or end:
-            date_str = f" ({start[:10] if start else '…'} — {end[:10] if end else '…'})"
-        lines.append(f"{i + 1}. **{title}**{date_str} [{status}]")
-        keyboard.append([{"text": f"{i + 1}. {title[:35]}", "callback_data": f"task:view:{t.get('id', '')}"}])
+        date_str = f" {start}–{end}" if (start or end) else ""
+        workload = (t.get("workload") or t.get("estimate") or "").strip()
+        extra = f" | {workload}" if workload else ""
+        lines.append(f"{i + 1}. **{title}**{date_str} [{status}]{extra}")
+        tid = t.get("id", "")
+        btn_label = f"{i + 1}. {title[:35]}"
+        if action != "view":
+            action_label = {"delete": "Удалить", "update": "Правка", "add_document": "Документ", "add_link": "Ссылка"}.get(action, action)
+            btn_label = f"{action_label}: {title[:28]}"
+        keyboard.append([{"text": btn_label, "callback_data": f"task:{action}:{tid}"}])
     text = "Задачи:\n\n" + "\n".join(lines)
     if len(tasks) > max_items:
         text += f"\n\n… и ещё {len(tasks) - max_items}."
     return text, keyboard
+
+
+def _task_matches_query(task: dict[str, Any], query: str) -> bool:
+    """Проверка: запрос входит в title или description (без учёта регистра)."""
+    if not query or not query.strip():
+        return True
+    q = query.strip().lower()
+    title = (task.get("title") or "").lower()
+    desc = (task.get("description") or "").lower()
+    return q in title or q in desc
 
 
 def get_due_reminders_sync(redis_url: str) -> list[dict[str, Any]]:
@@ -143,8 +272,8 @@ def get_due_reminders_sync(redis_url: str) -> list[dict[str, Any]]:
 class TaskSkill(BaseSkill):
     """
     Управление задачами пользователя. Все данные хранятся в разрезе user_id; доступ только к своим задачам.
-    Действия: create_task, delete_task, update_task, list_tasks, get_task, add_document, add_link, set_reminder,
-    get_due_reminders, format_for_telegram.
+    Действия: create_task, delete_task, update_task, list_tasks, get_task, search_tasks (query),
+    add_document, add_link, set_reminder, get_due_reminders, format_for_telegram (action=view|delete|update|...).
     """
 
     @property
@@ -152,7 +281,7 @@ class TaskSkill(BaseSkill):
         return "tasks"
 
     async def run(self, params: dict[str, Any]) -> dict[str, Any]:
-        action = (params.get("action") or "").strip().lower()
+        action = _normalize_action(params.get("action") or "")
         user_id = (params.get("user_id") or params.get("user") or "").strip()
         if not user_id:
             return {"ok": False, "error": "user_id обязателен для всех действий с задачами"}
@@ -186,6 +315,8 @@ class TaskSkill(BaseSkill):
                 return await self._get_due_reminders(client, params)
             if action == "format_for_telegram":
                 return await self._format_for_telegram(client, user_id, params)
+            if action == "search_tasks":
+                return await self._search_tasks(client, user_id, params)
             return {"ok": False, "error": f"Неизвестное действие: {action}"}
         finally:
             await client.aclose()
@@ -207,6 +338,8 @@ class TaskSkill(BaseSkill):
             "links": list(params.get("links") or []),
             "reminder_at": None,
             "status": (params.get("status") or "open").strip() or "open",
+            "workload": (params.get("workload") or params.get("estimate") or "").strip() or None,
+            "time_spent_minutes": _parse_time_spent(params.get("time_spent") or params.get("time_spent_minutes")),
             "created_at": now,
             "updated_at": now,
         }
@@ -234,6 +367,8 @@ class TaskSkill(BaseSkill):
         task = await _load_task(client, task_id)
         if not task or not _check_owner(task, user_id):
             return {"ok": False, "error": "Задача не найдена или доступ запрещён"}
+        old_start = task.get("start_date")
+        old_end = task.get("end_date")
         if "title" in params and params["title"] is not None:
             task["title"] = str(params["title"]).strip() or task["title"]
         if "description" in params:
@@ -244,9 +379,74 @@ class TaskSkill(BaseSkill):
             task["end_date"] = str(params.get("end_date") or "").strip() or None
         if "status" in params:
             task["status"] = str(params.get("status") or "open").strip() or "open"
+        if "workload" in params or "estimate" in params:
+            task["workload"] = str(params.get("workload") or params.get("estimate") or "").strip() or None
+        if "time_spent" in params or "time_spent_minutes" in params:
+            mins = _parse_time_spent(params.get("time_spent") or params.get("time_spent_minutes"))
+            task["time_spent_minutes"] = mins
         task["updated_at"] = _now_iso()
         await _save_task(client, task)
+        cascade = params.get("cascade", True)
+        if cascade and ("start_date" in params or "end_date" in params):
+            await self._cascade_reschedule(
+                client, user_id, task_id,
+                task.get("start_date"), task.get("end_date"),
+                old_start, old_end,
+            )
         return {"ok": True, "task": task}
+
+    async def _cascade_reschedule(
+        self,
+        client,
+        user_id: str,
+        moved_task_id: str,
+        new_start: str | None,
+        new_end: str | None,
+        old_start: str | None,
+        old_end: str | None,
+    ) -> None:
+        """Сдвигает другие задачи пользователя, попадающие в новый интервал, на тот же дельта (в днях)."""
+        new_s = _date_to_ordinal(new_start)
+        new_e = _date_to_ordinal(new_end)
+        old_s = _date_to_ordinal(old_start)
+        old_e = _date_to_ordinal(old_end)
+        if new_s is None and new_e is None:
+            return
+        delta = 0
+        if old_s is not None and new_s is not None:
+            delta = new_s - old_s
+        elif old_e is not None and new_e is not None:
+            delta = new_e - old_e
+        if delta == 0:
+            return
+        interval_start = new_s if new_s is not None else (new_e or 0)
+        interval_end = new_e if new_e is not None else (new_s or 0)
+        if interval_start > interval_end:
+            interval_start, interval_end = interval_end, interval_start
+        raw = await client.get(_user_list_key(user_id))
+        ids = json.loads(raw) if raw else []
+        for tid in ids:
+            if tid == moved_task_id:
+                continue
+            t = await _load_task(client, tid)
+            if not t or not _check_owner(t, user_id):
+                continue
+            ts = _date_to_ordinal(t.get("start_date"))
+            te = _date_to_ordinal(t.get("end_date"))
+            if ts is None and te is None:
+                continue
+            t_start = ts if ts is not None else (te or 0)
+            t_end = te if te is not None else (ts or 0)
+            if t_start > t_end:
+                t_start, t_end = t_end, t_start
+            if t_end < interval_start or t_start > interval_end:
+                continue
+            if ts is not None:
+                t["start_date"] = _ordinal_to_date(ts + delta)
+            if te is not None:
+                t["end_date"] = _ordinal_to_date(te + delta)
+            t["updated_at"] = _now_iso()
+            await _save_task(client, t)
 
     async def _list(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         raw = await client.get(_user_list_key(user_id))
@@ -259,7 +459,8 @@ class TaskSkill(BaseSkill):
         status_filter = (params.get("status") or "").strip()
         if status_filter:
             tasks = [t for t in tasks if (t.get("status") or "open") == status_filter]
-        return {"ok": True, "tasks": tasks, "total": len(tasks)}
+        formatted = format_tasks_list_readable(tasks)
+        return {"ok": True, "tasks": tasks, "total": len(tasks), "formatted": formatted}
 
     async def _get_one(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         task_id = (params.get("task_id") or params.get("id") or "").strip()
@@ -336,12 +537,36 @@ class TaskSkill(BaseSkill):
         return {"ok": True, "due_reminders": out}
 
     async def _format_for_telegram(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        task_ids = params.get("task_ids")  # опционально: только эти задачи (например результат search_tasks)
+        if task_ids is not None:
+            tasks = []
+            for tid in task_ids:
+                t = await _load_task(client, str(tid))
+                if t and _check_owner(t, user_id):
+                    tasks.append(t)
+        else:
+            raw = await client.get(_user_list_key(user_id))
+            ids = json.loads(raw) if raw else []
+            tasks = []
+            for tid in ids:
+                t = await _load_task(client, tid)
+                if t and _check_owner(t, user_id):
+                    tasks.append(t)
+        # Тип кнопок: view | delete | update | add_document | add_link (не путать с основным action скилла)
+        button_action = (params.get("button_action") or params.get("choice_action") or "view").strip().lower() or "view"
+        text, keyboard = format_tasks_for_telegram(
+            tasks, max_items=int(params.get("max_items") or 20), action=button_action
+        )
+        return {"ok": True, "text": text, "inline_keyboard": keyboard, "tasks_count": len(tasks)}
+
+    async def _search_tasks(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Поиск задач по запросу (подстрока в title или description). Возвращает список задач для выбора."""
+        query = (params.get("query") or params.get("q") or "").strip()
         raw = await client.get(_user_list_key(user_id))
         ids = json.loads(raw) if raw else []
         tasks = []
         for tid in ids:
             t = await _load_task(client, tid)
-            if t and _check_owner(t, user_id):
+            if t and _check_owner(t, user_id) and _task_matches_query(t, query):
                 tasks.append(t)
-        text, keyboard = format_tasks_for_telegram(tasks, max_items=int(params.get("max_items") or 20))
-        return {"ok": True, "text": text, "inline_keyboard": keyboard, "tasks_count": len(tasks)}
+        return {"ok": True, "tasks": tasks, "total": len(tasks)}

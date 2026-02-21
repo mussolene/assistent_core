@@ -60,7 +60,7 @@ class Orchestrator:
         max_iterations = self._config.orchestrator.max_iterations
         autonomous = self._config.orchestrator.autonomous_mode
         if not autonomous:
-            max_iterations = min(max_iterations, 1)
+            max_iterations = max(1, min(max_iterations, 3))
         state = "assistant"
         iteration = 0
         last_output = ""
@@ -137,9 +137,10 @@ class Orchestrator:
         state = task_data.get("state", "assistant")
         stream = task_data.get("stream", True)
         stream_callback = None
-        if state == "assistant" and stream:
+        # Стримим только ответы после выполнения инструментов (чтобы не слать пользователю сырой JSON tool_calls)
+        has_tool_results = bool(task_data.get("tool_results"))
+        if state == "assistant" and stream and has_tool_results:
             chat_id = task_data.get("chat_id", payload.chat_id)
-
             ch = payload.channel
 
             async def _stream_cb(tok: str, done: bool = False) -> None:

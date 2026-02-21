@@ -15,16 +15,17 @@
 
 | action | Параметры | Описание |
 |--------|-----------|----------|
-| `create_task` | title, description?, start_date?, end_date?, status? | Создать задачу. |
+| `create_task` | title, description?, start_date?, end_date?, status?, workload?, time_spent? | Создать задачу. |
 | `delete_task` | task_id | Удалить задачу (только свою). |
-| `update_task` | task_id, title?, description?, start_date?, end_date?, status? | Обновить задачу. |
-| `list_tasks` | status? | Список своих задач. |
+| `update_task` | task_id, title?, start_date?, end_date?, status?, workload?, time_spent?, time_spent_minutes?, cascade?=true | Обновить задачу. При смене дат остальные задачи, попадающие в новый интервал, сдвигаются (cascade). |
+| `list_tasks` | status? | Список своих задач. Возвращает также **formatted** — готовый текст с заголовками, датами (дд.мм), оценкой загрузки и затраченным временем. |
 | `get_task` | task_id | Одна задача (только своя). |
 | `add_document` | task_id, document (url, name) | Добавить документ к задаче. |
 | `add_link` | task_id, link (url, name) | Добавить ссылку. |
 | `set_reminder` | task_id, reminder_at (ISO datetime) | Установить напоминание. |
 | `get_due_reminders` | — | Список сработавших напоминаний (для воркера/агента). |
-| `format_for_telegram` | max_items? | Текст и inline_keyboard для отправки списка задач в чат. |
+| `search_tasks` | query (или q) | Поиск по подстроке в title/description. Для формулировок «задачу о X». |
+| `format_for_telegram` | max_items?, task_ids?, button_action? | Текст и inline_keyboard. button_action: view \| delete \| update \| add_document \| add_link; task_ids — только эти задачи для кнопок выбора. |
 
 **user_id** подставляется автоматически из контекста (ToolAgent передаёт `context.user_id` для скилла `tasks`).
 
@@ -33,19 +34,44 @@
 ## Модель задачи
 
 - `id`, `user_id`, `title`, `description`
-- `start_date`, `end_date` (строка, например ISO date или datetime)
-- `documents`: список `[{url, name}, ...]`
-- `links`: список `[{url, name}, ...]`
-- `reminder_at`: ISO datetime или null
-- `status`: `open` | `done` | и т.д.
-- `created_at`, `updated_at`
+- `start_date`, `end_date` (ISO YYYY-MM-DD)
+- `workload`, `estimate` — оценка загрузки (строка, например «2ч», «полдня»)
+- `time_spent_minutes` — затраченное время в минутах (можно задать через update_task с time_spent: «2h», «30 min»)
+- `documents`, `links`, `reminder_at`, `status`, `created_at`, `updated_at`
 
 ---
 
-## Список задач в Telegram
+## Список задач и ответ пользователю
 
-- **format_for_telegram** возвращает `text` (разметка с номерами, датами, статусом) и `inline_keyboard` — по одной кнопке на задачу с `callback_data`: `task:view:{task_id}`.
-- Агент или MCP может вызвать `tasks` с `format_for_telegram`, затем отправить в чат сообщение с `reply_markup: { inline_keyboard }` и `parse_mode: HTML` (или Markdown). Обработка нажатия кнопки `task:view:*` — в Telegram-адаптере (опционально: ответить деталями задачи или открыть в дашборде).
+- На запрос «список задач» ассистент вызывает **list_tasks**; в ответ пользователю подставляется поле **formatted** (без сырого JSON). Имена действий — с подчёркиванием: `list_tasks`, не `listtasks`.
+- В списке отображаются даты в формате дд.мм, оценка загрузки (workload) и затраченное время (time_spent_minutes).
+
+## Список задач в Telegram и выбор при нескольких
+
+- **format_for_telegram** возвращает `text` и `inline_keyboard` с датами в формате дд.мм и опционально workload. Параметр **button_action**: `view` | `delete` | `update` | `add_document` | `add_link` — в `callback_data` уходит `task:{action}:{task_id}`.
+- **task_ids** — опционально список id; если передан, форматируются только эти задачи (удобно после `search_tasks` для кнопок «с какой задачей выполнить действие»).
+- Агент отправляет сообщение с `reply_markup: { inline_keyboard }`. При нажатии кнопки Telegram-адаптер обрабатывает `task:view:*`, `task:delete:*` и т.д. и публикует в шину **IncomingMessage** с текстом-инструкцией («Покажи детали задачи с id …», «Удали задачу с id …» и т.д.), после чего ассистент выполняет действие.
+
+---
+
+## Работа на естественном языке
+
+- Пользователь может писать в Telegram, например: «Создай задачку по работе с репозиторием», «Удали задачку по работе с репозиторием», «Поправь задачу о репозиториях и добавь то-то», «Добавь документ к задаче про репозитории».
+- Ассистент сначала вызывает **search_tasks(query)** по ключевым словам из формулировки. Если найдена одна задача — выполняет действие; если несколько — отвечает «Нашлось несколько задач. Выберите:» и вызывает **format_for_telegram** с найденными `task_ids` и нужным **action**, чтобы показать кнопки выбора. После нажатия кнопки приходит сообщение с указанием task_id — ассистент выполняет удаление/правку/добавление документа или ссылки.
+
+### Даты и дедлайны обычным языком
+
+- Можно указывать даты и время в свободной форме: «создай задачу на понедельник», «до 25 февраля», «напомни завтра в 10:00».
+- Ассистент переводит в ISO (YYYY-MM-DD для дат, ISO datetime для reminder_at).
+
+### Затраченное время и оценка загрузки
+
+- «Потратил 2 часа на задачу X», «добавь к задаче про репо 30 минут» — через **update_task** с **time_spent** (строка «2h», «30 min» или число минут). Скилл хранит **time_spent_minutes**.
+- Оценка загрузки: **workload** или **estimate** (например «2ч», «полдня») в create_task / update_task.
+
+### Каскадный перенос при смене дат
+
+- При **update_task** с новыми start_date/end_date остальные задачи пользователя, чей интервал пересекается с новым, сдвигаются на тот же дельта (в днях). Отключить: **cascade=false**.
 
 ---
 

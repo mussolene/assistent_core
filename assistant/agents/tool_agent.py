@@ -32,10 +32,16 @@ class ToolAgent(BaseAgent):
         results = []
         for call in tool_calls:
             name = call.get("name") or call.get("skill")
-            params = call.get("params") or call.get("arguments") or {}
+            params = dict(call.get("params") or call.get("arguments") or {})
             if not name:
                 results.append({"error": "missing skill name", "ok": False})
                 continue
+            if name == "tasks" and "user_id" not in params and context.user_id:
+                params["user_id"] = context.user_id
+            action = params.get("action")
+            if name == "tasks" and action is not None:
+                from assistant.skills.tasks import _normalize_action
+                params["action"] = _normalize_action(str(action))
             result = await self._registry.run(name, params, self._runner)
             results.append(result)
             await self._memory.append_tool_result(context.task_id, name, result)

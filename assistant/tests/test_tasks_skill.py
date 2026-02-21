@@ -7,7 +7,10 @@ import pytest
 from assistant.skills.tasks import (
     TaskSkill,
     format_tasks_for_telegram,
+    format_tasks_list_readable,
     get_due_reminders_sync,
+    _normalize_action,
+    _parse_time_spent,
 )
 
 
@@ -149,6 +152,43 @@ async def test_tasks_add_link_and_document(skill, redis_mock):
 
 
 @pytest.mark.asyncio
+async def test_tasks_search_tasks(skill, redis_mock):
+    with patch("assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock):
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "Работа с репозиторием", "description": "Настроить git"})
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "Документация по репо", "description": ""})
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "Позвонить маме", "description": ""})
+        out = await skill.run({"action": "search_tasks", "user_id": "u1", "query": "репо"})
+    assert out.get("ok") is True
+    assert out.get("total") == 2
+    titles = [t["title"] for t in out["tasks"]]
+    assert "Работа с репозиторием" in titles
+    assert "Документация по репо" in titles
+    assert "Позвонить маме" not in titles
+
+    with patch("assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock):
+        empty = await skill.run({"action": "search_tasks", "user_id": "u1", "query": "неттакого"})
+    assert empty.get("ok") is True
+    assert empty.get("total") == 0
+
+
+@pytest.mark.asyncio
+async def test_tasks_format_for_telegram_with_task_ids(skill, redis_mock):
+    with patch("assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock):
+        cr1 = await skill.run({"action": "create_task", "user_id": "u1", "title": "A"})
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "B"})
+        out = await skill.run({
+            "action": "format_for_telegram",
+            "user_id": "u1",
+            "task_ids": [cr1["task_id"]],
+            "button_action": "delete",
+        })
+    assert out.get("ok") is True
+    assert out.get("tasks_count") == 1
+    assert "Удалить" in out["inline_keyboard"][0][0]["text"]
+    assert out["inline_keyboard"][0][0]["callback_data"] == f"task:delete:{cr1['task_id']}"
+
+
+@pytest.mark.asyncio
 async def test_tasks_cannot_access_other_user_task(skill, redis_mock):
     with patch("assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock):
         cr = await skill.run({"action": "create_task", "user_id": "owner", "title": "Secret"})
@@ -174,6 +214,48 @@ def test_format_tasks_for_telegram_with_items():
     assert "Task 1" in text and "Task 2" in text
     assert len(kb) == 2
     assert kb[0][0]["callback_data"] == "task:view:a1"
+
+
+def test_format_tasks_for_telegram_action_delete():
+    tasks = [{"id": "x1", "title": "По работе с репозиторием", "status": "open"}]
+    text, kb = format_tasks_for_telegram(tasks, action="delete")
+    assert "Удалить" in kb[0][0]["text"]
+    assert kb[0][0]["callback_data"] == "task:delete:x1"
+
+
+def test_normalize_action():
+    assert _normalize_action("list_tasks") == "list_tasks"
+    assert _normalize_action("listtasks") == "list_tasks"
+    assert _normalize_action("create_task") == "create_task"
+    assert _normalize_action("createtask") == "create_task"
+
+
+def test_parse_time_spent():
+    assert _parse_time_spent(None) is None
+    assert _parse_time_spent(30) == 30
+    assert _parse_time_spent("2h") == 120
+    assert _parse_time_spent("1.5 часа") == 90
+    assert _parse_time_spent("45 min") == 45
+
+
+def test_format_tasks_list_readable_with_workload_and_time_spent():
+    tasks = [
+        {"id": "1", "title": "Задача с оценкой", "start_date": "2025-02-20", "end_date": "2025-02-25", "status": "open", "workload": "2ч", "time_spent_minutes": 90},
+    ]
+    text = format_tasks_list_readable(tasks)
+    assert "Задача с оценкой" in text
+    assert "оценка: 2ч" in text
+    assert "затрачено: 1 ч 30 мин" in text
+
+
+@pytest.mark.asyncio
+async def test_tasks_list_returns_formatted(skill, redis_mock):
+    with patch("assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock):
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "Тест"})
+        out = await skill.run({"action": "list_tasks", "user_id": "u1"})
+    assert out.get("ok") is True
+    assert "formatted" in out
+    assert "Тест" in out["formatted"]
 
 
 def test_get_due_reminders_sync_empty():
