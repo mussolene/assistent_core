@@ -38,6 +38,8 @@ BOT_COMMANDS = [
     {"command": "start", "description": "Начать / pairing"},
     {"command": "help", "description": "Справка"},
     {"command": "reasoning", "description": "Включить режим рассуждений"},
+    {"command": "settings", "description": "Ссылка на настройки"},
+    {"command": "channels", "description": "Ссылка на дашборд (каналы)"},
 ]
 
 
@@ -359,6 +361,23 @@ async def run_telegram_adapter() -> None:
                                 json={"chat_id": chat_id, "text": "Rate limit exceeded. Try again later."},
                                 timeout=5.0,
                             )
+                        continue
+                    # /settings, /channels — ссылка на дашборд (настройки и каналы)
+                    if text in ("/settings", "/channels"):
+                        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:8080")
+                        reply = (
+                            f"Настройки и каналы: {dashboard_url}\n"
+                            "Там можно задать токен бота, разрешённые ID, модель, MCP и т.д."
+                        )
+                        try:
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={"chat_id": chat_id, "text": reply},
+                                    timeout=5.0,
+                                )
+                        except Exception as e:
+                            logger.debug("sendMessage settings/channels: %s", e)
                         continue
                     reasoning = "/reasoning" in text or "reasoning" in text.lower()
                     if reasoning:

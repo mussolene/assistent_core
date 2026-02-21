@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from assistant.channels.telegram import (
+    BOT_COMMANDS,
     RateLimiter,
     _strip_think_blocks,
     sanitize_text,
@@ -65,6 +66,12 @@ def test_strip_think_blocks_unclosed_think():
 def test_strip_think_blocks_only_think():
     text = "<think>\nok\n</think>"
     assert _strip_think_blocks(text) == ""
+
+
+def test_bot_commands_include_settings_and_channels():
+    commands = {c["command"] for c in BOT_COMMANDS}
+    assert "settings" in commands
+    assert "channels" in commands
 
 
 @pytest.mark.asyncio
