@@ -131,6 +131,23 @@ async def run_telegram_adapter() -> None:
 
     stream_state: dict[str, dict] = {}
     stream_lock = asyncio.Lock()
+    pending_chats: set[str] = set()
+    pending_lock = asyncio.Lock()
+    pending_typing_task: asyncio.Task | None = None
+
+    async def _pending_typing_loop() -> None:
+        """Send typing every TYPING_ACTION_INTERVAL for chats waiting for first response."""
+        while True:
+            await asyncio.sleep(TYPING_ACTION_INTERVAL)
+            async with pending_lock:
+                chats = set(pending_chats)
+            for cid in chats:
+                asyncio.create_task(send_typing(base_url, cid))
+
+    def _ensure_pending_typing_loop() -> None:
+        nonlocal pending_typing_task
+        if pending_typing_task is None or pending_typing_task.done():
+            pending_typing_task = asyncio.create_task(_pending_typing_loop())
 
     async def _flush_stream(task_id: str, force: bool = False) -> None:
         async with stream_lock:
@@ -194,6 +211,8 @@ async def run_telegram_adapter() -> None:
     typing_task: asyncio.Task | None = None
 
     async def on_stream(payload: StreamToken) -> None:
+        async with pending_lock:
+            pending_chats.discard(payload.chat_id)
         async with stream_lock:
             if payload.task_id not in stream_state:
                 stream_state[payload.task_id] = {
@@ -221,6 +240,8 @@ async def run_telegram_adapter() -> None:
             await _flush_stream(payload.task_id, force=False)
 
     async def on_outgoing(payload: OutgoingReply) -> None:
+        async with pending_lock:
+            pending_chats.discard(payload.chat_id)
         was_streaming = False
         async with stream_lock:
             if payload.task_id in stream_state:
@@ -332,6 +353,10 @@ async def run_telegram_adapter() -> None:
                     if reasoning:
                         text = text.replace("/reasoning", "").strip()
                     text = sanitize_text(text)
+                    async with pending_lock:
+                        pending_chats.add(chat_id)
+                        _ensure_pending_typing_loop()
+                    asyncio.create_task(send_typing(base_url, chat_id))
                     await bus.publish_incoming(
                         IncomingMessage(
                             message_id=message_id,
