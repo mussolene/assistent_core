@@ -226,3 +226,31 @@ def test_get_current_user_returns_user_when_valid():
     assert user.get("display_name") == "Alice"
 
 
+def test_api_session_logged_out(client, monkeypatch):
+    """GET /api/session without cookie returns logged_in: false."""
+    monkeypatch.setattr("assistant.dashboard.app.get_redis", MagicMock())
+    monkeypatch.setattr("assistant.dashboard.app.setup_done", lambda r: True)
+    monkeypatch.setattr("assistant.dashboard.app.get_current_user", lambda r: None)
+    r = client.get("/api/session")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data.get("logged_in") is False
+
+
+def test_api_session_logged_in(client, monkeypatch):
+    """GET /api/session with valid session returns logged_in and user."""
+    monkeypatch.setattr("assistant.dashboard.app.get_redis", MagicMock())
+    monkeypatch.setattr("assistant.dashboard.app.setup_done", lambda r: True)
+    monkeypatch.setattr(
+        "assistant.dashboard.app.get_current_user",
+        lambda r: {"login": "u1", "role": "owner", "display_name": "User One"},
+    )
+    r = client.get("/api/session")
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data.get("logged_in") is True
+    assert data.get("login") == "u1"
+    assert data.get("role") == "owner"
+    assert data.get("display_name") == "User One"
+
+

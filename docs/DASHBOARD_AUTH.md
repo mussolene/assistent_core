@@ -35,6 +35,6 @@
 - Пароль при setup: не менее 6 символов; логин — не менее 2.
 - Аудит: успешный/неуспешный вход и logout логируются через `assistant.security.audit` (если доступен).
 
-## API для фронта (опционально)
+## API для фронта
 
-Для SPA или проверки состояния входа можно добавить `GET /api/session`: при валидной cookie возвращать `{"logged_in": true, "login": "...", "role": "..."}`, иначе `{"logged_in": false}`. Сейчас состояние передаётся в шаблоны как `current_user` (см. `get_current_user` в auth.py).
+**GET /api/session** — без редиректа возвращает JSON: при валидной cookie — `{"logged_in": true, "login": "...", "role": "...", "display_name": "..."}`, иначе `{"logged_in": false}`. Удобно для SPA или проверки состояния входа.

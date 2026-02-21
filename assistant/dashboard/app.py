@@ -281,6 +281,21 @@ def _set_session_cookie(resp, sid: str) -> None:
     )
 
 
+@app.route("/api/session", methods=["GET"])
+def api_session():
+    """JSON: текущая сессия для фронта. Без редиректа."""
+    r = get_redis()
+    user = get_current_user(r)
+    if user:
+        return jsonify({
+            "logged_in": True,
+            "login": user.get("login"),
+            "role": user.get("role"),
+            "display_name": user.get("display_name"),
+        })
+    return jsonify({"logged_in": False})
+
+
 @app.route("/logout")
 def logout():
     sid = request.cookies.get(SESSION_COOKIE_NAME)
