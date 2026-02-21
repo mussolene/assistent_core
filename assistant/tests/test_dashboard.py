@@ -248,3 +248,26 @@ def test_api_pairing_code_returns_code_and_link(client, auth_mock, monkeypatch):
     assert j.get("ok") is True
     assert j.get("code") == "ABC123"
     assert j.get("expires_in_sec") == 600
+
+
+def test_email_page_renders(client, auth_mock, monkeypatch):
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.get("/email")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "Email" in body
+    assert "email_from" in body or "email_from" in body.lower()
+
+
+def test_save_email_redirects(client, auth_mock, redis_url, monkeypatch):
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: redis_url)
+    r = client.post("/save-email", data={
+        "email_from": "bot@test.local",
+        "email_provider": "smtp",
+        "email_smtp_port": "587",
+    })
+    assert r.status_code == 302
+    assert "email" in r.headers.get("Location", "")
+    data = get_config_from_redis_sync(redis_url)
+    assert data.get("EMAIL_FROM") == "bot@test.local"
+    assert data.get("EMAIL_PROVIDER") == "smtp"

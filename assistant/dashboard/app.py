@@ -97,6 +97,7 @@ INDEX_HTML = """
     <a href="{{ url_for('model') }}" class="{{ 'active' if section == 'model' else '' }}">Модель</a>
     <a href="{{ url_for('mcp') }}" class="{{ 'active' if section == 'mcp' else '' }}">MCP</a>
     <a href="{{ url_for('monitor') }}" class="{{ 'active' if section == 'monitor' else '' }}">Мониторинг</a>
+    <a href="{{ url_for('email_settings') }}" class="{{ 'active' if section == 'email' else '' }}">Email</a>
     {% if current_user %}
     <span style="margin-left:auto;color:var(--muted);font-size:0.9rem">{{ current_user.display_name or current_user.login }} ({{ current_user.role }})</span>
     <a href="{{ url_for('logout') }}" style="margin-left:0.5rem">Выйти</a>
@@ -213,7 +214,7 @@ def _inject_current_user():
 def _require_auth():
     """Redirect to setup or login when needed."""
     path = request.path
-    if path in ("/login", "/logout"):
+    if path in ("/login", "/logout", "/api/session"):
         return None
     if path == "/setup" and request.method in ("GET", "POST"):
         return None
@@ -519,6 +520,76 @@ def save_model():
     set_config_in_redis_sync(redis_url, "OPENAI_API_KEY", (request.form.get("openai_api_key") or "").strip())
     flash("Сохранено. Настройки модели применяются автоматически.", "success")
     return redirect(url_for("model"))
+
+
+# ----- Email -----
+_EMAIL_BODY = """
+<h1>Email</h1>
+<p class="sub">Настройки канала отправки писем (для скилла send_email и ответов по каналу Email).</p>
+<form method="post" action="/save-email">
+  <div class="card">
+    <div class="row">
+      <input type="checkbox" id="email_enabled" name="email_enabled" value="1" {{ 'checked' if config.get('EMAIL_ENABLED') == 'true' else '' }}>
+      <label for="email_enabled" style="margin-bottom:0">Включить отправку писем</label>
+    </div>
+  </div>
+  <div class="card">
+    <label for="email_from">Адрес отправителя (From)</label>
+    <input id="email_from" name="email_from" type="text" value="{{ config.get('EMAIL_FROM', '') }}" placeholder="bot@example.com">
+  </div>
+  <div class="card">
+    <label for="email_provider">Провайдер</label>
+    <input id="email_provider" name="email_provider" type="text" value="{{ config.get('EMAIL_PROVIDER', 'smtp') }}" placeholder="smtp или sendgrid">
+    <p class="hint">smtp — свой SMTP; sendgrid — API SendGrid.</p>
+  </div>
+  <div class="card">
+    <label for="email_smtp_host">SMTP: хост</label>
+    <input id="email_smtp_host" name="email_smtp_host" type="text" value="{{ config.get('EMAIL_SMTP_HOST', '') }}" placeholder="smtp.gmail.com">
+  </div>
+  <div class="card">
+    <label for="email_smtp_port">SMTP: порт</label>
+    <input id="email_smtp_port" name="email_smtp_port" type="text" value="{{ config.get('EMAIL_SMTP_PORT', '587') }}" placeholder="587">
+  </div>
+  <div class="card">
+    <label for="email_smtp_user">SMTP: пользователь</label>
+    <input id="email_smtp_user" name="email_smtp_user" type="text" value="{{ config.get('EMAIL_SMTP_USER', '') }}">
+  </div>
+  <div class="card">
+    <label for="email_smtp_password">SMTP: пароль</label>
+    <input id="email_smtp_password" name="email_smtp_password" type="password" value="{{ config.get('EMAIL_SMTP_PASSWORD', '') }}" autocomplete="off">
+  </div>
+  <div class="card">
+    <label for="email_sendgrid_key">SendGrid API Key (если провайдер sendgrid)</label>
+    <input id="email_sendgrid_key" name="email_sendgrid_key" type="password" value="{{ config.get('EMAIL_SENDGRID_API_KEY', '') }}" autocomplete="off">
+  </div>
+  <button type="submit" class="btn">Сохранить</button>
+</form>
+"""
+
+
+@app.route("/email")
+def email_settings():
+    config = load_config()
+    return render_template_string(
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace("{% block content %}{% endblock %}", _EMAIL_BODY),
+        config=config,
+        section="email",
+    )
+
+
+@app.route("/save-email", methods=["POST"])
+def save_email():
+    redis_url = get_redis_url()
+    set_config_in_redis_sync(redis_url, "EMAIL_ENABLED", "true" if request.form.get("email_enabled") == "1" else "false")
+    set_config_in_redis_sync(redis_url, "EMAIL_FROM", (request.form.get("email_from") or "").strip())
+    set_config_in_redis_sync(redis_url, "EMAIL_PROVIDER", (request.form.get("email_provider") or "smtp").strip().lower())
+    set_config_in_redis_sync(redis_url, "EMAIL_SMTP_HOST", (request.form.get("email_smtp_host") or "").strip())
+    set_config_in_redis_sync(redis_url, "EMAIL_SMTP_PORT", (request.form.get("email_smtp_port") or "587").strip())
+    set_config_in_redis_sync(redis_url, "EMAIL_SMTP_USER", (request.form.get("email_smtp_user") or "").strip())
+    set_config_in_redis_sync(redis_url, "EMAIL_SMTP_PASSWORD", (request.form.get("email_smtp_password") or "").strip())
+    set_config_in_redis_sync(redis_url, "EMAIL_SENDGRID_API_KEY", (request.form.get("email_sendgrid_key") or "").strip())
+    flash("Настройки Email сохранены.", "success")
+    return redirect(url_for("email_settings"))
 
 
 # ----- MCP -----
