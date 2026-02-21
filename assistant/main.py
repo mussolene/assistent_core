@@ -49,6 +49,9 @@ async def run_core(config: Config) -> None:
         summary_threshold_messages=config.memory.summary_threshold_messages,
         vector_top_k=config.memory.vector_top_k,
         vector_collection=config.memory.vector_collection,
+        vector_persist_dir=config.memory.vector_persist_dir,
+        vector_short_max=config.memory.vector_short_max,
+        vector_medium_max=config.memory.vector_medium_max,
     )
     await memory.connect()
 

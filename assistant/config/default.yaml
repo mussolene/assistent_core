@@ -32,6 +32,9 @@ memory:
   summary_threshold_messages: 20
   vector_top_k: 5
   vector_collection: "assistant_memory"
+  vector_persist_dir: "/tmp/assistant_vectors"
+  vector_short_max: 100
+  vector_medium_max: 500
 
 orchestrator:
   autonomous_mode: false

@@ -16,6 +16,7 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "pyyaml>=6.0.1",
+    "sentence-transformers>=2.2.0",
 ]
 
 [project.optional-dependencies]
@@ -27,9 +28,6 @@ dev = [
 ]
 dashboard = [
     "flask>=3.0.0",
-]
-vector = [
-    "sentence-transformers>=2.2.0",
 ]
 
 [project.scripts]

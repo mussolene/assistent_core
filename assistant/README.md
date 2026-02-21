@@ -64,7 +64,7 @@ This starts:
 - **dashboard**: Web UI on http://localhost:8080 — Telegram (token, pairing), Model (URL, test connection), MCP skills, Redis monitoring. Config stored in Redis.
 - **assistant-core**: Orchestrator, agents, skills, model gateway client.
 - **telegram-adapter**: Long polling; reads token from Redis. Registers bot commands (/start, /help, /reasoning). Pairing: enable in Dashboard, then user sends /start to bot to be added to allowed list.
-- Vector memory is in-process (optional `sentence-transformers`); no separate vector-db service by default.
+- Vector memory is in-process by default (`sentence-transformers` in dependencies); no separate vector-db service required.
 
 **Setup:** open http://localhost:8080, set bot token and optionally enable Pairing (then send /start to the bot), set model URL and name, save. Restart telegram-adapter after token change, assistant-core after model change.
 
@@ -116,6 +116,18 @@ orchestrator:
 
 Or set `ORCHESTRATOR_AUTONOMOUS_MODE=true` in `.env`. When `autonomous_mode` is false, the assistant does at most one iteration (no tool loop).
 
+## Memory: уровни и данные пользователя
+
+- **Кратковременная (short-term)**: последние N сообщений в Redis; окно задаётся `memory.short_term_window`.
+- **Векторная память** включена по умолчанию и имеет три уровня:
+  - **Краткосрочная (short)**: до `memory.vector_short_max` записей (по умолчанию 100), хранится в `vector_persist_dir/short.json`.
+  - **Среднесрочная (medium)**: до `memory.vector_medium_max` (500), `medium.json`.
+  - **Долговременная (long)**: без лимита, `long.json`.
+- Очистка векторной памяти: `memory.clear_vector(level)` — передать `"short"`, `"medium"`, `"long"` или `None` (очистить все уровни). Константы: `VECTOR_LEVEL_SHORT`, `VECTOR_LEVEL_MEDIUM`, `VECTOR_LEVEL_LONG` в `assistant.memory.manager`.
+- **Данные о пользователе**: ключ–значение в Redis по `user_id` (профиль, таймзона, предпочтения). API: `get_user_data(user_id)`, `set_user_data(user_id, ...)`, `clear_user_data(user_id)`. Эти данные автоматически попадают в системный контекст при сборке сообщений для модели.
+
+Настройки в `memory`: `vector_persist_dir`, `vector_short_max`, `vector_medium_max` (см. `assistant/config/default.yaml`).
+
 ## Adding a new skill
 
 1. Implement a class in `assistant/skills/` that extends `BaseSkill` (see `assistant/skills/base.py`):
@@ -143,7 +155,7 @@ Or set `ORCHESTRATOR_AUTONOMOUS_MODE=true` in `.env`. When `autonomous_mode` is 
 ## Known limitations
 
 - Streaming replies to Telegram are sent as a single message when done (no live token streaming in the UI).
-- Vector memory uses an in-process store by default (sentence-transformers + file); optional Qdrant service is defined in Compose but not wired in code yet.
+- Vector memory uses an in-process store by default (sentence-transformers + JSON files for short/medium/long levels); optional Qdrant service is defined in Compose but not wired in code yet.
 - MCP adapter is a stub and returns "not implemented".
 - Scaling: `docker compose up --scale assistant-core=3` runs multiple core instances; all consume from the same Redis. Ensure only one process runs the orchestrator loop per task (current design uses a single core instance; for multi-worker you would need task claiming or a queue).
 

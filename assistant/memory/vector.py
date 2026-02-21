@@ -1,4 +1,4 @@
-"""Vector memory: local embeddings and similarity search. Optional vector-db service later."""
+"""Vector memory: local embeddings and similarity search. Уровни: кратковременная, среднесрочная, долговременная."""
 
 from __future__ import annotations
 
@@ -13,17 +13,19 @@ logger = logging.getLogger(__name__)
 
 
 class VectorMemory:
-    """In-process vector store using sentence-transformers. Persist to a local file for MVP."""
+    """In-process vector store using sentence-transformers. Поддержка max_size (FIFO) и clear()."""
 
     def __init__(
         self,
         collection: str = "assistant_memory",
         top_k: int = 5,
         persist_path: str | Path | None = None,
+        max_size: int | None = None,
     ) -> None:
         self._collection = collection
         self._top_k = top_k
         self._persist_path = Path(persist_path) if persist_path else Path("/tmp/assistant_vectors.json")
+        self._max_size = max_size
         self._model = None
         self._documents: list[dict[str, Any]] = []
         self._vectors: list[list[float]] = []
@@ -35,7 +37,7 @@ class VectorMemory:
                 from sentence_transformers import SentenceTransformer
                 self._model = SentenceTransformer("all-MiniLM-L6-v2")
             except Exception as e:
-                logger.info("sentence_transformers not available: %s. Vector memory disabled (optional).", e)
+                logger.warning("sentence_transformers not available: %s. Vector memory disabled.", e)
         return self._model
 
     def _load(self) -> None:
@@ -63,9 +65,21 @@ class VectorMemory:
             return
         self._load()
         vec = model.encode(text).tolist()
-        self._documents.append({"text": text, "metadata": metadata or {}, "id": hashlib.sha256(text.encode()).hexdigest()[:16]})
+        doc = {"text": text, "metadata": metadata or {}, "id": hashlib.sha256(text.encode()).hexdigest()[:16]}
+        self._documents.append(doc)
         self._vectors.append(vec)
+        if self._max_size is not None and len(self._documents) > self._max_size:
+            self._documents = self._documents[-self._max_size:]
+            self._vectors = self._vectors[-self._max_size:]
         self._save()
+
+    def clear(self) -> None:
+        """Очистить хранилище векторов (документы и векторы)."""
+        self._load()
+        self._documents = []
+        self._vectors = []
+        self._save()
+        logger.info("Vector memory cleared: %s", self._persist_path)
 
     def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         model = self._get_model()

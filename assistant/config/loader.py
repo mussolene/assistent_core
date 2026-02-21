@@ -72,6 +72,9 @@ class MemorySettings(BaseSettings):
     summary_threshold_messages: int = 20
     vector_top_k: int = 5
     vector_collection: str = "assistant_memory"
+    vector_persist_dir: str = "/tmp/assistant_vectors"
+    vector_short_max: int = 100
+    vector_medium_max: int = 500
 
 
 class OrchestratorSettings(BaseSettings):
