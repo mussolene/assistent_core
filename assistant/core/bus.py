@@ -140,7 +140,9 @@ class EventBus:
                 try:
                     payload = _deserialize(data, model_cls)
                 except Exception as e:
-                    logger.warning("failed to deserialize event", extra={"channel": ch, "error": str(e)})
+                    logger.warning(
+                        "failed to deserialize event", extra={"channel": ch, "error": str(e)}
+                    )
                     continue
                 for handler in self._handlers.get(ch, []):
                     try:

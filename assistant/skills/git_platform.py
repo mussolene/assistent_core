@@ -71,7 +71,9 @@ async def create_merge_request(
         return {"ok": False, "error": "source_branch, target_branch and title are required"}
 
     # Prefer platform from URL; otherwise use GitHub if token present
-    use_github = (host_type == "github") or (host_type is None and github_token and "/" in repo_path)
+    use_github = (host_type == "github") or (
+        host_type is None and github_token and "/" in repo_path
+    )
     use_gitlab = (host_type == "gitlab") or (host_type is None and gitlab_token)
 
     if use_github and github_token and "/" in repo_path:
@@ -101,7 +103,9 @@ async def create_merge_request(
                     "number": data.get("number"),
                     "platform": "github",
                 }
-            err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            err = (
+                r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            )
             return {
                 "ok": False,
                 "error": err.get("message", r.text) or f"HTTP {r.status_code}",
@@ -134,7 +138,9 @@ async def create_merge_request(
                     "iid": data.get("iid"),
                     "platform": "gitlab",
                 }
-            err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            err = (
+                r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            )
             return {
                 "ok": False,
                 "error": err.get("message", err.get("error", r.text)) or f"HTTP {r.status_code}",
@@ -172,7 +178,9 @@ async def search_github_repos(
                 timeout=15.0,
             )
         if r.status_code != 200:
-            err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            err = (
+                r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            )
             return {
                 "ok": False,
                 "error": err.get("message", r.text) or f"HTTP {r.status_code}",
@@ -215,7 +223,9 @@ async def search_gitlab_repos(
                 timeout=15.0,
             )
         if r.status_code != 200:
-            err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            err = (
+                r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            )
             return {
                 "ok": False,
                 "error": err.get("message", err.get("error", r.text)) or f"HTTP {r.status_code}",

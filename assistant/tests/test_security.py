@@ -1,6 +1,5 @@
 """Tests for security: whitelist, audit."""
 
-
 from assistant.security.audit import _redact
 from assistant.security.command_whitelist import CommandWhitelist
 

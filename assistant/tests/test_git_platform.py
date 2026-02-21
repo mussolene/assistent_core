@@ -4,14 +4,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from assistant.skills.git_platform import create_merge_request, search_github_repos, search_gitlab_repos
+from assistant.skills.git_platform import (
+    create_merge_request,
+    search_github_repos,
+    search_gitlab_repos,
+)
 
 
 def _mock_httpx_client(status_code: int = 201, json_data: dict | None = None):
     response = MagicMock()
     response.status_code = status_code
     response.headers = {"content-type": "application/json"}
-    response.json = MagicMock(return_value=json_data or {"html_url": "https://github.com/a/b/pull/1", "number": 1})
+    response.json = MagicMock(
+        return_value=json_data or {"html_url": "https://github.com/a/b/pull/1", "number": 1}
+    )
     response.text = ""
 
     async def post(*args, **kwargs):
@@ -27,7 +33,13 @@ def _mock_httpx_client(status_code: int = 201, json_data: dict | None = None):
 @pytest.mark.asyncio
 async def test_create_merge_request_github_url_success():
     """GitHub repo URL: uses GitHub API and returns PR url/number."""
-    with patch("assistant.skills.git_platform.httpx.AsyncClient", side_effect=_mock_httpx_client(201, {"html_url": "https://github.com/o/r/pull/2", "number": 2})):
+    client = _mock_httpx_client(
+        201, {"html_url": "https://github.com/o/r/pull/2", "number": 2}
+    )
+    with patch(
+        "assistant.skills.git_platform.httpx.AsyncClient",
+        return_value=client,
+    ):
         out = await create_merge_request(
             repo="https://github.com/o/r",
             source_branch="feature",
@@ -48,7 +60,9 @@ async def test_create_merge_request_gitlab_url_success():
     response = MagicMock()
     response.status_code = 201
     response.headers = {"content-type": "application/json"}
-    response.json = MagicMock(return_value={"web_url": "https://gitlab.com/o/r/-/merge_requests/3", "iid": 3})
+    response.json = MagicMock(
+        return_value={"web_url": "https://gitlab.com/o/r/-/merge_requests/3", "iid": 3}
+    )
     response.text = ""
 
     async def post(*args, **kwargs):
@@ -112,7 +126,14 @@ async def test_search_github_repos_success():
     response.headers = {"content-type": "application/json"}
     response.json = MagicMock(
         return_value={
-            "items": [{"full_name": "a/b", "html_url": "https://github.com/a/b", "description": "d", "clone_url": "https://github.com/a/b.git"}],
+            "items": [
+                {
+                    "full_name": "a/b",
+                    "html_url": "https://github.com/a/b",
+                    "description": "d",
+                    "clone_url": "https://github.com/a/b.git",
+                }
+            ],
             "total_count": 1,
         }
     )
@@ -149,7 +170,12 @@ async def test_search_gitlab_repos_success():
     response.headers = {"content-type": "application/json"}
     response.json = MagicMock(
         return_value=[
-            {"path_with_namespace": "g/r", "web_url": "https://gitlab.com/g/r", "description": "d", "http_url_to_repo": "https://gitlab.com/g/r.git"},
+            {
+                "path_with_namespace": "g/r",
+                "web_url": "https://gitlab.com/g/r",
+                "description": "d",
+                "http_url_to_repo": "https://gitlab.com/g/r.git",
+            },
         ]
     )
     client = MagicMock()

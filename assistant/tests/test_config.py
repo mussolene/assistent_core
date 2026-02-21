@@ -18,7 +18,9 @@ def test_load_yaml_exists(tmp_path):
 
 def test_config_load_from_path(tmp_path):
     path = tmp_path / "config.yaml"
-    path.write_text("model:\n  provider: local\n  name: test\nredis:\n  url: redis://localhost:6379/0\n")
+    path.write_text(
+        "model:\n  provider: local\n  name: test\nredis:\n  url: redis://localhost:6379/0\n"
+    )
     config = Config.load(config_path=path)
     assert config.model.provider == "local"
     assert config.model.name == "test"

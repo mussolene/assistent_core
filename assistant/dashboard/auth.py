@@ -45,6 +45,7 @@ def get_redis():
     import redis
 
     from assistant.dashboard.config_store import get_redis_url
+
     return redis.from_url(get_redis_url(), decode_responses=True)
 
 
@@ -138,11 +139,16 @@ def get_current_user(redis_client: Any) -> dict[str, Any] | None:
     user = get_user(redis_client, login)
     if not user:
         return None
-    return {"login": login, "role": user.get("role", "viewer"), "display_name": user.get("display_name", login)}
+    return {
+        "login": login,
+        "role": user.get("role", "viewer"),
+        "display_name": user.get("display_name", login),
+    }
 
 
 def require_auth(f):
     """Decorator: redirect to login or setup if not authenticated."""
+
     @wraps(f)
     def wrapped(*args, **kwargs):
         redis_client = get_redis()
@@ -156,11 +162,13 @@ def require_auth(f):
         if request.path.startswith("/setup"):
             return f(*args, **kwargs)
         return redirect(url_for("login", next=request.url))
+
     return wrapped
 
 
 def require_role(*allowed_roles: str):
     """Decorator: require auth and one of allowed roles."""
+
     def deco(f):
         @wraps(f)
         def wrapped(*args, **kwargs):
@@ -172,7 +180,10 @@ def require_role(*allowed_roles: str):
                 return redirect(url_for("login", next=request.url))
             if user.get("role") not in allowed_roles:
                 from flask import abort
+
                 abort(403)
             return f(*args, **kwargs)
+
         return wrapped
+
     return deco

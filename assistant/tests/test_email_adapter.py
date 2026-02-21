@@ -1,7 +1,5 @@
 """Tests for email adapter: config, send_email (SMTP/SendGrid mocks), outgoing handler."""
 
-import pytest
-
 from assistant.channels.email_adapter import get_email_config, send_email
 from assistant.core.events import ChannelKind, OutgoingReply
 
@@ -57,14 +55,19 @@ def test_send_email_smtp_success(monkeypatch):
         class F:
             def starttls(self):
                 pass
+
             def login(self, user, password):
                 pass
+
             def sendmail(self, f, to, msg):
                 sent.append((f, to, msg))
+
             def __enter__(self):
                 return self
+
             def __exit__(self, *a):
                 pass
+
         return F()
 
     monkeypatch.setattr("smtplib.SMTP", fake_smtp)
@@ -92,9 +95,11 @@ def test_send_email_sendgrid_success(monkeypatch):
 
     def fake_post(url, json=None, headers=None, timeout=None):
         requests.append((url, json, headers))
+
         class R:
             status_code = 202
             text = "ok"
+
         return R()
 
     monkeypatch.setattr("httpx.post", fake_post)

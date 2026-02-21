@@ -24,7 +24,9 @@ class VectorMemory:
     ) -> None:
         self._collection = collection
         self._top_k = top_k
-        self._persist_path = Path(persist_path) if persist_path else Path("/tmp/assistant_vectors.json")
+        self._persist_path = (
+            Path(persist_path) if persist_path else Path("/tmp/assistant_vectors.json")
+        )
         self._max_size = max_size
         self._model = None
         self._documents: list[dict[str, Any]] = []
@@ -35,9 +37,12 @@ class VectorMemory:
         if self._model is None:
             try:
                 from sentence_transformers import SentenceTransformer
+
                 self._model = SentenceTransformer("all-MiniLM-L6-v2")
             except Exception as e:
-                logger.warning("sentence_transformers not available: %s. Vector memory disabled.", e)
+                logger.warning(
+                    "sentence_transformers not available: %s. Vector memory disabled.", e
+                )
         return self._model
 
     def _load(self) -> None:
@@ -65,12 +70,16 @@ class VectorMemory:
             return
         self._load()
         vec = model.encode(text).tolist()
-        doc = {"text": text, "metadata": metadata or {}, "id": hashlib.sha256(text.encode()).hexdigest()[:16]}
+        doc = {
+            "text": text,
+            "metadata": metadata or {},
+            "id": hashlib.sha256(text.encode()).hexdigest()[:16],
+        }
         self._documents.append(doc)
         self._vectors.append(vec)
         if self._max_size is not None and len(self._documents) > self._max_size:
-            self._documents = self._documents[-self._max_size:]
-            self._vectors = self._vectors[-self._max_size:]
+            self._documents = self._documents[-self._max_size :]
+            self._vectors = self._vectors[-self._max_size :]
         self._save()
 
     def clear(self) -> None:
@@ -93,10 +102,7 @@ class VectorMemory:
             sim = self._cosine(qvec, v)
             scores.append((i, sim))
         scores.sort(key=lambda x: -x[1])
-        return [
-            {**self._documents[idx], "score": score}
-            for idx, score in scores[:k]
-        ]
+        return [{**self._documents[idx], "score": score} for idx, score in scores[:k]]
 
     @staticmethod
     def _cosine(a: list[float], b: list[float]) -> float:

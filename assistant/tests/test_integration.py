@@ -45,11 +45,14 @@ async def test_incoming_to_stream_and_outgoing_mocked():
         await tm.connect()
 
     mock_gateway = MagicMock()
+
     async def mock_generate(prompt, *, stream=False, **kw):
         if stream:
+
             async def gen():
                 yield "Hello"
                 yield " world"
+
             return gen()
         return "Hello world"
 

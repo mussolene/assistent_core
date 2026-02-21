@@ -56,15 +56,25 @@ async def test_agent_registry_unknown():
 @pytest.mark.asyncio
 async def test_agent_registry_mock():
     reg = AgentRegistry()
+
     async def mock_handle(ctx):
         return AgentResult(success=True, output_text="ok")
+
     mock = MagicMock()
     mock.handle = AsyncMock(side_effect=mock_handle)
     reg.register("assistant", mock)
     ctx = TaskContext(
-        task_id="t1", user_id="u1", chat_id="c1", channel="telegram",
-        message_id="m1", text="hi", reasoning_requested=False,
-        state="assistant", iteration=0, tool_results=[], metadata={},
+        task_id="t1",
+        user_id="u1",
+        chat_id="c1",
+        channel="telegram",
+        message_id="m1",
+        text="hi",
+        reasoning_requested=False,
+        state="assistant",
+        iteration=0,
+        tool_results=[],
+        metadata={},
     )
     result = await reg.handle("assistant", ctx)
     assert result.success is True
@@ -105,6 +115,7 @@ async def test_orchestrator_task_to_context_stream_callback_set_when_assistant_a
         "task_id": "tid_1",
         "user_id": "u1",
         "message_id": "m1",
+        "tool_results": [{"tool": "test", "result": "ok"}],
     }
     ctx = orch._task_to_context("tid_1", task_data, payload)
     stream_cb = ctx.metadata.get("stream_callback")

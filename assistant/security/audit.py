@@ -14,7 +14,10 @@ REDACT_KEYS = frozenset({"token", "password", "secret", "api_key", "authorizatio
 
 def _redact(obj: Any) -> Any:
     if isinstance(obj, dict):
-        return {k: "[REDACTED]" if (isinstance(k, str) and k.lower() in REDACT_KEYS) else _redact(v) for k, v in obj.items()}
+        return {
+            k: "[REDACTED]" if (isinstance(k, str) and k.lower() in REDACT_KEYS) else _redact(v)
+            for k, v in obj.items()
+        }
     if isinstance(obj, list):
         return [_redact(v) for v in obj]
     return obj

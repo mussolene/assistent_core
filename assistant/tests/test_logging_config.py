@@ -24,8 +24,13 @@ def test_redact_list():
 def test_structured_formatter_json():
     fmt = StructuredFormatter(use_json=True)
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0,
-        msg="hello", args=(), exc_info=None,
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="hello",
+        args=(),
+        exc_info=None,
     )
     out = fmt.format(record)
     data = json.loads(out)
@@ -37,8 +42,13 @@ def test_structured_formatter_json():
 def test_structured_formatter_key_value():
     fmt = StructuredFormatter(use_json=False)
     record = logging.LogRecord(
-        name="test", level=logging.WARNING, pathname="", lineno=0,
-        msg="warn", args=(), exc_info=None,
+        name="test",
+        level=logging.WARNING,
+        pathname="",
+        lineno=0,
+        msg="warn",
+        args=(),
+        exc_info=None,
     )
     out = fmt.format(record)
     assert "warn" in out
@@ -51,23 +61,26 @@ def test_setup_logging():
     assert root.level == logging.INFO
     # Under pytest, root.handlers[0] may be pytest's (ColoredLevelFormatter); find ours
     structured = [
-        h for h in root.handlers
-        if isinstance(getattr(h, "formatter", None), StructuredFormatter)
+        h for h in root.handlers if isinstance(getattr(h, "formatter", None), StructuredFormatter)
     ]
     if structured:
         assert structured[0].formatter.use_json is True
 
 
 def test_structured_formatter_with_exc_info():
-    import traceback
     fmt = StructuredFormatter(use_json=True)
     try:
         raise ValueError("test error")
     except ValueError:
         exc_info = __import__("sys").exc_info()
     record = logging.LogRecord(
-        name="test", level=logging.ERROR, pathname="", lineno=0,
-        msg="failed", args=(), exc_info=exc_info,
+        name="test",
+        level=logging.ERROR,
+        pathname="",
+        lineno=0,
+        msg="failed",
+        args=(),
+        exc_info=exc_info,
     )
     out = fmt.format(record)
     data = json.loads(out)

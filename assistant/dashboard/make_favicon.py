@@ -1,4 +1,5 @@
 """Generate a minimal 32x32 favicon.png (no Pillow). Run from repo root: python -m assistant.dashboard.make_favicon"""
+
 import struct
 import zlib
 from pathlib import Path

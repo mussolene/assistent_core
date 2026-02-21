@@ -17,6 +17,7 @@ from assistant.dashboard.config_store import (
 def _redis_available():
     try:
         import redis
+
         r = redis.from_url("redis://localhost:6379/13", decode_responses=True)
         r.ping()
         r.close()
@@ -42,7 +43,10 @@ def test_config_store_roundtrip(redis_url):
 
 
 def test_config_store_mcp_servers_roundtrip(redis_url):
-    servers = [{"name": "m1", "url": "http://localhost:3000"}, {"name": "m2", "url": "http://localhost:3001"}]
+    servers = [
+        {"name": "m1", "url": "http://localhost:3000"},
+        {"name": "m2", "url": "http://localhost:3001"},
+    ]
     set_config_in_redis_sync(redis_url, MCP_SERVERS_KEY, servers)
     data = get_config_from_redis_sync(redis_url)
     assert data.get(MCP_SERVERS_KEY) == servers
@@ -70,6 +74,7 @@ async def test_add_telegram_allowed_user(redis_url):
 @pytest.fixture
 def client():
     from assistant.dashboard.app import app
+
     app.config["TESTING"] = True
     return app.test_client()
 
@@ -83,6 +88,7 @@ def auth_mock(monkeypatch):
         lambda r: {"login": "test", "role": "owner", "display_name": "test"},
     )
     from unittest.mock import MagicMock
+
     monkeypatch.setattr("assistant.dashboard.app.get_redis", lambda: MagicMock())
 
 
@@ -103,8 +109,10 @@ def test_api_test_bot_mock(monkeypatch, client, auth_mock):
         lambda url: {"TELEGRAM_BOT_TOKEN": "123:ABC"},
     )
     import httpx
+
     def fake_get(*a, **kw):
         return httpx.Response(200, json={"ok": True, "result": {"username": "test_bot"}})
+
     monkeypatch.setattr("httpx.get", fake_get)
     r = client.post("/api/test-bot")
     assert r.status_code == 200
@@ -152,7 +160,11 @@ def test_api_test_model_returns_json(monkeypatch, client, auth_mock):
     """Dashboard API test-model returns JSON with ok key (may fail without real model)."""
     monkeypatch.setattr(
         "assistant.dashboard.app.get_config_from_redis_sync",
-        lambda url: {"OPENAI_BASE_URL": "http://127.0.0.1:9999/v1", "MODEL_NAME": "x", "OPENAI_API_KEY": "k"},
+        lambda url: {
+            "OPENAI_BASE_URL": "http://127.0.0.1:9999/v1",
+            "MODEL_NAME": "x",
+            "OPENAI_API_KEY": "k",
+        },
     )
     r = client.post("/api/test-model")
     assert r.status_code == 200
@@ -257,6 +269,7 @@ def test_create_and_consume_pairing_code(redis_url):
     assert code.isalnum()
     assert expires == 600
     import redis
+
     r = redis.from_url(redis_url, decode_responses=True)
     assert r.get(PAIRING_CODE_PREFIX + code) == "1"
     assert consume_pairing_code(redis_url, code) is True
@@ -288,11 +301,14 @@ def test_email_page_renders(client, auth_mock, monkeypatch):
 
 def test_save_email_redirects(client, auth_mock, redis_url, monkeypatch):
     monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: redis_url)
-    r = client.post("/save-email", data={
-        "email_from": "bot@test.local",
-        "email_provider": "smtp",
-        "email_smtp_port": "587",
-    })
+    r = client.post(
+        "/save-email",
+        data={
+            "email_from": "bot@test.local",
+            "email_provider": "smtp",
+            "email_smtp_port": "587",
+        },
+    )
     assert r.status_code == 302
     assert "email" in r.headers.get("Location", "")
     data = get_config_from_redis_sync(redis_url)

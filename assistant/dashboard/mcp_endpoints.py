@@ -32,6 +32,7 @@ def create_endpoint(name: str, chat_id: str) -> tuple[str, str]:
     Secret показывается один раз — сохраните его для подстановки в MCP config.
     """
     import redis
+
     chat_id = str(chat_id).strip()
     endpoint_id = str(uuid.uuid4()).replace("-", "")[:16]
     secret = secrets.token_urlsafe(32)
@@ -41,12 +42,14 @@ def create_endpoint(name: str, chat_id: str) -> tuple[str, str]:
         r.sadd(MCP_ENDPOINTS_SET, endpoint_id)
         r.set(
             MCP_ENDPOINT_PREFIX + endpoint_id,
-            json.dumps({
-                "name": name,
-                "chat_id": chat_id,
-                "secret_hash": secret_hash,
-                "created_at": "",
-            }),
+            json.dumps(
+                {
+                    "name": name,
+                    "chat_id": chat_id,
+                    "secret_hash": secret_hash,
+                    "created_at": "",
+                }
+            ),
         )
         r.set(MCP_ENDPOINT_BY_CHAT_PREFIX + chat_id, endpoint_id)
         return endpoint_id, secret
@@ -57,6 +60,7 @@ def create_endpoint(name: str, chat_id: str) -> tuple[str, str]:
 def list_endpoints() -> list[dict]:
     """Список endpoint'ов (без секрета): id, name, chat_id, created_at."""
     import redis
+
     r = redis.from_url(_redis_url(), decode_responses=True)
     try:
         ids = r.smembers(MCP_ENDPOINTS_SET) or []
@@ -67,12 +71,14 @@ def list_endpoints() -> list[dict]:
                 continue
             try:
                 data = json.loads(raw)
-                out.append({
-                    "id": eid,
-                    "name": data.get("name", ""),
-                    "chat_id": data.get("chat_id", ""),
-                    "created_at": data.get("created_at", ""),
-                })
+                out.append(
+                    {
+                        "id": eid,
+                        "name": data.get("name", ""),
+                        "chat_id": data.get("chat_id", ""),
+                        "created_at": data.get("created_at", ""),
+                    }
+                )
             except json.JSONDecodeError:
                 continue
         return out
@@ -83,6 +89,7 @@ def list_endpoints() -> list[dict]:
 def get_endpoint(endpoint_id: str) -> dict | None:
     """Получить endpoint по id (без секрета)."""
     import redis
+
     r = redis.from_url(_redis_url(), decode_responses=True)
     try:
         raw = r.get(MCP_ENDPOINT_PREFIX + endpoint_id)
@@ -119,6 +126,7 @@ def get_chat_id_for_endpoint(endpoint_id: str) -> str | None:
 def get_endpoint_id_for_chat(chat_id: str) -> str | None:
     """По chat_id (Telegram) получить endpoint_id для публикации событий."""
     import redis
+
     r = redis.from_url(_redis_url(), decode_responses=True)
     try:
         return r.get(MCP_ENDPOINT_BY_CHAT_PREFIX + chat_id)
@@ -128,6 +136,7 @@ def get_endpoint_id_for_chat(chat_id: str) -> str | None:
 
 def delete_endpoint(endpoint_id: str) -> bool:
     import redis
+
     r = redis.from_url(_redis_url(), decode_responses=True)
     try:
         ep = get_endpoint(endpoint_id)
@@ -147,6 +156,7 @@ def delete_endpoint(endpoint_id: str) -> bool:
 def regenerate_endpoint_secret(endpoint_id: str) -> str | None:
     """Новый секрет для endpoint. Возвращает plain secret или None."""
     import redis
+
     ep = get_endpoint(endpoint_id)
     if not ep:
         return None
@@ -165,6 +175,7 @@ def regenerate_endpoint_secret(endpoint_id: str) -> str | None:
 def push_mcp_event(endpoint_id: str, event_type: str, data: dict) -> None:
     """Положить событие в очередь для SSE (Redis list)."""
     import redis
+
     r = redis.from_url(_redis_url(), decode_responses=True)
     try:
         key = MCP_EVENT_QUEUE_PREFIX + endpoint_id
@@ -180,6 +191,7 @@ def push_mcp_event(endpoint_id: str, event_type: str, data: dict) -> None:
 def pop_mcp_events(endpoint_id: str, timeout_sec: float = 30.0) -> list[dict]:
     """Забрать события из очереди (для SSE). BLPOP с timeout."""
     import redis
+
     r = redis.from_url(_redis_url(), decode_responses=True)
     key = MCP_EVENT_QUEUE_PREFIX + endpoint_id
     try:

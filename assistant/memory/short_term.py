@@ -30,7 +30,9 @@ class ShortTermMemory:
     def _key(self, user_id: str, session_id: str = "default") -> str:
         return f"{KEY_PREFIX}{user_id}:{session_id}"
 
-    async def append(self, user_id: str, role: str, content: str, session_id: str = "default") -> None:
+    async def append(
+        self, user_id: str, role: str, content: str, session_id: str = "default"
+    ) -> None:
         await self.connect()
         key = self._key(user_id, session_id)
         msg = {"role": role, "content": content}

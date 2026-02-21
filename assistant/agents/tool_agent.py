@@ -42,8 +42,10 @@ class ToolAgent(BaseAgent):
                 action = params.get("action")
                 if action is not None:
                     from assistant.skills.tasks import _normalize_action
+
                     params["action"] = _normalize_action(str(action))
                 from assistant.skills.tasks import _normalize_task_params
+
                 params = _normalize_task_params(params)
             result = await self._registry.run(name, params, self._runner)
             results.append(result)

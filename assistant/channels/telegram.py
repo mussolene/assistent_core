@@ -34,6 +34,7 @@ def _strip_think_blocks(text: str) -> str:
         text = text[: text.index("<think>")].strip()
     return text.strip()
 
+
 TELEGRAM_API = "https://api.telegram.org/bot"
 
 BOT_COMMANDS = [
@@ -51,6 +52,7 @@ BOT_COMMANDS = [
 
 def get_config() -> dict:
     from assistant.config import get_config
+
     c = get_config()
     return {
         "token": c.telegram.bot_token or os.getenv("TELEGRAM_BOT_TOKEN", ""),
@@ -273,13 +275,20 @@ async def run_telegram_adapter() -> None:
         cfg = get_config()
         if not cfg["token"]:
             from assistant.dashboard.config_store import get_config_from_redis
+
             redis_cfg = await get_config_from_redis(redis_url)
             cfg["token"] = redis_cfg.get("TELEGRAM_BOT_TOKEN") or ""
             ids = redis_cfg.get("TELEGRAM_ALLOWED_USER_IDS")
-            cfg["allowed_ids"] = set(ids) if isinstance(ids, list) else (set(int(x) for x in str(ids).split(",") if x.strip()) if ids else set())
+            cfg["allowed_ids"] = (
+                set(ids)
+                if isinstance(ids, list)
+                else (set(int(x) for x in str(ids).split(",") if x.strip()) if ids else set())
+            )
         token = cfg["token"]
         if not token:
-            logger.warning("TELEGRAM_BOT_TOKEN not set. Configure via Web Dashboard: http://localhost:8080 (retry in 60s)")
+            logger.warning(
+                "TELEGRAM_BOT_TOKEN not set. Configure via Web Dashboard: http://localhost:8080 (retry in 60s)"
+            )
             await asyncio.sleep(60)
             continue
         break
@@ -343,7 +352,11 @@ async def run_telegram_adapter() -> None:
                     if s.get("message_id") is None:
                         r = await client.post(
                             f"{base_url}/sendMessage",
-                            json={"chat_id": chat_id, "text": text or STREAM_PLACEHOLDER, "parse_mode": PARSE_MODE},
+                            json={
+                                "chat_id": chat_id,
+                                "text": text or STREAM_PLACEHOLDER,
+                                "parse_mode": PARSE_MODE,
+                            },
                             timeout=15.0,
                         )
                         if r.status_code == 200:
@@ -351,7 +364,9 @@ async def run_telegram_adapter() -> None:
                             s["message_id"] = j.get("result", {}).get("message_id")
                         else:
                             try:
-                                logger.warning("sendMessage stream: %s", r.json().get("description", r.text))
+                                logger.warning(
+                                    "sendMessage stream: %s", r.json().get("description", r.text)
+                                )
                             except Exception:
                                 pass
                             return
@@ -368,7 +383,9 @@ async def run_telegram_adapter() -> None:
                         )
                         if r.status_code != 200:
                             try:
-                                logger.debug("editMessageText: %s", r.json().get("description", r.text))
+                                logger.debug(
+                                    "editMessageText: %s", r.json().get("description", r.text)
+                                )
                             except Exception:
                                 pass
             except Exception as e:
@@ -498,6 +515,7 @@ async def run_telegram_adapter() -> None:
                             REJECT_CALLBACK,
                             consume_pending_confirmation,
                         )
+
                         chat_id = str(cq["message"]["chat"]["id"])
                         callback_data = (cq.get("data") or "").strip()
                         uid_int = int(cq["from"]["id"])
@@ -541,7 +559,10 @@ async def run_telegram_adapter() -> None:
                                     "add_document": "Добавь документ к задаче с id {} (данные из предыдущего сообщения или вложения).",
                                     "add_link": "Добавь ссылку к задаче с id {} (данные из предыдущего сообщения).",
                                 }
-                                text_instruction = (instructions.get(action) or "Выполни действие для задачи с id {}.").format(task_id)
+                                text_instruction = (
+                                    instructions.get(action)
+                                    or "Выполни действие для задачи с id {}."
+                                ).format(task_id)
                                 await _answer_callback(base_url, cq["id"], "Ок")
                                 await bus.publish_incoming(
                                     IncomingMessage(
@@ -549,7 +570,10 @@ async def run_telegram_adapter() -> None:
                                         user_id=str(uid_int),
                                         chat_id=chat_id,
                                         text=text_instruction,
-                                        metadata={"task_callback": callback_data, "task_id": task_id},
+                                        metadata={
+                                            "task_callback": callback_data,
+                                            "task_id": task_id,
+                                        },
                                     )
                                 )
                             else:
@@ -567,19 +591,28 @@ async def run_telegram_adapter() -> None:
                     text = (msg.get("text") or "").strip()
                     # Pairing: /start CODE or /pair CODE (one-time code from dashboard)
                     if text.startswith("/start ") or text.startswith("/pair "):
-                        code = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
+                        code = (
+                            text.split(maxsplit=1)[1].strip()
+                            if len(text.split(maxsplit=1)) > 1
+                            else ""
+                        )
                         if code:
                             from assistant.dashboard.config_store import (
                                 add_telegram_allowed_user,
                                 consume_pairing_code,
                             )
+
                             if consume_pairing_code(redis_url, code):
                                 await add_telegram_allowed_user(redis_url, uid_int)
                                 allowed.add(uid_int)
                                 async with httpx.AsyncClient() as client:
                                     await client.post(
                                         f"{base_url}/sendMessage",
-                                        json={"chat_id": chat_id, "text": "Привязка выполнена. Ваш ID добавлен в разрешённые.", "parse_mode": PARSE_MODE},
+                                        json={
+                                            "chat_id": chat_id,
+                                            "text": "Привязка выполнена. Ваш ID добавлен в разрешённые.",
+                                            "parse_mode": PARSE_MODE,
+                                        },
                                         timeout=5.0,
                                     )
                                 continue
@@ -590,6 +623,7 @@ async def run_telegram_adapter() -> None:
                             add_telegram_allowed_user,
                             get_config_from_redis,
                         )
+
                         redis_cfg = await get_config_from_redis(redis_url)
                         if (redis_cfg.get(PAIRING_MODE_KEY) or "").lower() in ("true", "1", "yes"):
                             await add_telegram_allowed_user(redis_url, uid_int)
@@ -597,7 +631,11 @@ async def run_telegram_adapter() -> None:
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
-                                    json={"chat_id": chat_id, "text": "Pairing выполнен. Ваш ID добавлен в разрешённые.", "parse_mode": PARSE_MODE},
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": "Pairing выполнен. Ваш ID добавлен в разрешённые.",
+                                        "parse_mode": PARSE_MODE,
+                                    },
                                     timeout=5.0,
                                 )
                             continue
@@ -608,7 +646,11 @@ async def run_telegram_adapter() -> None:
                         async with httpx.AsyncClient() as client:
                             await client.post(
                                 f"{base_url}/sendMessage",
-                                json={"chat_id": chat_id, "text": "Rate limit exceeded. Try again later.", "parse_mode": PARSE_MODE},
+                                json={
+                                    "chat_id": chat_id,
+                                    "text": "Rate limit exceeded. Try again later.",
+                                    "parse_mode": PARSE_MODE,
+                                },
                                 timeout=5.0,
                             )
                         continue
@@ -623,7 +665,11 @@ async def run_telegram_adapter() -> None:
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
-                                    json={"chat_id": chat_id, "text": reply, "parse_mode": PARSE_MODE},
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": reply,
+                                        "parse_mode": PARSE_MODE,
+                                    },
                                     timeout=5.0,
                                 )
                         except Exception as e:
@@ -631,16 +677,24 @@ async def run_telegram_adapter() -> None:
                         continue
                     # /repos, /github, /gitlab — репозитории (задел 9.2: список и поиск с кнопками)
                     if text in ("/repos", "/github", "/gitlab"):
-                        dashboard_url = (os.getenv("DASHBOARD_URL", "http://localhost:8080")).rstrip("/")
+                        dashboard_url = (
+                            os.getenv("DASHBOARD_URL", "http://localhost:8080")
+                        ).rstrip("/")
                         repos_url = f"{dashboard_url}/repos"
-                        label = "Репо" if text == "/repos" else ("GitHub" if text == "/github" else "GitLab")
+                        label = (
+                            "Репо"
+                            if text == "/repos"
+                            else ("GitHub" if text == "/github" else "GitLab")
+                        )
                         reply = (
                             f"Репозитории ({label}).\n\n"
                             "Список склонированных репо и поиск по имени — в дашборде. "
                             "Скоро: список и поиск прямо в чате с кнопками «назад»/«вперёд»."
                         )
                         reply_markup = {
-                            "inline_keyboard": [[{"text": f"Открыть дашборд ({label})", "url": repos_url}]],
+                            "inline_keyboard": [
+                                [{"text": f"Открыть дашборд ({label})", "url": repos_url}]
+                            ],
                         }
                         try:
                             async with httpx.AsyncClient() as client:
@@ -660,11 +714,16 @@ async def run_telegram_adapter() -> None:
                     # Ответ на запрос подтверждения от MCP/агента
                     try:
                         from assistant.core.notify import consume_pending_confirmation
+
                         if consume_pending_confirmation(chat_id, text):
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
-                                    json={"chat_id": chat_id, "text": "Принято.", "parse_mode": PARSE_MODE},
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": "Принято.",
+                                        "parse_mode": PARSE_MODE,
+                                    },
                                     timeout=5.0,
                                 )
                             continue
@@ -676,7 +735,11 @@ async def run_telegram_adapter() -> None:
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
-                                    json={"chat_id": chat_id, "text": "Напишите: /dev ваш текст или пожелания для агента.", "parse_mode": PARSE_MODE},
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": "Напишите: /dev ваш текст или пожелания для агента.",
+                                        "parse_mode": PARSE_MODE,
+                                    },
                                     timeout=5.0,
                                 )
                         except Exception:
@@ -685,11 +748,16 @@ async def run_telegram_adapter() -> None:
                     if text.startswith("/dev "):
                         try:
                             from assistant.core.notify import push_dev_feedback
+
                             push_dev_feedback(chat_id, text[5:].strip())
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
-                                    json={"chat_id": chat_id, "text": "Передано агенту.", "parse_mode": PARSE_MODE},
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": "Передано агенту.",
+                                        "parse_mode": PARSE_MODE,
+                                    },
                                     timeout=5.0,
                                 )
                         except Exception as e:

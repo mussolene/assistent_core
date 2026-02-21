@@ -10,8 +10,11 @@ from typing import Any
 from assistant.security.command_whitelist import CommandWhitelist
 from assistant.security.sandbox import run_in_sandbox
 from assistant.skills.base import BaseSkill
-
-from assistant.skills.git_platform import create_merge_request, search_github_repos, search_gitlab_repos
+from assistant.skills.git_platform import (
+    create_merge_request,
+    search_github_repos,
+    search_gitlab_repos,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -222,7 +225,10 @@ class GitSkill(BaseSkill):
         title = (params.get("title") or "").strip()
         description = (params.get("description") or params.get("body") or "").strip()
         github_token = os.environ.get("GITHUB_TOKEN", "").strip()
-        gitlab_token = os.environ.get("GITLAB_TOKEN", "").strip() or os.environ.get("GITLAB_PRIVATE_TOKEN", "").strip()
+        gitlab_token = (
+            os.environ.get("GITLAB_TOKEN", "").strip()
+            or os.environ.get("GITLAB_PRIVATE_TOKEN", "").strip()
+        )
         result = await create_merge_request(
             repo=repo,
             source_branch=source_branch,
@@ -271,13 +277,29 @@ class GitSkill(BaseSkill):
             token = os.environ.get("GITHUB_TOKEN", "").strip() or None
             return await search_github_repos(query, token=token)
         if platform == "gitlab":
-            token = os.environ.get("GITLAB_TOKEN", "").strip() or os.environ.get("GITLAB_PRIVATE_TOKEN", "").strip() or None
+            token = (
+                os.environ.get("GITLAB_TOKEN", "").strip()
+                or os.environ.get("GITLAB_PRIVATE_TOKEN", "").strip()
+                or None
+            )
             return await search_gitlab_repos(query, token=token)
         if platform == "both":
             gh_token = os.environ.get("GITHUB_TOKEN", "").strip() or None
-            gl_token = os.environ.get("GITLAB_TOKEN", "").strip() or os.environ.get("GITLAB_PRIVATE_TOKEN", "").strip() or None
-            gh_out = await search_github_repos(query, token=gh_token) if gh_token else {"ok": True, "items": [], "total_count": 0}
-            gl_out = await search_gitlab_repos(query, token=gl_token) if gl_token else {"ok": True, "items": [], "total_count": 0}
+            gl_token = (
+                os.environ.get("GITLAB_TOKEN", "").strip()
+                or os.environ.get("GITLAB_PRIVATE_TOKEN", "").strip()
+                or None
+            )
+            gh_out = (
+                await search_github_repos(query, token=gh_token)
+                if gh_token
+                else {"ok": True, "items": [], "total_count": 0}
+            )
+            gl_out = (
+                await search_gitlab_repos(query, token=gl_token)
+                if gl_token
+                else {"ok": True, "items": [], "total_count": 0}
+            )
             items = (gh_out.get("items") or []) + (gl_out.get("items") or [])
             return {"ok": True, "items": items, "total_count": len(items)}
         return {"ok": False, "error": "platform must be github, gitlab, or both"}

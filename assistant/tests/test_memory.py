@@ -7,10 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from assistant.memory.manager import (
-    MemoryManager,
-    VECTOR_LEVEL_LONG,
-    VECTOR_LEVEL_MEDIUM,
     VECTOR_LEVEL_SHORT,
+    MemoryManager,
 )
 from assistant.memory.short_term import ShortTermMemory
 from assistant.memory.summary import SummaryMemory
@@ -22,6 +20,7 @@ async def test_short_term_memory_in_memory():
     """Test short-term without Redis by using a fake URL and catching connection error or using fakeredis."""
     try:
         import redis.asyncio as aioredis
+
         r = aioredis.from_url("redis://localhost:6379/15")
         await r.ping()
     except Exception:
@@ -41,6 +40,7 @@ async def test_short_term_memory_in_memory():
 async def test_task_memory():
     try:
         import redis.asyncio as aioredis
+
         r = aioredis.from_url("redis://localhost:6379/15")
         await r.ping()
     except Exception:
@@ -60,6 +60,7 @@ async def test_task_memory():
 async def test_summary_memory_roundtrip():
     try:
         import redis.asyncio as aioredis
+
         r = aioredis.from_url("redis://localhost:6379/15")
         await r.ping()
     except Exception:
@@ -77,10 +78,12 @@ async def test_memory_manager_get_context_no_vector():
     """get_context_for_user with mocked backends and no vector model."""
     mgr = MemoryManager("redis://localhost:6379/0")
     mgr._short = MagicMock()
-    mgr._short.get_messages = AsyncMock(return_value=[
-        {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": "hello"},
-    ])
+    mgr._short.get_messages = AsyncMock(
+        return_value=[
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "hello"},
+        ]
+    )
     mgr._summary = MagicMock()
     mgr._summary.get_summary = AsyncMock(return_value="Old summary.")
     for vec in (mgr._vector_short, mgr._vector_medium, mgr._vector_long):
@@ -147,17 +150,21 @@ async def test_short_term_with_mock_redis():
     mock_client = MagicMock()
     mock_client.ping = AsyncMock()
     mock_client.rpush = AsyncMock()
-    mock_client.lrange = AsyncMock(return_value=[
-        _json.dumps({"role": "user", "content": "ok"}),
-        "not-valid-json",
-    ])
+    mock_client.lrange = AsyncMock(
+        return_value=[
+            _json.dumps({"role": "user", "content": "ok"}),
+            "not-valid-json",
+        ]
+    )
     mock_client.delete = AsyncMock()
-    mock_client.pipeline = MagicMock(return_value=MagicMock(
-        rpush=MagicMock(),
-        ltrim=MagicMock(),
-        expire=MagicMock(),
-        execute=AsyncMock(),
-    ))
+    mock_client.pipeline = MagicMock(
+        return_value=MagicMock(
+            rpush=MagicMock(),
+            ltrim=MagicMock(),
+            expire=MagicMock(),
+            execute=AsyncMock(),
+        )
+    )
 
     with patch("assistant.memory.short_term.aioredis") as m:
         m.from_url = MagicMock(return_value=mock_client)
@@ -188,7 +195,9 @@ async def test_memory_manager_connect_and_getters():
         with patch("assistant.memory.manager.TaskMemory", return_value=mock_task):
             with patch("assistant.memory.manager.SummaryMemory", return_value=mock_summary):
                 with patch("assistant.memory.manager.VectorMemory", return_value=mock_vector):
-                    with patch("assistant.memory.manager.UserDataMemory", return_value=mock_user_data):
+                    with patch(
+                        "assistant.memory.manager.UserDataMemory", return_value=mock_user_data
+                    ):
                         mgr = MemoryManager("redis://localhost:6379/0")
                         await mgr.connect()
                         mock_short.connect.assert_called_once()

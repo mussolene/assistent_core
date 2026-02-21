@@ -29,6 +29,7 @@ def get_email_config(redis_url: str) -> dict[str, Any]:
     """Load email settings from Redis. Returns dict with EMAIL_* keys."""
     try:
         from assistant.dashboard.config_store import get_config_from_redis_sync
+
         cfg = get_config_from_redis_sync(redis_url)
         return {
             "enabled": (cfg.get("EMAIL_ENABLED") or "").lower() in ("true", "1", "yes"),

@@ -13,13 +13,13 @@ import httpx
 logger = logging.getLogger(__name__)
 from flask import (
     Flask,
+    Response,
     flash,
     jsonify,
     make_response,
     redirect,
     render_template_string,
     request,
-    Response,
     session,
     stream_with_context,
     url_for,
@@ -51,6 +51,7 @@ _secret_key = os.getenv("SECRET_KEY", "change-me-in-production")
 app.secret_key = _secret_key
 if _secret_key == "change-me-in-production":
     import logging
+
     logging.getLogger(__name__).warning(
         "SECRET_KEY not set; using default. Set SECRET_KEY in production."
     )
@@ -204,7 +205,9 @@ def load_config() -> dict:
     redis_url = get_redis_url()
     data = get_config_from_redis_sync(redis_url)
     if "TELEGRAM_ALLOWED_USER_IDS" in data and isinstance(data["TELEGRAM_ALLOWED_USER_IDS"], list):
-        data["TELEGRAM_ALLOWED_USER_IDS_STR"] = ",".join(str(x) for x in data["TELEGRAM_ALLOWED_USER_IDS"])
+        data["TELEGRAM_ALLOWED_USER_IDS_STR"] = ",".join(
+            str(x) for x in data["TELEGRAM_ALLOWED_USER_IDS"]
+        )
     else:
         data["TELEGRAM_ALLOWED_USER_IDS_STR"] = data.get("TELEGRAM_ALLOWED_USER_IDS", "") or ""
     data.setdefault("PAIRING_MODE", "false")
@@ -266,6 +269,7 @@ def login():
     if not user:
         try:
             from assistant.security.audit import audit
+
             audit("login_failed")
         except Exception:
             pass
@@ -276,6 +280,7 @@ def login():
     _set_session_cookie(resp, sid)
     try:
         from assistant.security.audit import audit
+
         audit("login_ok", login=login_name)
     except Exception:
         pass
@@ -284,7 +289,10 @@ def login():
 
 def _set_session_cookie(resp, sid: str) -> None:
     """Set session cookie; use secure=True when HTTPS or production."""
-    secure = os.getenv("HTTPS", "").lower() in ("1", "true", "yes") or os.getenv("FLASK_ENV") == "production"
+    secure = (
+        os.getenv("HTTPS", "").lower() in ("1", "true", "yes")
+        or os.getenv("FLASK_ENV") == "production"
+    )
     resp.set_cookie(
         SESSION_COOKIE_NAME,
         sid,
@@ -301,12 +309,14 @@ def api_session():
     r = get_redis()
     user = get_current_user(r)
     if user:
-        return jsonify({
-            "logged_in": True,
-            "login": user.get("login"),
-            "role": user.get("role"),
-            "display_name": user.get("display_name"),
-        })
+        return jsonify(
+            {
+                "logged_in": True,
+                "login": user.get("login"),
+                "role": user.get("role"),
+                "display_name": user.get("display_name"),
+            }
+        )
     return jsonify({"logged_in": False})
 
 
@@ -317,6 +327,7 @@ def logout():
         try:
             delete_session(get_redis(), sid)
             from assistant.security.audit import audit
+
             audit("logout")
         except Exception:
             pass
@@ -358,6 +369,7 @@ def setup():
     _set_session_cookie(resp, sid)
     try:
         from assistant.security.audit import audit
+
         audit("setup_completed", login=login_name)
     except Exception:
         pass
@@ -442,7 +454,9 @@ function genPairingCode() {
 def index():
     config = load_config()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace("{% block content %}{% endblock %}", _TELEGRAM_BODY),
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
+            "{% block content %}{% endblock %}", _TELEGRAM_BODY
+        ),
         config=config,
         section="telegram",
     )
@@ -456,12 +470,16 @@ def save_telegram():
         flash("Укажите токен бота.", "error")
         return redirect(url_for("index"))
     users_str = (request.form.get("telegram_allowed_user_ids") or "").strip()
-    user_ids = [int(x.strip()) for x in re.split(r"[\s,]+", users_str) if x.strip() and x.strip().isdigit()]
+    user_ids = [
+        int(x.strip()) for x in re.split(r"[\s,]+", users_str) if x.strip() and x.strip().isdigit()
+    ]
     pairing = request.form.get("pairing_mode") == "1"
     set_config_in_redis_sync(redis_url, "TELEGRAM_BOT_TOKEN", token)
     set_config_in_redis_sync(redis_url, "TELEGRAM_ALLOWED_USER_IDS", user_ids if user_ids else [])
     set_config_in_redis_sync(redis_url, PAIRING_MODE_KEY, "true" if pairing else "false")
-    set_config_in_redis_sync(redis_url, "TELEGRAM_DEV_CHAT_ID", (request.form.get("telegram_dev_chat_id") or "").strip())
+    set_config_in_redis_sync(
+        redis_url, "TELEGRAM_DEV_CHAT_ID", (request.form.get("telegram_dev_chat_id") or "").strip()
+    )
     flash("Сохранено. Настройки применяются автоматически.", "success")
     return redirect(url_for("index"))
 
@@ -522,7 +540,9 @@ function testModel() {
 def model():
     config = load_config()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace("{% block content %}{% endblock %}", _MODEL_BODY),
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
+            "{% block content %}{% endblock %}", _MODEL_BODY
+        ),
         config=config,
         section="model",
     )
@@ -531,12 +551,28 @@ def model():
 @app.route("/save-model", methods=["POST"])
 def save_model():
     redis_url = get_redis_url()
-    set_config_in_redis_sync(redis_url, "OPENAI_BASE_URL", (request.form.get("openai_base_url") or "").strip())
-    set_config_in_redis_sync(redis_url, "MODEL_NAME", (request.form.get("model_name") or "").strip())
-    set_config_in_redis_sync(redis_url, "MODEL_FALLBACK_NAME", (request.form.get("model_fallback_name") or "").strip())
-    set_config_in_redis_sync(redis_url, "CLOUD_FALLBACK_ENABLED", "true" if request.form.get("cloud_fallback_enabled") == "1" else "false")
-    set_config_in_redis_sync(redis_url, "LM_STUDIO_NATIVE", "true" if request.form.get("lm_studio_native") == "1" else "false")
-    set_config_in_redis_sync(redis_url, "OPENAI_API_KEY", (request.form.get("openai_api_key") or "").strip())
+    set_config_in_redis_sync(
+        redis_url, "OPENAI_BASE_URL", (request.form.get("openai_base_url") or "").strip()
+    )
+    set_config_in_redis_sync(
+        redis_url, "MODEL_NAME", (request.form.get("model_name") or "").strip()
+    )
+    set_config_in_redis_sync(
+        redis_url, "MODEL_FALLBACK_NAME", (request.form.get("model_fallback_name") or "").strip()
+    )
+    set_config_in_redis_sync(
+        redis_url,
+        "CLOUD_FALLBACK_ENABLED",
+        "true" if request.form.get("cloud_fallback_enabled") == "1" else "false",
+    )
+    set_config_in_redis_sync(
+        redis_url,
+        "LM_STUDIO_NATIVE",
+        "true" if request.form.get("lm_studio_native") == "1" else "false",
+    )
+    set_config_in_redis_sync(
+        redis_url, "OPENAI_API_KEY", (request.form.get("openai_api_key") or "").strip()
+    )
     flash("Сохранено. Настройки модели применяются автоматически.", "success")
     return redirect(url_for("model"))
 
@@ -590,7 +626,9 @@ _EMAIL_BODY = """
 def email_settings():
     config = load_config()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace("{% block content %}{% endblock %}", _EMAIL_BODY),
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
+            "{% block content %}{% endblock %}", _EMAIL_BODY
+        ),
         config=config,
         section="email",
     )
@@ -599,14 +637,30 @@ def email_settings():
 @app.route("/save-email", methods=["POST"])
 def save_email():
     redis_url = get_redis_url()
-    set_config_in_redis_sync(redis_url, "EMAIL_ENABLED", "true" if request.form.get("email_enabled") == "1" else "false")
-    set_config_in_redis_sync(redis_url, "EMAIL_FROM", (request.form.get("email_from") or "").strip())
-    set_config_in_redis_sync(redis_url, "EMAIL_PROVIDER", (request.form.get("email_provider") or "smtp").strip().lower())
-    set_config_in_redis_sync(redis_url, "EMAIL_SMTP_HOST", (request.form.get("email_smtp_host") or "").strip())
-    set_config_in_redis_sync(redis_url, "EMAIL_SMTP_PORT", (request.form.get("email_smtp_port") or "587").strip())
-    set_config_in_redis_sync(redis_url, "EMAIL_SMTP_USER", (request.form.get("email_smtp_user") or "").strip())
-    set_config_in_redis_sync(redis_url, "EMAIL_SMTP_PASSWORD", (request.form.get("email_smtp_password") or "").strip())
-    set_config_in_redis_sync(redis_url, "EMAIL_SENDGRID_API_KEY", (request.form.get("email_sendgrid_key") or "").strip())
+    set_config_in_redis_sync(
+        redis_url, "EMAIL_ENABLED", "true" if request.form.get("email_enabled") == "1" else "false"
+    )
+    set_config_in_redis_sync(
+        redis_url, "EMAIL_FROM", (request.form.get("email_from") or "").strip()
+    )
+    set_config_in_redis_sync(
+        redis_url, "EMAIL_PROVIDER", (request.form.get("email_provider") or "smtp").strip().lower()
+    )
+    set_config_in_redis_sync(
+        redis_url, "EMAIL_SMTP_HOST", (request.form.get("email_smtp_host") or "").strip()
+    )
+    set_config_in_redis_sync(
+        redis_url, "EMAIL_SMTP_PORT", (request.form.get("email_smtp_port") or "587").strip()
+    )
+    set_config_in_redis_sync(
+        redis_url, "EMAIL_SMTP_USER", (request.form.get("email_smtp_user") or "").strip()
+    )
+    set_config_in_redis_sync(
+        redis_url, "EMAIL_SMTP_PASSWORD", (request.form.get("email_smtp_password") or "").strip()
+    )
+    set_config_in_redis_sync(
+        redis_url, "EMAIL_SENDGRID_API_KEY", (request.form.get("email_sendgrid_key") or "").strip()
+    )
     flash("Настройки Email сохранены.", "success")
     return redirect(url_for("email_settings"))
 
@@ -646,7 +700,9 @@ _MCP_BODY = """
 def mcp():
     config = load_config()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace("{% block content %}{% endblock %}", _MCP_BODY),
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
+            "{% block content %}{% endblock %}", _MCP_BODY
+        ),
         config=config,
         section="mcp",
     )
@@ -749,13 +805,16 @@ def _mcp_agent_base_url():
 @app.route("/mcp-agent")
 def mcp_agent():
     from assistant.dashboard.mcp_endpoints import list_endpoints
+
     config = load_config()
     new_secret = None
     if "mcp_new_secret" in session:
         new_secret = session.pop("mcp_new_secret", None)
     base_url = _mcp_agent_base_url()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace("{% block content %}{% endblock %}", _MCP_AGENT_BODY),
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
+            "{% block content %}{% endblock %}", _MCP_AGENT_BODY
+        ),
         config=config,
         section="mcp_agent",
         mcp_endpoints=list_endpoints(),
@@ -767,6 +826,7 @@ def mcp_agent():
 @app.route("/mcp-agent/create", methods=["POST"])
 def mcp_agent_create():
     from assistant.dashboard.mcp_endpoints import create_endpoint
+
     name = (request.form.get("name") or "").strip()
     chat_id = (request.form.get("chat_id") or "").strip()
     if not name or not chat_id:
@@ -782,12 +842,16 @@ def mcp_agent_create():
 @app.route("/mcp-agent/regenerate", methods=["POST"])
 def mcp_agent_regenerate():
     from assistant.dashboard.mcp_endpoints import regenerate_endpoint_secret
+
     endpoint_id = (request.form.get("endpoint_id") or "").strip()
     if not endpoint_id:
         return redirect(url_for("mcp_agent"))
     new_secret = regenerate_endpoint_secret(endpoint_id)
     if new_secret:
-        session["mcp_new_secret"] = {"url": _mcp_agent_base_url() + "mcp/v1/agent/" + endpoint_id, "secret": new_secret}
+        session["mcp_new_secret"] = {
+            "url": _mcp_agent_base_url() + "mcp/v1/agent/" + endpoint_id,
+            "secret": new_secret,
+        }
         flash("Секрет обновлён. Скопируйте новый секрет ниже.", "success")
     return redirect(url_for("mcp_agent"))
 
@@ -795,6 +859,7 @@ def mcp_agent_regenerate():
 @app.route("/mcp-agent/delete", methods=["POST"])
 def mcp_agent_delete():
     from assistant.dashboard.mcp_endpoints import delete_endpoint
+
     endpoint_id = (request.form.get("endpoint_id") or "").strip()
     if endpoint_id:
         delete_endpoint(endpoint_id)
@@ -804,7 +869,8 @@ def mcp_agent_delete():
 
 def _mcp_api_auth(endpoint_id: str):
     """Проверка Bearer для MCP API. Возвращает chat_id или None."""
-    from assistant.dashboard.mcp_endpoints import verify_endpoint_secret, get_chat_id_for_endpoint
+    from assistant.dashboard.mcp_endpoints import get_chat_id_for_endpoint, verify_endpoint_secret
+
     if not endpoint_id:
         return None
     auth = request.headers.get("Authorization") or ""
@@ -822,37 +888,41 @@ def mcp_api_base_get(endpoint_id):
     if not chat_id:
         return jsonify({"error": "Unauthorized"}), 401
     base = _mcp_agent_base_url()
-    return jsonify({
-        "protocol": "mcp",
-        "endpoint_id": endpoint_id,
-        "links": {
-            "notify": base + f"mcp/v1/agent/{endpoint_id}/notify",
-            "question": base + f"mcp/v1/agent/{endpoint_id}/question",
-            "confirmation": base + f"mcp/v1/agent/{endpoint_id}/confirmation",
-            "replies": base + f"mcp/v1/agent/{endpoint_id}/replies",
-            "events": base + f"mcp/v1/agent/{endpoint_id}/events",
-        },
-        "auth": "Authorization: Bearer <secret>",
-    })
+    return jsonify(
+        {
+            "protocol": "mcp",
+            "endpoint_id": endpoint_id,
+            "links": {
+                "notify": base + f"mcp/v1/agent/{endpoint_id}/notify",
+                "question": base + f"mcp/v1/agent/{endpoint_id}/question",
+                "confirmation": base + f"mcp/v1/agent/{endpoint_id}/confirmation",
+                "replies": base + f"mcp/v1/agent/{endpoint_id}/replies",
+                "events": base + f"mcp/v1/agent/{endpoint_id}/events",
+            },
+            "auth": "Authorization: Bearer <secret>",
+        }
+    )
 
 
 def _mcp_tools_call(chat_id: str, endpoint_id: str, name: str, arguments: dict) -> dict:
     """Обработка tools/call для endpoint (chat_id из auth)."""
     import time
+
     from assistant.core.notify import (
         get_and_clear_pending_result,
         notify_to_chat,
         pop_dev_feedback,
         send_confirmation_request,
     )
-    from assistant.dashboard.mcp_endpoints import push_mcp_event
 
     if name == "notify":
         msg = (arguments.get("message") or "").strip()
         if not msg:
             return {"content": [{"type": "text", "text": "Ошибка: message пустой."}]}
         ok = notify_to_chat(chat_id, msg)
-        return {"content": [{"type": "text", "text": "Отправлено." if ok else "Не удалось отправить."}]}
+        return {
+            "content": [{"type": "text", "text": "Отправлено." if ok else "Не удалось отправить."}]
+        }
 
     if name == "ask_confirmation":
         msg = (arguments.get("message") or "").strip()
@@ -864,9 +934,29 @@ def _mcp_tools_call(chat_id: str, endpoint_id: str, name: str, arguments: dict) 
         while time.monotonic() < deadline:
             result = get_and_clear_pending_result(chat_id)
             if result is not None:
-                return {"content": [{"type": "text", "text": json.dumps({"confirmed": result.get("confirmed"), "rejected": result.get("rejected"), "reply": result.get("reply", "")})}]}
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                {
+                                    "confirmed": result.get("confirmed"),
+                                    "rejected": result.get("rejected"),
+                                    "reply": result.get("reply", ""),
+                                }
+                            ),
+                        }
+                    ]
+                }
             time.sleep(0.5)
-        return {"content": [{"type": "text", "text": json.dumps({"confirmed": False, "timeout": True, "reply": ""})}]}
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps({"confirmed": False, "timeout": True, "reply": ""}),
+                }
+            ]
+        }
 
     if name == "get_user_feedback":
         feedback = pop_dev_feedback(chat_id)
@@ -876,9 +966,29 @@ def _mcp_tools_call(chat_id: str, endpoint_id: str, name: str, arguments: dict) 
 
 
 MCP_TOOLS_SPEC = [
-    {"name": "notify", "description": "Отправить сообщение в Telegram.", "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}},
-    {"name": "ask_confirmation", "description": "Запросить подтверждение в Telegram (confirm/reject). Таймаут по умолчанию 120 сек.", "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}, "timeout_sec": {"type": "integer"}}, "required": ["message"]}},
-    {"name": "get_user_feedback", "description": "Забрать сообщения от пользователя (/dev в Telegram).", "inputSchema": {"type": "object", "properties": {}}},
+    {
+        "name": "notify",
+        "description": "Отправить сообщение в Telegram.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"message": {"type": "string"}},
+            "required": ["message"],
+        },
+    },
+    {
+        "name": "ask_confirmation",
+        "description": "Запросить подтверждение в Telegram (confirm/reject). Таймаут по умолчанию 120 сек.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"message": {"type": "string"}, "timeout_sec": {"type": "integer"}},
+            "required": ["message"],
+        },
+    },
+    {
+        "name": "get_user_feedback",
+        "description": "Забрать сообщения от пользователя (/dev в Telegram).",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -887,7 +997,9 @@ def mcp_api_base_post(endpoint_id):
     """POST базового URL: JSON-RPC MCP (initialize, tools/list, tools/call) для Cursor."""
     chat_id = _mcp_api_auth(endpoint_id)
     if not chat_id:
-        return jsonify({"jsonrpc": "2.0", "error": {"code": -32001, "message": "Unauthorized"}}), 401
+        return jsonify(
+            {"jsonrpc": "2.0", "error": {"code": -32001, "message": "Unauthorized"}}
+        ), 401
     data = request.get_json(silent=True) or {}
     method = data.get("method")
     params = data.get("params") or {}
@@ -902,11 +1014,13 @@ def mcp_api_base_post(endpoint_id):
         return jsonify(out)
 
     if method == "initialize":
-        return reply({
-            "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": "assistant-mcp", "version": "0.1.0"},
-        })
+        return reply(
+            {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"tools": {}},
+                "serverInfo": {"name": "assistant-mcp", "version": "0.1.0"},
+            }
+        )
     if method == "notified" and params.get("method") == "initialized":
         return reply()
     if method == "tools/list":
@@ -939,6 +1053,7 @@ def mcp_api_notify(endpoint_id):
     if not message:
         return jsonify({"ok": False, "error": "message required"}), 400
     from assistant.core.notify import notify_to_chat
+
     ok = notify_to_chat(chat_id, message)
     return jsonify({"ok": ok})
 
@@ -953,6 +1068,7 @@ def mcp_api_question(endpoint_id):
     if not message:
         return jsonify({"ok": False, "error": "message required"}), 400
     from assistant.core.notify import notify_to_chat
+
     prompt = message + "\n\nОтветьте в Telegram (confirm/reject или свой текст)."
     ok = notify_to_chat(chat_id, prompt)
     return jsonify({"ok": ok})
@@ -968,8 +1084,15 @@ def mcp_api_confirmation(endpoint_id):
     if not message:
         return jsonify({"ok": False, "error": "message required"}), 400
     from assistant.core.notify import send_confirmation_request
+
     ok = send_confirmation_request(chat_id, message)
-    return jsonify({"ok": ok, "pending": True, "message": "Сообщение с кнопками Подтвердить/Отклонить отправлено. Ожидайте ответ в SSE /events или в следующем запросе /replies."})
+    return jsonify(
+        {
+            "ok": ok,
+            "pending": True,
+            "message": "Сообщение с кнопками Подтвердить/Отклонить отправлено. Ожидайте ответ в SSE /events или в следующем запросе /replies.",
+        }
+    )
 
 
 @app.route("/mcp/v1/agent/<endpoint_id>/replies", methods=["GET"])
@@ -978,6 +1101,7 @@ def mcp_api_replies(endpoint_id):
     if not chat_id:
         return jsonify({"ok": False, "error": "Unauthorized"}), 401
     from assistant.core.notify import pop_dev_feedback
+
     replies = pop_dev_feedback(chat_id)
     return jsonify({"ok": True, "replies": replies})
 
@@ -1069,11 +1193,14 @@ def repos_page():
     if workspace_dir:
         try:
             from assistant.skills.git import list_cloned_repos_sync
+
             repos = list_cloned_repos_sync(workspace_dir)
         except Exception:
             pass
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace("{% block content %}{% endblock %}", _REPOS_BODY),
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
+            "{% block content %}{% endblock %}", _REPOS_BODY
+        ),
         config=config,
         section="repos",
         workspace_dir=workspace_dir or None,
@@ -1086,7 +1213,9 @@ def monitor():
     config = load_config()
     info = _redis_info()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace("{% block content %}{% endblock %}", _MONITOR_BODY),
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
+            "{% block content %}{% endblock %}", _MONITOR_BODY
+        ),
         config=config,
         section="monitor",
         info=info,
@@ -1096,6 +1225,7 @@ def monitor():
 def _redis_info() -> dict:
     try:
         import redis
+
         client = redis.from_url(get_redis_url(), decode_responses=True)
         raw = client.info("memory")
         raw["connected_clients"] = client.info("clients").get("connected_clients", 0)
@@ -1139,6 +1269,7 @@ def api_test_model():
     async def _check():
         if use_lm_studio_native:
             from assistant.models import lm_studio
+
             try:
                 out = await lm_studio.generate_lm_studio(
                     base_url or "http://localhost:1234",
@@ -1151,6 +1282,7 @@ def api_test_model():
                 return _model_check_hint(str(e))
         normalized_base = _normalize_base_url(base_url, for_lm_studio_native=False)
         from openai import AsyncOpenAI
+
         http_client = httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=8.0))
         client = AsyncOpenAI(
             base_url=normalized_base,
@@ -1225,6 +1357,7 @@ def api_cloned_repos():
     if workspace_dir:
         try:
             from assistant.skills.git import list_cloned_repos_sync
+
             repos = list_cloned_repos_sync(workspace_dir)
         except Exception:
             pass

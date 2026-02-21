@@ -24,12 +24,13 @@ async def get_config_from_redis(redis_url: str) -> dict[str, Any]:
     """Load config keys from Redis. Returns dict of key -> value (strings)."""
     try:
         import redis.asyncio as aioredis
+
         client = aioredis.from_url(redis_url, decode_responses=True)
         await client.ping()
         keys = await client.keys(REDIS_PREFIX + "*")
         out = {}
         for k in keys:
-            name = k[len(REDIS_PREFIX):]
+            name = k[len(REDIS_PREFIX) :]
             val = await client.get(k)
             if val is not None:
                 if name == "TELEGRAM_ALLOWED_USER_IDS" and val:
@@ -55,12 +56,13 @@ def get_config_from_redis_sync(redis_url: str) -> dict[str, Any]:
     """Sync version for use in non-async contexts."""
     try:
         import redis
+
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
         keys = client.keys(REDIS_PREFIX + "*")
         out = {}
         for k in keys:
-            name = k[len(REDIS_PREFIX):]
+            name = k[len(REDIS_PREFIX) :]
             val = client.get(k)
             if val is not None:
                 if name == "TELEGRAM_ALLOWED_USER_IDS" and val:
@@ -90,10 +92,13 @@ def _serialize_value(key: str, value: Any) -> str:
     return str(value)
 
 
-async def set_config_in_redis(redis_url: str, key: str, value: str | list[int] | list[dict]) -> None:
+async def set_config_in_redis(
+    redis_url: str, key: str, value: str | list[int] | list[dict]
+) -> None:
     val_str = _serialize_value(key, value)
     try:
         import redis.asyncio as aioredis
+
         client = aioredis.from_url(redis_url, decode_responses=True)
         await client.set(REDIS_PREFIX + key, val_str)
         await client.close()
@@ -118,9 +123,11 @@ def create_pairing_code(redis_url: str) -> tuple[str, int]:
     """Create one-time pairing code. Returns (code, expires_in_sec). Code is 6 alphanumeric."""
     import secrets
     import string
+
     code = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
     try:
         import redis
+
         client = redis.from_url(redis_url, decode_responses=True)
         key = PAIRING_CODE_PREFIX + code
         client.setex(key, PAIRING_CODE_TTL, "1")
@@ -138,6 +145,7 @@ def consume_pairing_code(redis_url: str, code: str) -> bool:
     code = code.strip().upper()
     try:
         import redis
+
         client = redis.from_url(redis_url, decode_responses=True)
         key = PAIRING_CODE_PREFIX + code
         if client.delete(key):
@@ -153,6 +161,7 @@ def set_config_in_redis_sync(redis_url: str, key: str, value: str | list[int] | 
     val_str = _serialize_value(key, value)
     try:
         import redis
+
         client = redis.from_url(redis_url, decode_responses=True)
         client.set(REDIS_PREFIX + key, val_str)
         client.close()

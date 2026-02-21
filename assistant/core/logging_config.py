@@ -37,7 +37,30 @@ class StructuredFormatter(logging.Formatter):
         if record.exc_info:
             log_dict["exception"] = self.formatException(record.exc_info)
         for key, value in record.__dict__.items():
-            if key not in ("name", "msg", "args", "created", "filename", "funcName", "levelname", "levelno", "lineno", "module", "msecs", "pathname", "process", "processName", "relativeCreated", "stack_info", "exc_info", "exc_text", "thread", "threadName", "message", "asctime"):
+            if key not in (
+                "name",
+                "msg",
+                "args",
+                "created",
+                "filename",
+                "funcName",
+                "levelname",
+                "levelno",
+                "lineno",
+                "module",
+                "msecs",
+                "pathname",
+                "process",
+                "processName",
+                "relativeCreated",
+                "stack_info",
+                "exc_info",
+                "exc_text",
+                "thread",
+                "threadName",
+                "message",
+                "asctime",
+            ):
                 log_dict[key] = _redact(value)
         if self.use_json:
             return json.dumps(log_dict, default=str)

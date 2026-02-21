@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
@@ -39,7 +38,13 @@ def _format_model_error_for_user(exc: Exception) -> str:
         )
     if "404" in err or "not found" in err:
         return "Сервер модели не найден (404). Проверьте OPENAI_BASE_URL в настройках."
-    if "500" in err or "502" in err or "503" in err or "internal server error" in err or "bad gateway" in err:
+    if (
+        "500" in err
+        or "502" in err
+        or "503" in err
+        or "internal server error" in err
+        or "bad gateway" in err
+    ):
         return "Сервер модели временно недоступен (ошибка 5xx). Попробуйте позже."
     if "connection" in err or "connect" in err or "refused" in err:
         return (
@@ -55,7 +60,9 @@ def _format_model_error_for_user(exc: Exception) -> str:
     one_line = raw.replace("\n", " ").replace("\r", " ").strip()
     if len(one_line) > 120:
         one_line = one_line[:117] + "..."
-    return f"Ошибка модели: {one_line}" if one_line else "Ошибка модели. Проверьте настройки и логи."
+    return (
+        f"Ошибка модели: {one_line}" if one_line else "Ошибка модели. Проверьте настройки и логи."
+    )
 
 
 SYSTEM_PROMPT = """You are a helpful personal assistant. You can use tools when needed.
@@ -88,7 +95,9 @@ class AssistantAgent(BaseAgent):
         self._model = model_gateway
         self._memory = memory
         self._gateway_factory = gateway_factory
-        if (model_gateway is None and gateway_factory is None) or (model_gateway is not None and gateway_factory is not None):
+        if (model_gateway is None and gateway_factory is None) or (
+            model_gateway is not None and gateway_factory is not None
+        ):
             raise ValueError("Provide exactly one of model_gateway or gateway_factory")
 
     async def _get_gateway(self) -> ModelGateway:
@@ -105,12 +114,12 @@ class AssistantAgent(BaseAgent):
             await self._memory.append_message(context.user_id, "user", context.text)
         user_content = context.text
         if context.tool_results:
-            user_content += "\n\nTool results:\n" + "\n".join(
-                str(r) for r in context.tool_results
-            )
+            user_content += "\n\nTool results:\n" + "\n".join(str(r) for r in context.tool_results)
         prompt_parts = []
         today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        prompt_parts.append(f"Current date: {today_iso}. Use this when interpreting relative dates (e.g. 'завтра', 'пятница') or when the user gives a date without year.")
+        prompt_parts.append(
+            f"Current date: {today_iso}. Use this when interpreting relative dates (e.g. 'завтра', 'пятница') or when the user gives a date without year."
+        )
         for m in messages:
             role = m.get("role", "user")
             content = m.get("content", "")

@@ -111,7 +111,11 @@ class MemoryManager:
         messages.extend(recent)
         if include_vector:
             tool_results = await self._task.get_tool_results(task_id)
-            query = " ".join(str(r.get("result", ""))[:200] for r in tool_results[-3:]) if tool_results else ""
+            query = (
+                " ".join(str(r.get("result", ""))[:200] for r in tool_results[-3:])
+                if tool_results
+                else ""
+            )
             if not query and recent:
                 query = " ".join(m.get("content", "")[:150] for m in recent[-2:])
             if query:
@@ -132,7 +136,9 @@ class MemoryManager:
                     messages.append({"role": "system", "content": ref})
         return messages
 
-    async def append_message(self, user_id: str, role: str, content: str, session_id: str = "default") -> None:
+    async def append_message(
+        self, user_id: str, role: str, content: str, session_id: str = "default"
+    ) -> None:
         await self._short.append(user_id, role, content, session_id)
 
     async def store_task_fact(self, task_id: str, key: str, value: Any) -> None:
@@ -164,7 +170,9 @@ class MemoryManager:
         """Данные о пользователе (профиль, настройки)."""
         return await self._user_data.get(user_id)
 
-    async def set_user_data(self, user_id: str, data: dict[str, Any] | None = None, **kwargs: Any) -> None:
+    async def set_user_data(
+        self, user_id: str, data: dict[str, Any] | None = None, **kwargs: Any
+    ) -> None:
         """Установить данные о пользователе."""
         await self._user_data.set(user_id, data, **kwargs)
 

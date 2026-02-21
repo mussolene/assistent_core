@@ -86,8 +86,10 @@ async def test_assistant_agent_uses_gateway_factory():
     memory = MagicMock()
     memory.get_context_for_user = AsyncMock(return_value=[])
     memory.append_message = AsyncMock()
+
     async def get_gw():
         return model
+
     agent = AssistantAgent(gateway_factory=get_gw, memory=memory)
     result = await agent.handle(_ctx())
     assert result.success is True
@@ -137,7 +139,11 @@ async def test_assistant_agent_handle_model_error_connection():
     agent = AssistantAgent(model_gateway=model, memory=memory)
     result = await agent.handle(_ctx())
     assert result.success is True
-    assert "refused" in result.output_text.lower() or "недоступна" in result.output_text or "model" in result.output_text.lower()
+    assert (
+        "refused" in result.output_text.lower()
+        or "недоступна" in result.output_text
+        or "model" in result.output_text.lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -149,10 +155,17 @@ async def test_tool_agent_runs_skill():
     import tempfile
 
     from assistant.skills.filesystem import FilesystemSkill
+
     with tempfile.TemporaryDirectory() as d:
         reg.register(FilesystemSkill(workspace_dir=d))
         agent = ToolAgent(reg, runner, memory)
-        ctx = _ctx(metadata={"pending_tool_calls": [{"name": "filesystem", "params": {"action": "list", "path": "."}}]})
+        ctx = _ctx(
+            metadata={
+                "pending_tool_calls": [
+                    {"name": "filesystem", "params": {"action": "list", "path": "."}}
+                ]
+            }
+        )
         result = await agent.handle(ctx)
     assert result.success is True
     assert result.next_agent == "assistant"

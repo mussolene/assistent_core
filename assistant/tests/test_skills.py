@@ -1,6 +1,5 @@
 """Tests for skills: registry, filesystem, shell whitelist, mcp stub."""
 
-
 import pytest
 
 from assistant.skills.filesystem import FilesystemSkill

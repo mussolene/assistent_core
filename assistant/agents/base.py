@@ -10,6 +10,7 @@ from typing import Any
 @dataclass
 class TaskContext:
     """Context for one task. Read/write via central store."""
+
     task_id: str
     user_id: str
     chat_id: str
@@ -26,6 +27,7 @@ class TaskContext:
 @dataclass
 class AgentResult:
     """Result from handle(). Orchestrator uses this for state transition."""
+
     success: bool
     output_text: str = ""
     tool_calls: list[dict[str, Any]] | None = None

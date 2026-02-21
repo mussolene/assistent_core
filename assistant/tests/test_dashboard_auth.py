@@ -1,8 +1,10 @@
 """Tests for dashboard auth: setup, login, logout, redirects."""
 
-from unittest.mock import MagicMock
-
 import pytest
+
+pytest.importorskip("flask")
+
+from unittest.mock import MagicMock
 
 from assistant.dashboard.auth import (
     SESSION_COOKIE_NAME,
@@ -26,6 +28,7 @@ from assistant.dashboard.auth import (
 def redis_url():
     try:
         import redis
+
         r = redis.from_url("redis://localhost:6379/13", decode_responses=True)
         r.ping()
         r.close()
@@ -62,12 +65,15 @@ def test_setup_done_has_users():
 def test_create_user_and_get_user(redis_url):
     try:
         import redis
+
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
     except Exception:
         pytest.skip("Redis not available")
     # Clean test keys
-    for key in list(client.scan_iter(USER_PREFIX + "*")) + list(client.scan_iter(SESSION_PREFIX + "*")):
+    for key in list(client.scan_iter(USER_PREFIX + "*")) + list(
+        client.scan_iter(SESSION_PREFIX + "*")
+    ):
         client.delete(key)
     client.delete(USERS_SET_KEY)
     try:
@@ -90,6 +96,7 @@ def test_create_user_and_get_user(redis_url):
 def test_create_user_duplicate_raises(redis_url):
     try:
         import redis
+
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
     except Exception:
@@ -109,6 +116,7 @@ def test_create_user_duplicate_raises(redis_url):
 def test_session_roundtrip(redis_url):
     try:
         import redis
+
         client = redis.from_url(redis_url, decode_responses=True)
         client.ping()
     except Exception:
@@ -130,6 +138,7 @@ def test_session_roundtrip(redis_url):
 @pytest.fixture
 def client():
     from assistant.dashboard.app import app
+
     app.config["TESTING"] = True
     return app.test_client()
 
@@ -137,6 +146,7 @@ def client():
 def test_setup_page_accessible_without_auth(client, monkeypatch):
     """When no users exist, / is redirected to /setup; /setup is accessible."""
     from unittest.mock import MagicMock
+
     monkeypatch.setattr("assistant.dashboard.app.get_redis", MagicMock())
     monkeypatch.setattr("assistant.dashboard.app.setup_done", lambda r: False)
     monkeypatch.setattr(
@@ -156,6 +166,7 @@ def test_setup_creates_owner_and_redirects(client, redis_url, monkeypatch):
     """POST /setup with valid data creates user and redirects to index with cookie."""
     try:
         import redis
+
         r = redis.from_url(redis_url, decode_responses=True)
         r.ping()
         for k in list(r.scan_iter("assistant:user:*")) + list(r.scan_iter("assistant:session:*")):
@@ -165,11 +176,14 @@ def test_setup_creates_owner_and_redirects(client, redis_url, monkeypatch):
     except Exception:
         pytest.skip("Redis not available")
     monkeypatch.setattr("assistant.dashboard.config_store.get_redis_url", lambda: redis_url)
-    resp = client.post("/setup", data={
-        "login": "setup_owner",
-        "password": "securepass123",
-        "password2": "securepass123",
-    })
+    resp = client.post(
+        "/setup",
+        data={
+            "login": "setup_owner",
+            "password": "securepass123",
+            "password2": "securepass123",
+        },
+    )
     assert resp.status_code == 302
     assert resp.headers.get("Location", "").endswith("/")
     assert SESSION_COOKIE_NAME in resp.headers.get("Set-Cookie", "")
@@ -178,7 +192,9 @@ def test_setup_creates_owner_and_redirects(client, redis_url, monkeypatch):
 def test_get_current_user_none_without_cookie():
     """get_current_user returns None when no session cookie."""
     from unittest.mock import patch
+
     from flask import Flask
+
     app = Flask(__name__)
     with app.test_request_context():
         with patch("assistant.dashboard.auth.request") as m:
@@ -191,7 +207,9 @@ def test_get_current_user_none_without_cookie():
 def test_get_current_user_none_when_session_invalid():
     """get_current_user returns None when session not in Redis."""
     from unittest.mock import patch
+
     from flask import Flask
+
     app = Flask(__name__)
     with app.test_request_context():
         with patch("assistant.dashboard.auth.request") as m:
@@ -204,20 +222,24 @@ def test_get_current_user_none_when_session_invalid():
 
 def test_get_current_user_returns_user_when_valid():
     """get_current_user returns login/role/display_name when cookie and session and user exist."""
-    from unittest.mock import patch
-    from flask import Flask
     import json
+    from unittest.mock import patch
+
+    from flask import Flask
+
     app = Flask(__name__)
     with app.test_request_context():
         with patch("assistant.dashboard.auth.request") as m:
             m.cookies.get = lambda key: "valid_sid" if key == SESSION_COOKIE_NAME else None
             r = MagicMock()
+
             def redis_get(k):
                 if k == SESSION_PREFIX + "valid_sid":
                     return json.dumps({"login": "alice"})
                 if k == USER_PREFIX + "alice":
                     return json.dumps({"role": "owner", "display_name": "Alice"})
                 return None
+
             r.get = MagicMock(side_effect=redis_get)
             user = get_current_user(r)
     assert user is not None
@@ -252,5 +274,3 @@ def test_api_session_logged_in(client, monkeypatch):
     assert data.get("login") == "u1"
     assert data.get("role") == "owner"
     assert data.get("display_name") == "User One"
-
-

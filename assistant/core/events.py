@@ -63,8 +63,12 @@ class OutgoingReply(BaseModel):
     text: str = ""
     done: bool = Field(default=True, description="True when reply is complete (streaming)")
     reasoning_requested: bool = False
-    channel: ChannelKind = Field(default=ChannelKind.TELEGRAM, description="Target channel for routing")
-    reply_markup: Optional[dict] = Field(default=None, description="Telegram reply_markup, e.g. inline_keyboard for buttons")
+    channel: ChannelKind = Field(
+        default=ChannelKind.TELEGRAM, description="Target channel for routing"
+    )
+    reply_markup: Optional[dict] = Field(
+        default=None, description="Telegram reply_markup, e.g. inline_keyboard for buttons"
+    )
 
 
 class StreamToken(BaseModel):
@@ -75,4 +79,6 @@ class StreamToken(BaseModel):
     message_id: str = Field(default="", description="Optional; for threading")
     token: str = ""
     done: bool = False
-    channel: ChannelKind = Field(default=ChannelKind.TELEGRAM, description="Target channel for routing")
+    channel: ChannelKind = Field(
+        default=ChannelKind.TELEGRAM, description="Target channel for routing"
+    )

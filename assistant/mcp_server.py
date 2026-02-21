@@ -38,7 +38,11 @@ TOOLS_SPEC = [
             "type": "object",
             "properties": {
                 "message": {"type": "string", "description": "Вопрос или описание действия"},
-                "timeout_sec": {"type": "integer", "description": "Таймаут ожидания в секундах (по умолчанию 120)", "default": 120},
+                "timeout_sec": {
+                    "type": "integer",
+                    "description": "Таймаут ожидания в секундах (по умолчанию 120)",
+                    "default": 120,
+                },
             },
             "required": ["message"],
         },
@@ -53,13 +57,13 @@ TOOLS_SPEC = [
 
 def handle_tools_call(name: str, arguments: dict) -> dict:
     try:
-    from assistant.core.notify import (
-        get_dev_chat_id,
-        get_and_clear_pending_result,
-        notify_main_channel,
-        pop_dev_feedback,
-        send_confirmation_request,
-    )
+        from assistant.core.notify import (
+            get_and_clear_pending_result,
+            get_dev_chat_id,
+            notify_main_channel,
+            pop_dev_feedback,
+            send_confirmation_request,
+        )
     except (ImportError, ModuleNotFoundError) as e:
         logger.error(
             "MCP tools/call: не удалось импортировать assistant.core.notify: %s; sys.path=%s",
@@ -71,14 +75,23 @@ def handle_tools_call(name: str, arguments: dict) -> dict:
 
     chat_id = get_dev_chat_id()
     if not chat_id:
-        return {"content": [{"type": "text", "text": "Ошибка: не задан TELEGRAM_DEV_CHAT_ID или нет разрешённых пользователей."}]}
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": "Ошибка: не задан TELEGRAM_DEV_CHAT_ID или нет разрешённых пользователей.",
+                }
+            ]
+        }
 
     if name == "notify":
         msg = (arguments.get("message") or "").strip()
         if not msg:
             return {"content": [{"type": "text", "text": "Ошибка: message пустой."}]}
         ok = notify_main_channel(msg)
-        return {"content": [{"type": "text", "text": "Отправлено." if ok else "Не удалось отправить."}]}
+        return {
+            "content": [{"type": "text", "text": "Отправлено." if ok else "Не удалось отправить."}]
+        }
 
     if name == "ask_confirmation":
         msg = (arguments.get("message") or "").strip()
@@ -92,9 +105,25 @@ def handle_tools_call(name: str, arguments: dict) -> dict:
             if result is not None:
                 c = result.get("confirmed", False)
                 r = result.get("reply", "")
-                return {"content": [{"type": "text", "text": json.dumps({"confirmed": c, "rejected": result.get("rejected"), "reply": r})}]}
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps(
+                                {"confirmed": c, "rejected": result.get("rejected"), "reply": r}
+                            ),
+                        }
+                    ]
+                }
             time.sleep(1.0)
-        return {"content": [{"type": "text", "text": json.dumps({"confirmed": False, "timeout": True, "reply": ""})}]}
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps({"confirmed": False, "timeout": True, "reply": ""}),
+                }
+            ]
+        }
 
     if name == "get_user_feedback":
         feedback = pop_dev_feedback(chat_id)
@@ -130,11 +159,13 @@ def run_stdio() -> None:
             print(json.dumps(out), flush=True)
 
         if method == "initialize":
-            reply({
-                "protocolVersion": "2024-11-05",
-                "capabilities": {"tools": {}},
-                "serverInfo": {"name": "assistant-dev-mcp", "version": "0.1.0"},
-            })
+            reply(
+                {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "assistant-dev-mcp", "version": "0.1.0"},
+                }
+            )
             continue
         if method == "notified" and params.get("method") == "initialized":
             continue

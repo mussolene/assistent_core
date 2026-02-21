@@ -26,6 +26,7 @@ def get_dev_chat_id() -> str | None:
     """Chat ID для уведомлений агента (MCP). TELEGRAM_DEV_CHAT_ID или первый из TELEGRAM_ALLOWED_USER_IDS."""
     try:
         from assistant.dashboard.config_store import get_config_from_redis_sync
+
         cfg = get_config_from_redis_sync(_get_redis_url())
         dev = (cfg.get("TELEGRAM_DEV_CHAT_ID") or os.getenv("TELEGRAM_DEV_CHAT_ID") or "").strip()
         if dev:
@@ -52,6 +53,7 @@ def notify_to_chat(chat_id: str, text: str, reply_markup: dict | None = None) ->
         return False
     try:
         import redis
+
         r = redis.from_url(_get_redis_url(), decode_responses=False)
         r.ping()
         payload = OutgoingReply(
@@ -77,7 +79,10 @@ def send_confirmation_request(chat_id: str, message: str) -> bool:
     prompt = f"{message}\n\nВыберите ответ кнопкой ниже."
     reply_markup = {
         "inline_keyboard": [
-            [{"text": "✅ Подтвердить", "callback_data": CONFIRM_CALLBACK}, {"text": "❌ Отклонить", "callback_data": REJECT_CALLBACK}],
+            [
+                {"text": "✅ Подтвердить", "callback_data": CONFIRM_CALLBACK},
+                {"text": "❌ Отклонить", "callback_data": REJECT_CALLBACK},
+            ],
         ]
     }
     return notify_to_chat(chat_id, prompt, reply_markup=reply_markup)
@@ -101,6 +106,7 @@ def set_pending_confirmation(chat_id: str, message: str) -> None:
     """Поставить ожидание ответа от пользователя (confirm/reject)."""
     try:
         import redis
+
         r = redis.from_url(_get_redis_url(), decode_responses=True)
         cid = _norm_chat_id(chat_id)
         key = PENDING_CONFIRM_PREFIX + cid
@@ -115,6 +121,7 @@ def get_and_clear_pending_result(chat_id: str) -> dict[str, Any] | None:
     """Получить результат подтверждения (если пользователь ответил) и снять ожидание."""
     try:
         import redis
+
         r = redis.from_url(_get_redis_url(), decode_responses=True)
         key = PENDING_CONFIRM_PREFIX + _norm_chat_id(chat_id)
         raw = r.get(key)
@@ -136,6 +143,7 @@ def set_pending_confirmation_result(chat_id: str, result: dict[str, Any]) -> Non
     """Записать результат ответа пользователя (вызывается из Telegram-адаптера)."""
     try:
         import redis
+
         r = redis.from_url(_get_redis_url(), decode_responses=True)
         key = PENDING_CONFIRM_PREFIX + _norm_chat_id(chat_id)
         raw = r.get(key)
@@ -157,13 +165,16 @@ def consume_pending_confirmation(chat_id: str, user_text: str) -> bool:
     """
     try:
         import redis
+
         r = redis.from_url(_get_redis_url(), decode_responses=True)
         cid = _norm_chat_id(chat_id)
         key = PENDING_CONFIRM_PREFIX + cid
         raw = r.get(key)
         r.close()
         if not raw:
-            logger.warning("consume_pending_confirmation: ключ не найден chat_id=%r key=%s", cid, key)
+            logger.warning(
+                "consume_pending_confirmation: ключ не найден chat_id=%r key=%s", cid, key
+            )
             return False
         data = json.loads(raw)
         if data.get("result") is not None:
@@ -179,6 +190,7 @@ def consume_pending_confirmation(chat_id: str, user_text: str) -> bool:
         set_pending_confirmation_result(chat_id, result)
         try:
             from assistant.dashboard.mcp_endpoints import get_endpoint_id_for_chat, push_mcp_event
+
             eid = get_endpoint_id_for_chat(chat_id)
             if eid:
                 push_mcp_event(eid, "confirmation", result)
@@ -194,6 +206,7 @@ def push_dev_feedback(chat_id: str, text: str) -> None:
     """Добавить сообщение пользователя в очередь обратной связи для агента."""
     try:
         import redis
+
         r = redis.from_url(_get_redis_url(), decode_responses=True)
         key = DEV_FEEDBACK_PREFIX + chat_id
         r.rpush(key, text)
@@ -201,6 +214,7 @@ def push_dev_feedback(chat_id: str, text: str) -> None:
         r.close()
         try:
             from assistant.dashboard.mcp_endpoints import get_endpoint_id_for_chat, push_mcp_event
+
             eid = get_endpoint_id_for_chat(chat_id)
             if eid:
                 push_mcp_event(eid, "feedback", {"text": text})
@@ -214,6 +228,7 @@ def pop_dev_feedback(chat_id: str) -> list[str]:
     """Забрать и очистить накопленную обратную связь от пользователя."""
     try:
         import redis
+
         r = redis.from_url(_get_redis_url(), decode_responses=True)
         key = DEV_FEEDBACK_PREFIX + chat_id
         items = r.lrange(key, 0, -1)

@@ -48,8 +48,10 @@ async def run_in_sandbox(
     timeout = timeout_seconds or (cpu_limit_seconds + 5)
     preexec = None
     if os.name != "nt":
+
         def _limits() -> None:
             _set_resource_limits(cpu_limit_seconds, memory_limit_mb)
+
         preexec = _limits
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -61,7 +63,11 @@ async def run_in_sandbox(
             preexec_fn=preexec,
         )
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        return proc.returncode or 0, (stdout or b"").decode("utf-8", errors="replace"), (stderr or b"").decode("utf-8", errors="replace")
+        return (
+            proc.returncode or 0,
+            (stdout or b"").decode("utf-8", errors="replace"),
+            (stderr or b"").decode("utf-8", errors="replace"),
+        )
     except asyncio.TimeoutError:
         try:
             if proc.returncode is None:

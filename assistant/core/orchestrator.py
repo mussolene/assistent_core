@@ -112,7 +112,11 @@ class Orchestrator:
                                 )
                             )
                             return
-                        if isinstance(tr, dict) and tr.get("formatted") and tr.get("inline_keyboard"):
+                        if (
+                            isinstance(tr, dict)
+                            and tr.get("formatted")
+                            and tr.get("inline_keyboard")
+                        ):
                             await self._bus.publish_outgoing(
                                 OutgoingReply(
                                     task_id=task_id,

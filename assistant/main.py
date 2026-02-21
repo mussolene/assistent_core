@@ -60,14 +60,34 @@ async def run_core(config: Config) -> None:
     async def get_gateway() -> ModelGateway:
         """Build gateway from current Redis config. Settings apply without restart."""
         redis_cfg = await get_config_from_redis(config.redis.url)
-        openai_base_url = (redis_cfg.get("OPENAI_BASE_URL") or "").strip() or config.model.openai_base_url
+        openai_base_url = (
+            redis_cfg.get("OPENAI_BASE_URL") or ""
+        ).strip() or config.model.openai_base_url
         model_name = (redis_cfg.get("MODEL_NAME") or "").strip() or config.model.name
-        fallback_name = (redis_cfg.get("MODEL_FALLBACK_NAME") or "").strip() or config.model.fallback_name
-        cloud_fallback = (redis_cfg.get("CLOUD_FALLBACK_ENABLED") or "").lower() in ("true", "1", "yes")
-        openai_api_key = (redis_cfg.get("OPENAI_API_KEY") or "").strip() or config.model.openai_api_key or "ollama"
-        use_lm_studio_native = (redis_cfg.get("LM_STUDIO_NATIVE") or "").lower() in ("true", "1", "yes")
+        fallback_name = (
+            redis_cfg.get("MODEL_FALLBACK_NAME") or ""
+        ).strip() or config.model.fallback_name
+        cloud_fallback = (redis_cfg.get("CLOUD_FALLBACK_ENABLED") or "").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
+        openai_api_key = (
+            (redis_cfg.get("OPENAI_API_KEY") or "").strip()
+            or config.model.openai_api_key
+            or "ollama"
+        )
+        use_lm_studio_native = (redis_cfg.get("LM_STUDIO_NATIVE") or "").lower() in (
+            "true",
+            "1",
+            "yes",
+        )
         # OpenAI-compat base URL must end with /v1 for chat/completions path
-        if not use_lm_studio_native and openai_base_url and not openai_base_url.rstrip("/").endswith("/v1"):
+        if (
+            not use_lm_studio_native
+            and openai_base_url
+            and not openai_base_url.rstrip("/").endswith("/v1")
+        ):
             openai_base_url = openai_base_url.rstrip("/") + "/v1"
         return ModelGateway(
             provider=config.model.provider,
@@ -82,19 +102,23 @@ async def run_core(config: Config) -> None:
 
     skills = SkillRegistry()
     skills.register(FilesystemSkill(workspace_dir=config.sandbox.workspace_dir))
-    skills.register(ShellSkill(
-        allowed_commands=config.security.command_whitelist,
-        workspace_dir=config.sandbox.workspace_dir,
-        cpu_limit_seconds=config.sandbox.cpu_limit_seconds,
-        memory_limit_mb=config.sandbox.memory_limit_mb,
-        network_enabled=config.sandbox.network_enabled,
-    ))
-    skills.register(GitSkill(
-        workspace_dir=config.sandbox.workspace_dir,
-        cpu_limit_seconds=config.sandbox.cpu_limit_seconds,
-        memory_limit_mb=config.sandbox.memory_limit_mb,
-        network_enabled=config.sandbox.network_enabled,
-    ))
+    skills.register(
+        ShellSkill(
+            allowed_commands=config.security.command_whitelist,
+            workspace_dir=config.sandbox.workspace_dir,
+            cpu_limit_seconds=config.sandbox.cpu_limit_seconds,
+            memory_limit_mb=config.sandbox.memory_limit_mb,
+            network_enabled=config.sandbox.network_enabled,
+        )
+    )
+    skills.register(
+        GitSkill(
+            workspace_dir=config.sandbox.workspace_dir,
+            cpu_limit_seconds=config.sandbox.cpu_limit_seconds,
+            memory_limit_mb=config.sandbox.memory_limit_mb,
+            network_enabled=config.sandbox.network_enabled,
+        )
+    )
     skills.register(VectorRagSkill(memory.get_vector()))
     skills.register(TaskSkill())
     skills.register(McpAdapterSkill())

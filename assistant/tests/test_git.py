@@ -26,7 +26,11 @@ async def test_git_clone_missing_url(skill_with_network):
 
 @pytest.mark.asyncio
 async def test_git_clone_with_network(skill_with_network):
-    with patch("assistant.skills.git.run_in_sandbox", new_callable=AsyncMock, return_value=(0, "stdout", "")):
+    with patch(
+        "assistant.skills.git.run_in_sandbox",
+        new_callable=AsyncMock,
+        return_value=(0, "stdout", ""),
+    ):
         out = await skill_with_network.run({"action": "clone", "url": "https://github.com/o/r"})
     assert out["ok"] is True
     assert out.get("returncode") == 0
@@ -34,7 +38,11 @@ async def test_git_clone_with_network(skill_with_network):
 
 @pytest.mark.asyncio
 async def test_git_clone_no_network_returns_error(skill_no_network):
-    with patch("assistant.skills.git.run_in_sandbox", new_callable=AsyncMock, return_value=(1, "", "fatal: unable to access")):
+    with patch(
+        "assistant.skills.git.run_in_sandbox",
+        new_callable=AsyncMock,
+        return_value=(1, "", "fatal: unable to access"),
+    ):
         out = await skill_no_network.run({"action": "clone", "url": "https://github.com/o/r"})
     assert out["ok"] is False
     assert "network" in out.get("error", "").lower()
@@ -49,7 +57,11 @@ async def test_git_read_missing_path(skill_no_network):
 
 @pytest.mark.asyncio
 async def test_git_read_success(skill_no_network):
-    with patch("assistant.skills.git.run_in_sandbox", new_callable=AsyncMock, return_value=(0, "file content", "")):
+    with patch(
+        "assistant.skills.git.run_in_sandbox",
+        new_callable=AsyncMock,
+        return_value=(0, "file content", ""),
+    ):
         out = await skill_no_network.run({"action": "read", "path": "README.md"})
     assert out["ok"] is True
     assert out.get("content") == "file content"
@@ -65,7 +77,11 @@ async def test_git_commit_missing_message(skill_no_network):
 
 @pytest.mark.asyncio
 async def test_git_commit_success(skill_no_network):
-    with patch("assistant.skills.git.run_in_sandbox", new_callable=AsyncMock, side_effect=[(0, "", ""), (0, "1 file changed", "")]):
+    with patch(
+        "assistant.skills.git.run_in_sandbox",
+        new_callable=AsyncMock,
+        side_effect=[(0, "", ""), (0, "1 file changed", "")],
+    ):
         out = await skill_no_network.run({"action": "commit", "message": "fix", "paths": ["a.txt"]})
     assert out["ok"] is True
     assert out.get("message") == "fix"
@@ -80,7 +96,11 @@ async def test_git_push_missing_branch(skill_no_network):
 
 @pytest.mark.asyncio
 async def test_git_push_no_network_error(skill_no_network):
-    with patch("assistant.skills.git.run_in_sandbox", new_callable=AsyncMock, return_value=(1, "", "Could not resolve host")):
+    with patch(
+        "assistant.skills.git.run_in_sandbox",
+        new_callable=AsyncMock,
+        return_value=(1, "", "Could not resolve host"),
+    ):
         out = await skill_no_network.run({"action": "push", "branch": "main"})
     assert out["ok"] is False
     assert "network" in out.get("error", "").lower()
@@ -88,14 +108,20 @@ async def test_git_push_no_network_error(skill_no_network):
 
 @pytest.mark.asyncio
 async def test_git_create_mr_delegates(skill_no_network):
-    with patch("assistant.skills.git.create_merge_request", new_callable=AsyncMock, return_value={"ok": True, "url": "https://gitlab.com/...", "platform": "gitlab"}) as m:
-        out = await skill_no_network.run({
-            "action": "create_mr",
-            "repo": "https://gitlab.com/o/r",
-            "source_branch": "f",
-            "target_branch": "main",
-            "title": "T",
-        })
+    with patch(
+        "assistant.skills.git.create_merge_request",
+        new_callable=AsyncMock,
+        return_value={"ok": True, "url": "https://gitlab.com/...", "platform": "gitlab"},
+    ) as m:
+        out = await skill_no_network.run(
+            {
+                "action": "create_mr",
+                "repo": "https://gitlab.com/o/r",
+                "source_branch": "f",
+                "target_branch": "main",
+                "title": "T",
+            }
+        )
     assert out["ok"] is True
     assert out.get("platform") == "gitlab"
     m.assert_called_once()
@@ -103,7 +129,11 @@ async def test_git_create_mr_delegates(skill_no_network):
 
 @pytest.mark.asyncio
 async def test_git_status_subcommand(skill_no_network):
-    with patch("assistant.skills.git.run_in_sandbox", new_callable=AsyncMock, return_value=(0, "On branch main", "")):
+    with patch(
+        "assistant.skills.git.run_in_sandbox",
+        new_callable=AsyncMock,
+        return_value=(0, "On branch main", ""),
+    ):
         out = await skill_no_network.run({"action": "status"})
     assert out["ok"] is True
     assert "stdout" in out
@@ -128,7 +158,16 @@ async def test_git_list_repos_no_repos(skill_no_network):
 
 @pytest.mark.asyncio
 async def test_git_list_repos_finds_repo(skill_no_network):
-    with patch("os.path.isdir", return_value=True), patch("os.listdir", return_value=["my-repo"]), patch("os.path.exists", side_effect=lambda p: ".git" in p), patch("assistant.skills.git.run_in_sandbox", new_callable=AsyncMock, return_value=(0, "https://github.com/o/r", "")):
+    with (
+        patch("os.path.isdir", return_value=True),
+        patch("os.listdir", return_value=["my-repo"]),
+        patch("os.path.exists", side_effect=lambda p: ".git" in p),
+        patch(
+            "assistant.skills.git.run_in_sandbox",
+            new_callable=AsyncMock,
+            return_value=(0, "https://github.com/o/r", ""),
+        ),
+    ):
         out = await skill_no_network.run({"action": "list_repos"})
     assert out["ok"] is True
     assert len(out["repos"]) == 1
@@ -145,16 +184,28 @@ async def test_git_search_repos_missing_query(skill_no_network):
 
 @pytest.mark.asyncio
 async def test_git_search_repos_github_delegates(skill_no_network):
-    with patch("assistant.skills.git.search_github_repos", new_callable=AsyncMock, return_value={"ok": True, "items": [], "total_count": 0}) as m:
-        out = await skill_no_network.run({"action": "search_repos", "query": "python", "platform": "github"})
+    with patch(
+        "assistant.skills.git.search_github_repos",
+        new_callable=AsyncMock,
+        return_value={"ok": True, "items": [], "total_count": 0},
+    ) as m:
+        out = await skill_no_network.run(
+            {"action": "search_repos", "query": "python", "platform": "github"}
+        )
     assert out["ok"] is True
     m.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_git_search_repos_gitlab_delegates(skill_no_network):
-    with patch("assistant.skills.git.search_gitlab_repos", new_callable=AsyncMock, return_value={"ok": True, "items": [], "total_count": 0}) as m:
-        out = await skill_no_network.run({"action": "search_repos", "query": "python", "platform": "gitlab"})
+    with patch(
+        "assistant.skills.git.search_gitlab_repos",
+        new_callable=AsyncMock,
+        return_value={"ok": True, "items": [], "total_count": 0},
+    ) as m:
+        out = await skill_no_network.run(
+            {"action": "search_repos", "query": "python", "platform": "gitlab"}
+        )
     assert out["ok"] is True
     m.assert_called_once()
 

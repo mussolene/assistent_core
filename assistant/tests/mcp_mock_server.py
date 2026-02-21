@@ -20,7 +20,9 @@ class MockMCPHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "application/json")
             self.end_headers()
             self.wfile.write(
-                json.dumps({"tools": [{"name": "test_tool", "description": "A test tool"}]}).encode()
+                json.dumps(
+                    {"tools": [{"name": "test_tool", "description": "A test tool"}]}
+                ).encode()
             )
             return
         self.send_response(404)

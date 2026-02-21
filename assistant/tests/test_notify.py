@@ -2,8 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from assistant.core import notify
 
 
@@ -14,12 +12,18 @@ def test_get_dev_chat_id_from_env():
 
 
 def test_get_dev_chat_id_from_redis():
-    with patch("assistant.dashboard.config_store.get_config_from_redis_sync", return_value={"TELEGRAM_DEV_CHAT_ID": "111"}):
+    with patch(
+        "assistant.dashboard.config_store.get_config_from_redis_sync",
+        return_value={"TELEGRAM_DEV_CHAT_ID": "111"},
+    ):
         assert notify.get_dev_chat_id() == "111"
 
 
 def test_get_dev_chat_id_fallback_to_allowed():
-    with patch("assistant.dashboard.config_store.get_config_from_redis_sync", return_value={"TELEGRAM_ALLOWED_USER_IDS": [123, 456]}):
+    with patch(
+        "assistant.dashboard.config_store.get_config_from_redis_sync",
+        return_value={"TELEGRAM_ALLOWED_USER_IDS": [123, 456]},
+    ):
         assert notify.get_dev_chat_id() == "123"
 
 
@@ -50,6 +54,7 @@ def test_consume_pending_confirmation_no_pending():
 
 def test_consume_pending_confirmation_confirm():
     import json
+
     r = MagicMock()
     r.get.return_value = json.dumps({"message": "Deploy?", "created_at": 0, "result": None})
     r.close = MagicMock()
@@ -72,7 +77,9 @@ def test_push_and_pop_dev_feedback():
     r.delete = MagicMock()
     with patch("redis.from_url", return_value=r):
         with patch("assistant.core.notify._get_redis_url", return_value="redis://localhost/0"):
-            with patch("assistant.dashboard.mcp_endpoints.get_endpoint_id_for_chat", return_value=None):
+            with patch(
+                "assistant.dashboard.mcp_endpoints.get_endpoint_id_for_chat", return_value=None
+            ):
                 notify.push_dev_feedback("123", "hello")
             assert r.rpush.call_count >= 1
             items = notify.pop_dev_feedback("123")

@@ -1,6 +1,6 @@
 """Tests for Telegram channel: sanitize, rate limit, strip_think, send_typing, chunk, probe."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -134,11 +134,15 @@ def test_chunk_text_for_telegram_splits_on_newline():
 @pytest.mark.asyncio
 async def test_probe_telegram_ok():
     from assistant.channels.telegram import probe_telegram
+
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = {
+        "ok": True,
+        "result": {"id": 1, "username": "test_bot"},
+    }
     with patch("assistant.channels.telegram.httpx.AsyncClient") as m:
-        mock_get = AsyncMock()
-        mock_get.return_value.status_code = 200
-        mock_get.return_value.json.return_value = {"ok": True, "result": {"id": 1, "username": "test_bot"}}
-        m.return_value.__aenter__.return_value.get = mock_get
+        m.return_value.__aenter__.return_value.get = AsyncMock(return_value=response)
         out = await probe_telegram("fake-token")
     assert out.get("ok") is True
     assert out.get("bot", {}).get("username") == "test_bot"
@@ -147,6 +151,7 @@ async def test_probe_telegram_ok():
 @pytest.mark.asyncio
 async def test_probe_telegram_fail():
     from assistant.channels.telegram import probe_telegram
+
     with patch("assistant.channels.telegram.httpx.AsyncClient") as m:
         mock_get = AsyncMock()
         mock_get.return_value.status_code = 401
