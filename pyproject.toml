@@ -35,6 +35,7 @@ vector = [
 [project.scripts]
 assistant-core = "assistant.main:main"
 telegram-adapter = "assistant.channels.telegram:main"
+email-adapter = "assistant.channels.email_adapter:main"
 assistant-mcp-server = "assistant.mcp_server:main"
 
 [tool.setuptools.packages.find]
