@@ -1,0 +1,12 @@
+FROM python:3.11-slim
+
+RUN groupadd -r app && useradd -r -g app app
+WORKDIR /app
+
+COPY pyproject.toml ./
+COPY assistant ./assistant
+RUN pip install --no-cache-dir -e .
+
+USER app
+ENV PYTHONUNBUFFERED=1
+CMD ["python", "-m", "assistant.channels.telegram"]

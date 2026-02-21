@@ -1,0 +1,45 @@
+# Assistant core configuration. Override with environment variables.
+
+redis:
+  url: "redis://localhost:6379/0"
+
+telegram:
+  enabled: true
+  long_poll_timeout: 30
+  rate_limit_per_user_per_minute: 10
+
+model:
+  provider: "local"
+  name: "llama3.2"
+  fallback_name: null
+  cloud_fallback_enabled: false
+  reasoning_model_suffix: ":reasoning"
+
+security:
+  allowed_user_ids: []
+  cloud_fallback_enabled: false
+  network_egress_enabled: false
+  command_whitelist:
+    - "git"
+    - "pytest"
+    - "ls"
+    - "cat"
+    - "python"
+    - "python3"
+
+memory:
+  short_term_window: 10
+  summary_threshold_messages: 20
+  vector_top_k: 5
+  vector_collection: "assistant_memory"
+
+orchestrator:
+  autonomous_mode: false
+  max_iterations: 5
+  quality_threshold: 0.8
+
+sandbox:
+  workspace_dir: "/workspace"
+  cpu_limit_seconds: 30
+  memory_limit_mb: 256
+  network_enabled: false

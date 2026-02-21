@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+RUN groupadd -r app && useradd -r -g app app
+WORKDIR /app
+
+RUN pip install --no-cache-dir flask redis
+
+COPY assistant/__init__.py /app/assistant/__init__.py
+COPY assistant/dashboard /app/assistant/dashboard
+
+ENV PYTHONPATH=/app
+ENV PORT=8080
+
+USER app
+EXPOSE 8080
+CMD ["python", "-m", "assistant.dashboard.app"]
