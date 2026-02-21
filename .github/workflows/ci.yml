@@ -25,10 +25,36 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-          pip install openai httpx
+          pip install openai httpx flask
 
       - name: Run tests
         run: pytest assistant/tests -v --tb=short
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install openai httpx flask
+
+      - name: Run tests with coverage
+        run: |
+          pytest assistant/tests -v --tb=short --cov=assistant --cov-report=xml --cov-report=term --cov-fail-under=85
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
 
   lint:
     runs-on: ubuntu-latest
@@ -44,7 +70,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-          pip install openai httpx
+          pip install openai httpx flask
 
       - name: Check imports
         run: python -c "

@@ -22,6 +22,7 @@ dependencies = [
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
 ]
 dashboard = [
     "flask>=3.0.0",
@@ -42,3 +43,22 @@ include = ["assistant*"]
 asyncio_mode = "auto"
 testpaths = ["assistant/tests"]
 pythonpath = ["."]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["assistant"]
+branch = true
+omit = [
+    "assistant/tests/*",
+    "assistant/__init__.py",
+    "assistant/main.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+fail_under = 85

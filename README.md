@@ -96,9 +96,15 @@ pip install -e ".[dev]"
 
 # Тесты
 pytest assistant/tests -v
+
+# С покрытием (цель ≥90%, порог в CI пока 85%)
+pytest assistant/tests -v --cov=assistant --cov-report=html --cov-fail-under=85
 ```
 
 Тесты, требующие Redis, помечаются как skipped при его отсутствии.
+
+- **Аудит и план доработок:** [docs/AUDIT.md](docs/AUDIT.md)
+- **Приёмочное тестирование:** [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 
 ## Лицензия
 
