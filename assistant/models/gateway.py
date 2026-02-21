@@ -7,12 +7,13 @@ from typing import AsyncIterator
 
 from assistant.models.local import LocalModelGateway
 from assistant.models.cloud import CloudModelGateway
+from assistant.models import lm_studio
 
 logger = logging.getLogger(__name__)
 
 
 class ModelGateway:
-    """Unified gateway: local (Ollama) with optional cloud fallback. LLM does not control lifecycle."""
+    """Unified gateway: local (Ollama/LM Studio) with optional cloud fallback. LLM does not control lifecycle."""
 
     def __init__(
         self,
@@ -23,6 +24,7 @@ class ModelGateway:
         reasoning_suffix: str = ":reasoning",
         openai_base_url: str | None = None,
         openai_api_key: str = "",
+        use_lm_studio_native: bool = False,
     ) -> None:
         self._provider = provider
         self._model_name = model_name
@@ -31,6 +33,7 @@ class ModelGateway:
         self._reasoning_suffix = reasoning_suffix
         self._openai_base_url = openai_base_url or "http://localhost:11434/v1"
         self._openai_api_key = openai_api_key or "ollama"
+        self._use_lm_studio_native = use_lm_studio_native
         self._local = LocalModelGateway(
             base_url=self._openai_base_url,
             api_key=self._openai_api_key,
@@ -58,8 +61,31 @@ class ModelGateway:
         reasoning: bool = False,
         system: str | None = None,
     ) -> str | AsyncIterator[str]:
-        """Generate completion. Returns full text or async iterator of tokens. Cloud only if enabled."""
+        """Generate completion. LM Studio native: only message content (reasoning hidden)."""
         model = self._model_for_reasoning(reasoning)
+        if self._use_lm_studio_native:
+            try:
+                if stream:
+                    return lm_studio.stream_lm_studio(
+                        self._openai_base_url,
+                        model,
+                        prompt,
+                        system=system,
+                        api_key=self._openai_api_key,
+                        reasoning="on" if reasoning else "off",
+                    )
+                return await lm_studio.generate_lm_studio(
+                    self._openai_base_url,
+                    model,
+                    prompt,
+                    system=system,
+                    api_key=self._openai_api_key,
+                    reasoning="on" if reasoning else "off",
+                )
+            except Exception as e:
+                logger.warning("LM Studio native failed: %s", e)
+                if not self._cloud:
+                    raise
         try:
             if stream:
                 return self._local.generate_stream(prompt, model=model, system=system)

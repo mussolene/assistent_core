@@ -190,6 +190,13 @@ _MODEL_BODY = """
     </div>
   </div>
   <div class="card">
+    <div class="row">
+      <input type="checkbox" id="lm_native" name="lm_studio_native" value="1" {{ 'checked' if config.get('LM_STUDIO_NATIVE') == 'true' else '' }}>
+      <label for="lm_native" style="margin-bottom:0">LM Studio native API</label>
+    </div>
+    <p class="hint">Стриминг по <a href="https://lmstudio.ai/docs/developer/rest/streaming-events" target="_blank" rel="noopener">SSE</a>: размышления (reasoning) скрыты, в чат дописывается только итоговый ответ.</p>
+  </div>
+  <div class="card">
     <label for="api_key">API ключ</label>
     <input id="api_key" name="openai_api_key" type="password" value="{{ config.get('OPENAI_API_KEY', '') }}" placeholder="sk-... или ollama" autocomplete="off">
   </div>
@@ -227,6 +234,7 @@ def save_model():
     set_config_in_redis_sync(redis_url, "MODEL_NAME", (request.form.get("model_name") or "").strip())
     set_config_in_redis_sync(redis_url, "MODEL_FALLBACK_NAME", (request.form.get("model_fallback_name") or "").strip())
     set_config_in_redis_sync(redis_url, "CLOUD_FALLBACK_ENABLED", "true" if request.form.get("cloud_fallback_enabled") == "1" else "false")
+    set_config_in_redis_sync(redis_url, "LM_STUDIO_NATIVE", "true" if request.form.get("lm_studio_native") == "1" else "false")
     set_config_in_redis_sync(redis_url, "OPENAI_API_KEY", (request.form.get("openai_api_key") or "").strip())
     flash("Сохранено. Перезапустите assistant-core при смене модели.", "success")
     return redirect(url_for("model"))

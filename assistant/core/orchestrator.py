@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from assistant.core.bus import EventBus, CH_INCOMING, CH_OUTGOING
-from assistant.core.events import IncomingMessage, OutgoingReply
+from assistant.core.events import IncomingMessage, OutgoingReply, StreamToken
 from assistant.core.task_manager import TaskManager
 from assistant.core.agent_registry import AgentRegistry
 from assistant.agents.base import TaskContext
@@ -52,6 +52,7 @@ class Orchestrator:
             message_id=payload.message_id,
             text=payload.text,
             reasoning_requested=payload.reasoning_requested,
+            stream=True,
         )
         asyncio.create_task(self._process_task(task_id, payload))
 
@@ -130,6 +131,23 @@ class Orchestrator:
         task_data: dict,
         payload: IncomingMessage,
     ) -> TaskContext:
+        state = task_data.get("state", "assistant")
+        stream = task_data.get("stream", True)
+        stream_callback = None
+        if state == "assistant" and stream:
+            chat_id = task_data.get("chat_id", payload.chat_id)
+
+            async def _stream_cb(tok: str, done: bool = False) -> None:
+                await self._bus.publish_stream_token(
+                    StreamToken(task_id=task_id, chat_id=chat_id, token=tok, done=done)
+                )
+
+            stream_callback = _stream_cb
+        metadata = {
+            "pending_tool_calls": task_data.get("pending_tool_calls", []),
+            "stream": stream,
+            "stream_callback": stream_callback,
+        }
         return TaskContext(
             task_id=task_id,
             user_id=task_data.get("user_id", payload.user_id),
@@ -138,13 +156,10 @@ class Orchestrator:
             message_id=task_data.get("message_id", payload.message_id),
             text=task_data.get("text", payload.text),
             reasoning_requested=task_data.get("reasoning_requested", False),
-            state=task_data.get("state", "assistant"),
+            state=state,
             iteration=task_data.get("iteration", 0),
             tool_results=task_data.get("tool_results", []),
-            metadata={
-                "pending_tool_calls": task_data.get("pending_tool_calls", []),
-                "stream": task_data.get("stream", False),
-            },
+            metadata=metadata,
         )
 
     def set_agent_registry(self, registry: AgentRegistry) -> None:

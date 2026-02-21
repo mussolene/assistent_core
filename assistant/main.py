@@ -54,6 +54,7 @@ async def run_core(config: "assistant.config.loader.Config") -> None:
     fallback_name = (redis_cfg.get("MODEL_FALLBACK_NAME") or "").strip() or config.model.fallback_name
     cloud_fallback = (redis_cfg.get("CLOUD_FALLBACK_ENABLED") or "").lower() in ("true", "1", "yes")
     openai_api_key = (redis_cfg.get("OPENAI_API_KEY") or "").strip() or config.model.openai_api_key or "ollama"
+    use_lm_studio_native = (redis_cfg.get("LM_STUDIO_NATIVE") or "").lower() in ("true", "1", "yes")
 
     model_gateway = ModelGateway(
         provider=config.model.provider,
@@ -63,6 +64,7 @@ async def run_core(config: "assistant.config.loader.Config") -> None:
         reasoning_suffix=config.model.reasoning_model_suffix,
         openai_base_url=openai_base_url,
         openai_api_key=openai_api_key,
+        use_lm_studio_native=use_lm_studio_native,
     )
     skills = SkillRegistry()
     skills.register(FilesystemSkill(workspace_dir=config.sandbox.workspace_dir))

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import time
 from typing import Optional, Set
 
@@ -14,6 +15,21 @@ from assistant.core.events import IncomingMessage, OutgoingReply, StreamToken
 from assistant.core.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
+
+STREAM_EDIT_INTERVAL = 0.2
+STREAM_PLACEHOLDER = "…"
+MAX_MESSAGE_LENGTH = 4096
+TYPING_ACTION_INTERVAL = 4.0
+
+
+def _strip_think_blocks(text: str) -> str:
+    """Remove <think>...</think> blocks (model reasoning) so only the visible reply is shown."""
+    if not text or "<think>" not in text:
+        return text.strip()
+    text = re.sub(r"<think>\s*.*?\s*</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    if "<think>" in text:
+        text = text[: text.index("<think>")].strip()
+    return text.strip()
 
 TELEGRAM_API = "https://api.telegram.org/bot"
 
@@ -100,10 +116,120 @@ async def run_telegram_adapter() -> None:
     except Exception as e:
         logger.warning("setMyCommands failed: %s", e)
 
+    stream_state: dict[str, dict] = {}
+    stream_lock = asyncio.Lock()
+
+    async def _flush_stream(task_id: str, force: bool = False) -> None:
+        async with stream_lock:
+            s = stream_state.get(task_id)
+            if not s:
+                return
+            if not s["text"] and not force and s.get("message_id") is not None:
+                return
+            chat_id = s["chat_id"]
+            raw = s["text"] or ""
+            visible = _strip_think_blocks(raw)
+            text = (visible or STREAM_PLACEHOLDER)[:MAX_MESSAGE_LENGTH]
+            if len(visible) > MAX_MESSAGE_LENGTH:
+                text = text[: MAX_MESSAGE_LENGTH - 3] + "..."
+            try:
+                async with httpx.AsyncClient() as client:
+                    if s.get("message_id") is None:
+                        r = await client.post(
+                            f"{base_url}/sendMessage",
+                            json={"chat_id": chat_id, "text": text or STREAM_PLACEHOLDER},
+                            timeout=15.0,
+                        )
+                        if r.status_code == 200:
+                            j = r.json()
+                            s["message_id"] = j.get("result", {}).get("message_id")
+                        else:
+                            try:
+                                logger.warning("sendMessage stream: %s", r.json().get("description", r.text))
+                            except Exception:
+                                pass
+                            return
+                    else:
+                        r = await client.post(
+                            f"{base_url}/editMessageText",
+                            json={
+                                "chat_id": chat_id,
+                                "message_id": s["message_id"],
+                                "text": text or STREAM_PLACEHOLDER,
+                            },
+                            timeout=10.0,
+                        )
+                        if r.status_code != 200:
+                            try:
+                                logger.debug("editMessageText: %s", r.json().get("description", r.text))
+                            except Exception:
+                                pass
+            except Exception as e:
+                logger.warning("stream flush failed: %s", e)
+            s["last_edit"] = time.monotonic()
+            if force:
+                stream_state.pop(task_id, None)
+
+    async def _send_typing(chat_id: str) -> None:
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{base_url}/sendChatAction",
+                    json={"chat_id": chat_id, "action": "typing"},
+                    timeout=5.0,
+                )
+        except Exception as e:
+            logger.debug("sendChatAction failed: %s", e)
+
+    async def _typing_loop() -> None:
+        while True:
+            await asyncio.sleep(TYPING_ACTION_INTERVAL)
+            async with stream_lock:
+                for s in stream_state.values():
+                    if s.get("message_id") is None:
+                        asyncio.create_task(_send_typing(s["chat_id"]))
+
+    typing_task: asyncio.Task | None = None
+
+    async def on_stream(payload: StreamToken) -> None:
+        async with stream_lock:
+            if payload.task_id not in stream_state:
+                stream_state[payload.task_id] = {
+                    "chat_id": payload.chat_id,
+                    "message_id": None,
+                    "text": "",
+                    "last_edit": 0.0,
+                }
+                asyncio.create_task(_send_typing(payload.chat_id))
+                nonlocal typing_task
+                if typing_task is None or typing_task.done():
+                    typing_task = asyncio.create_task(_typing_loop())
+            s = stream_state[payload.task_id]
+            s["text"] = (s["text"] or "") + (payload.token or "")
+            last_edit = s["last_edit"]
+            no_message_yet = s.get("message_id") is None
+            has_text = bool(s["text"])
+            token_has_newline = "\n" in (payload.token or "")
+        now = time.monotonic()
+        if payload.done:
+            await _flush_stream(payload.task_id, force=True)
+        elif no_message_yet:
+            await _flush_stream(payload.task_id, force=False)
+        elif token_has_newline or (has_text and now - last_edit >= STREAM_EDIT_INTERVAL):
+            await _flush_stream(payload.task_id, force=False)
+
     async def on_outgoing(payload: OutgoingReply) -> None:
-        text = payload.text or "(empty)"
-        if len(text) > 4096:
-            text = text[:4093] + "..."
+        was_streaming = False
+        async with stream_lock:
+            if payload.task_id in stream_state:
+                stream_state[payload.task_id]["text"] = (payload.text or "").strip()
+                was_streaming = True
+        if was_streaming:
+            await _flush_stream(payload.task_id, force=True)
+            return
+        text = _strip_think_blocks(payload.text or "(empty)")
+        if len(text) > MAX_MESSAGE_LENGTH:
+            text = text[: MAX_MESSAGE_LENGTH - 3] + "..."
         reply_id = None
         if payload.message_id and payload.message_id.isdigit():
             mid = int(payload.message_id)
@@ -130,9 +256,6 @@ async def run_telegram_adapter() -> None:
                     logger.warning("sendMessage %s: %s", r.status_code, body)
         except Exception as e:
             logger.exception("sendMessage failed: %s", e)
-
-    async def on_stream(payload: StreamToken) -> None:
-        pass  # MVP: no streaming edits; full reply sent via OutgoingReply
 
     bus.subscribe_outgoing(on_outgoing)
     bus.subscribe_stream(on_stream)

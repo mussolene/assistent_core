@@ -51,8 +51,9 @@ class AssistantAgent(BaseAgent):
             prompt_parts.append(f"{role.capitalize()}: {content}")
         prompt_parts.append(f"User: {user_content}")
         full_prompt = "\n\n".join(prompt_parts)
+        stream_cb = context.metadata.get("stream_callback")
         try:
-            if context.metadata.get("stream"):
+            if stream_cb:
                 stream = self._model.generate(
                     full_prompt,
                     stream=True,
@@ -63,15 +64,27 @@ class AssistantAgent(BaseAgent):
                     full = ""
                     async for token in stream:
                         full += token
-                    return AgentResult(success=True, output_text=full)
-            text = await self._model.generate(
-                full_prompt,
-                stream=False,
-                reasoning=context.reasoning_requested,
-                system=SYSTEM_PROMPT,
-            )
+                        await stream_cb(token, done=False)
+                    await stream_cb("", done=True)
+                    text = full
+                else:
+                    text = await self._model.generate(
+                        full_prompt,
+                        stream=False,
+                        reasoning=context.reasoning_requested,
+                        system=SYSTEM_PROMPT,
+                    )
+            else:
+                text = await self._model.generate(
+                    full_prompt,
+                    stream=False,
+                    reasoning=context.reasoning_requested,
+                    system=SYSTEM_PROMPT,
+                )
         except Exception as e:
             logger.exception("model generate failed: %s", e)
+            if stream_cb:
+                await stream_cb("", done=True)
             err_msg = str(e).lower()
             if "connection" in err_msg or "connect" in err_msg or "refused" in err_msg:
                 user_msg = (

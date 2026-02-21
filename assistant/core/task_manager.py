@@ -42,6 +42,7 @@ class TaskManager:
         message_id: str = "",
         text: str = "",
         reasoning_requested: bool = False,
+        stream: bool = True,
     ) -> str:
         await self.connect()
         task_id = self.create_id()
@@ -53,6 +54,7 @@ class TaskManager:
             "message_id": message_id,
             "text": text,
             "reasoning_requested": reasoning_requested,
+            "stream": stream,
             "state": "received",
             "iteration": 0,
             "tool_results": [],
