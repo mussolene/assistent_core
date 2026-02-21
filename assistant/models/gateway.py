@@ -1,4 +1,7 @@
-"""Model Gateway: single entrypoint generate(prompt, stream, reasoning). Cloud disabled by default."""
+"""Model Gateway: single entrypoint generate(prompt, stream, reasoning). Cloud disabled by default.
+
+Streaming contract: see assistant.models.streaming. Compatible with OpenAI Chat Completions
+stream (content deltas); LM Studio native is mapped to the same token stream."""
 
 from __future__ import annotations
 

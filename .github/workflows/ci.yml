@@ -48,7 +48,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest assistant/tests -v --tb=short --cov=assistant --cov-report=xml --cov-report=term --cov-fail-under=85
+          pytest assistant/tests -v --tb=short --cov=assistant --cov-report=xml --cov-report=term --cov-fail-under=90
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

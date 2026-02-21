@@ -1,8 +1,15 @@
-"""Tests for Telegram channel: sanitize, rate limit, strip_think."""
+"""Tests for Telegram channel: sanitize, rate limit, strip_think, send_typing."""
+
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from assistant.channels.telegram import sanitize_text, RateLimiter, _strip_think_blocks
+from assistant.channels.telegram import (
+    sanitize_text,
+    RateLimiter,
+    _strip_think_blocks,
+    send_typing,
+)
 
 
 def test_sanitize_text_empty():
@@ -58,3 +65,15 @@ def test_strip_think_blocks_unclosed_think():
 def test_strip_think_blocks_only_think():
     text = "<think>\nok\n</think>"
     assert _strip_think_blocks(text) == ""
+
+
+@pytest.mark.asyncio
+async def test_send_typing_calls_telegram_api():
+    with patch("assistant.channels.telegram.httpx.AsyncClient") as mock_client:
+        mock_post = AsyncMock()
+        mock_client.return_value.__aenter__.return_value.post = mock_post
+        await send_typing("https://api.telegram.org/bot123", "chat_456")
+        mock_post.assert_called_once()
+        call_args = mock_post.call_args
+        assert "sendChatAction" in call_args[0][0]
+        assert call_args[1]["json"] == {"chat_id": "chat_456", "action": "typing"}

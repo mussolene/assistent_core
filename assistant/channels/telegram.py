@@ -78,6 +78,19 @@ def sanitize_text(text: Optional[str], max_len: int = 4000) -> str:
     return text[:max_len].strip()
 
 
+async def send_typing(telegram_base_url: str, chat_id: str) -> None:
+    """Send Telegram sendChatAction(typing) for the given chat. Testable with mocked httpx."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{telegram_base_url}/sendChatAction",
+                json={"chat_id": chat_id, "action": "typing"},
+                timeout=5.0,
+            )
+    except Exception as e:
+        logger.debug("sendChatAction failed: %s", e)
+
+
 async def run_telegram_adapter() -> None:
     setup_logging()
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -170,24 +183,13 @@ async def run_telegram_adapter() -> None:
             if force:
                 stream_state.pop(task_id, None)
 
-    async def _send_typing(chat_id: str) -> None:
-        try:
-            async with httpx.AsyncClient() as client:
-                await client.post(
-                    f"{base_url}/sendChatAction",
-                    json={"chat_id": chat_id, "action": "typing"},
-                    timeout=5.0,
-                )
-        except Exception as e:
-            logger.debug("sendChatAction failed: %s", e)
-
     async def _typing_loop() -> None:
         while True:
             await asyncio.sleep(TYPING_ACTION_INTERVAL)
             async with stream_lock:
                 for s in stream_state.values():
                     if s.get("message_id") is None:
-                        asyncio.create_task(_send_typing(s["chat_id"]))
+                        asyncio.create_task(send_typing(base_url, s["chat_id"]))
 
     typing_task: asyncio.Task | None = None
 
@@ -200,7 +202,7 @@ async def run_telegram_adapter() -> None:
                     "text": "",
                     "last_edit": 0.0,
                 }
-                asyncio.create_task(_send_typing(payload.chat_id))
+                asyncio.create_task(send_typing(base_url, payload.chat_id))
                 nonlocal typing_task
                 if typing_task is None or typing_task.done():
                     typing_task = asyncio.create_task(_typing_loop())

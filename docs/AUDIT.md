@@ -32,10 +32,10 @@
 
 ### 2.1 Чего не хватает
 
-- **Pre-commit / pre-push:** нет хуков (lint, format, tests). Рекомендация: `pre-commit` с ruff/black, mypy опционально.
-- **Версионирование:** версия только в `pyproject.toml`, нет единого места для релизов (тегов).
-- **Changelog:** нет CHANGELOG.md для пользователей.
-- **Стандарт кода:** нет явного ruff/black/mypy в CI (только проверка импортов).
+- **Pre-commit:** добавлен `.pre-commit-config.yaml` (ruff, pytest). Установка: `pip install pre-commit && pre-commit install`.
+- **Версионирование:** версия в `pyproject.toml`; теги — по желанию для релизов.
+- **Changelog:** добавлен CHANGELOG.md.
+- **Стандарт кода:** ruff в CI и в pre-commit (п. 9).
 - **Документация кода:** часть модулей без docstring; нет Sphinx/API docs.
 - **Локальный запуск тестов с Redis:** тесты, зависящие от Redis, скипаются при отсутствии — нет docker-compose для тестового Redis в CI.
 
@@ -55,9 +55,11 @@
   - `models/lm_studio.py`: нет тестов (generate_lm_studio, stream_lm_studio, парсинг SSE).
   - `models/gateway.py`: только local mock; нет тестов с use_lm_studio_native, fallback на cloud.
   - `core/orchestrator.py`: добавлены тесты _task_to_context со stream_callback и публикацией StreamToken (state=assistant/stream, state=tool, stream=False).
-  - `core/task_manager.py`: нет тестов create/update/get (нужен Redis или mock).
-  - `memory/*`: test_memory есть; проверить покрытие summary, vector (с моком sentence_transformers).
-  - `security/audit.py`, `core/logging_config.py`: нет тестов.
+  - `core/task_manager.py`: тесты с mock Redis в test_task_manager.py.
+  - `memory/*`: test_memory (short-term, task, summary, manager get_context).
+  - `security/audit.py`, `core/logging_config.py`: test_audit.py, test_logging_config.py.
+  - `memory/summary.py`, `memory/manager.py`: тесты в test_memory.py (summary roundtrip, get_context с моками).
+  - Интеграционный тест: test_integration.py (orchestrator + assistant + stream/outgoing с моками).
 - **Интеграционные:** сценарий «incoming → orchestrator → assistant → stream → outgoing» с моками bus и модели.
 - **E2E (опционально):** один сценарий с реальным Redis (в CI — сервис redis).
 
@@ -173,9 +175,9 @@
 
 ### 7.1 Цель
 
-- **Покрытие кода ≥90%** (pytest-cov).
+- **Покрытие кода ≥90%** (pytest-cov). В pyproject.toml и CI установлен `--cov-fail-under=90`.
 - Локально: `pytest --cov=assistant --cov-report=html --cov-fail-under=90`.
-- В CI: тот же порог; артефакт отчёта (html или xml) для просмотра.
+- В CI: артефакт coverage-report (coverage.xml) для просмотра.
 
 ### 7.2 Настройка coverage
 
@@ -195,7 +197,7 @@
 
 | # | Действие | Статус | Файлы/места |
 |---|----------|--------|-------------|
-| 1 | pytest-cov, fail-under 85, исключения | ✅ | pyproject.toml |
+| 1 | pytest-cov, fail-under 90, исключения | ✅ | pyproject.toml |
 | 2 | CI: coverage job, артефакт | ✅ | .github/workflows/ci.yml |
 | 3 | Тесты: strip_think_blocks в telegram | ✅ | assistant/tests/test_channels.py |
 | 4 | Тесты: dashboard save-model, save-mcp, remove-mcp, MCP args | ✅ | assistant/tests/test_dashboard.py |
@@ -206,6 +208,10 @@
 | 9 | Ruff в CI | ✅ | .github/workflows/ci.yml, pyproject.toml |
 | 10 | Документ приёмочных тестов | ✅ | docs/ACCEPTANCE.md |
 | 11 | README: конфиг Redis/env/YAML, контракт событий | ✅ | README.md |
-| 12 | Рефакторинг: streaming, dashboard, telegram | По плану в п. 6 |
+| 12 | Рефакторинг: streaming, telegram helpers | ✅ | models/streaming.py, gateway doc; telegram send_typing, test_send_typing |
+| 13 | Coverage 90%, CI fail_under=90 | ✅ | pyproject.toml, .github/workflows/ci.yml |
+| 14 | Тесты: audit, logging_config, task_manager (mock), memory (summary, manager), integration | ✅ | test_audit.py, test_logging_config.py, test_task_manager.py, test_memory.py, test_integration.py |
+| 15 | Pre-commit, CHANGELOG | ✅ | .pre-commit-config.yaml, CHANGELOG.md |
+| 16 | Рефакторинг dashboard (blueprints) | По плану | п. 6 — разбить app.py на blueprint'ы при доработке |
 
-Пункты 1–11 выполнены. Пункт 12 (рефакторинг) — по плану в п. 6.
+Пункты 1–15 выполнены. Пункт 16 (dashboard blueprints) — по плану в п. 6.
