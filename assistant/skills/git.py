@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 from typing import Any
 
 from assistant.security.command_whitelist import CommandWhitelist
@@ -15,6 +16,40 @@ from assistant.skills.git_platform import create_merge_request, search_github_re
 logger = logging.getLogger(__name__)
 
 GIT_ALLOWED = ["git"]
+
+
+def list_cloned_repos_sync(workspace_dir: str) -> list[dict[str, str]]:
+    """
+    Синхронно сканирует workspace на директории с .git и возвращает список {path, remote_url}.
+    Для использования в дашборде/API (без asyncio). Путь workspace_dir должен быть абсолютным и существовать.
+    """
+    if not workspace_dir or not os.path.isdir(workspace_dir):
+        return []
+    repos: list[dict[str, str]] = []
+    try:
+        for name in sorted(os.listdir(workspace_dir)):
+            path = os.path.join(workspace_dir, name)
+            if not os.path.isdir(path):
+                continue
+            if not os.path.exists(os.path.join(path, ".git")):
+                continue
+            remote_url = ""
+            try:
+                r = subprocess.run(
+                    ["git", "-C", path, "remote", "get-url", "origin"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    cwd=workspace_dir,
+                )
+                if r.returncode == 0 and r.stdout:
+                    remote_url = r.stdout.strip()
+            except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+                pass
+            repos.append({"path": name, "remote_url": remote_url})
+    except OSError:
+        pass
+    return repos
 
 
 class GitSkill(BaseSkill):

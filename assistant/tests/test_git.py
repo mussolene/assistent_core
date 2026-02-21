@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from assistant.skills.git import GitSkill
+from assistant.skills.git import GitSkill, list_cloned_repos_sync
 
 
 @pytest.fixture
@@ -171,3 +171,24 @@ async def test_git_list_cloned_alias(skill_no_network):
 async def test_git_name():
     s = GitSkill()
     assert s.name == "git"
+
+
+def test_list_cloned_repos_sync_empty_when_not_dir():
+    assert list_cloned_repos_sync("") == []
+    assert list_cloned_repos_sync("/nonexistent_path_xyz") == []
+
+
+def test_list_cloned_repos_sync_empty_dir(tmp_path):
+    assert list_cloned_repos_sync(str(tmp_path)) == []
+
+
+def test_list_cloned_repos_sync_finds_repo(tmp_path):
+    repo_dir = tmp_path / "my-repo"
+    repo_dir.mkdir()
+    (repo_dir / ".git").mkdir()
+    with patch("assistant.skills.git.subprocess.run") as m:
+        m.return_value = type("R", (), {"returncode": 0, "stdout": "https://github.com/o/r\n"})()
+        out = list_cloned_repos_sync(str(tmp_path))
+    assert len(out) == 1
+    assert out[0]["path"] == "my-repo"
+    assert out[0]["remote_url"] == "https://github.com/o/r"

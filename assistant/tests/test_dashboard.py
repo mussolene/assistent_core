@@ -121,6 +121,33 @@ def test_api_monitor(client, auth_mock):
     assert isinstance(j, dict)
 
 
+def test_api_cloned_repos_returns_ok(client, auth_mock, monkeypatch):
+    """GET /api/cloned-repos returns ok, repos list and workspace_dir."""
+    monkeypatch.setattr("assistant.dashboard.app._get_workspace_dir", lambda: "")
+    r = client.get("/api/cloned-repos")
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j.get("ok") is True
+    assert "repos" in j
+    assert j.get("workspace_dir") is None
+
+
+def test_api_cloned_repos_with_repos(client, auth_mock, monkeypatch):
+    """GET /api/cloned-repos with mocked list returns repos."""
+    monkeypatch.setattr("assistant.dashboard.app._get_workspace_dir", lambda: "/tmp")
+    monkeypatch.setattr(
+        "assistant.skills.git.list_cloned_repos_sync",
+        lambda w: [{"path": "my-repo", "remote_url": "https://github.com/o/r"}],
+    )
+    r = client.get("/api/cloned-repos")
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j.get("ok") is True
+    assert len(j.get("repos", [])) == 1
+    assert j["repos"][0]["path"] == "my-repo"
+    assert j["repos"][0]["remote_url"] == "https://github.com/o/r"
+
+
 def test_api_test_model_returns_json(monkeypatch, client, auth_mock):
     """Dashboard API test-model returns JSON with ok key (may fail without real model)."""
     monkeypatch.setattr(

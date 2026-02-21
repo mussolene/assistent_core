@@ -104,6 +104,7 @@ INDEX_HTML = """
     <a href="{{ url_for('model') }}" class="{{ 'active' if section == 'model' else '' }}">Модель</a>
     <a href="{{ url_for('mcp') }}" class="{{ 'active' if section == 'mcp' else '' }}">MCP</a>
     <a href="{{ url_for('monitor') }}" class="{{ 'active' if section == 'monitor' else '' }}">Мониторинг</a>
+    <a href="{{ url_for('repos_page') }}" class="{{ 'active' if section == 'repos' else '' }}">Репо</a>
     <a href="{{ url_for('email_settings') }}" class="{{ 'active' if section == 'email' else '' }}">Email</a>
     <a href="{{ url_for('mcp_agent') }}" class="{{ 'active' if section == 'mcp_agent' else '' }}">MCP (агент)</a>
     {% if current_user %}
@@ -1019,6 +1020,67 @@ _MONITOR_BODY = """
 """
 
 
+_REPOS_BODY = """
+<h1>Склонированные репозитории</h1>
+<p class="sub">Список директорий с .git в workspace (путь задаётся через WORKSPACE_DIR или SANDBOX_WORKSPACE_DIR).</p>
+<div class="card">
+  <p class="hint" style="margin-bottom:0.5rem">Workspace: {{ workspace_dir or '— не задан —' }}</p>
+  {% if repos %}
+  <table style="width:100%%; border-collapse: collapse;">
+    <thead>
+      <tr style="text-align:left; border-bottom: 1px solid var(--border);">
+        <th style="padding:0.5rem 0.75rem;">Директория</th>
+        <th style="padding:0.5rem 0.75rem;">Remote (origin)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in repos %}
+      <tr style="border-bottom: 1px solid var(--border);">
+        <td style="padding:0.5rem 0.75rem;"><code>{{ r.path }}</code></td>
+        <td style="padding:0.5rem 0.75rem; word-break: break-all;">{{ r.remote_url or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="hint">Репозиториев нет или workspace недоступен.</p>
+  {% endif %}
+</div>
+"""
+
+
+def _get_workspace_dir() -> str:
+    """Путь к workspace для сканирования репо (дашборд/API)."""
+    env = os.getenv("WORKSPACE_DIR", "").strip() or os.getenv("SANDBOX_WORKSPACE_DIR", "").strip()
+    if env:
+        return env
+    try:
+        cfg = get_config_from_redis_sync(get_redis_url())
+        return (cfg.get("WORKSPACE_DIR") or "").strip()
+    except Exception:
+        return ""
+
+
+@app.route("/repos")
+def repos_page():
+    config = load_config()
+    workspace_dir = _get_workspace_dir()
+    repos: list = []
+    if workspace_dir:
+        try:
+            from assistant.skills.git import list_cloned_repos_sync
+            repos = list_cloned_repos_sync(workspace_dir)
+        except Exception:
+            pass
+    return render_template_string(
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace("{% block content %}{% endblock %}", _REPOS_BODY),
+        config=config,
+        section="repos",
+        workspace_dir=workspace_dir or None,
+        repos=repos,
+    )
+
+
 @app.route("/monitor")
 def monitor():
     config = load_config()
@@ -1153,6 +1215,20 @@ def api_pairing_code():
         except Exception:
             pass
     return jsonify({"ok": True, "code": code, "link": link, "expires_in_sec": expires})
+
+
+@app.route("/api/cloned-repos", methods=["GET"])
+def api_cloned_repos():
+    """JSON: список склонированных репо в workspace (path, remote_url)."""
+    workspace_dir = _get_workspace_dir()
+    repos: list = []
+    if workspace_dir:
+        try:
+            from assistant.skills.git import list_cloned_repos_sync
+            repos = list_cloned_repos_sync(workspace_dir)
+        except Exception:
+            pass
+    return jsonify({"ok": True, "repos": repos, "workspace_dir": workspace_dir or None})
 
 
 @app.route("/api/monitor")
