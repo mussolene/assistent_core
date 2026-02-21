@@ -94,7 +94,7 @@ services:
         limits:
           cpus: "0.5"
           memory: 512M
-    user: "1000:1000"
+    # Qdrant пишет в /qdrant/storage; без user образ работает от root и volume доступен
 
 volumes:
   redis_data:

@@ -59,19 +59,20 @@ def sanitize_text(text: Optional[str], max_len: int = 4000) -> str:
 async def run_telegram_adapter() -> None:
     setup_logging()
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    cfg = get_config()
-    if not cfg["token"]:
-        from assistant.dashboard.config_store import get_config_from_redis
-        redis_cfg = await get_config_from_redis(redis_url)
-        cfg["token"] = redis_cfg.get("TELEGRAM_BOT_TOKEN") or ""
-        ids = redis_cfg.get("TELEGRAM_ALLOWED_USER_IDS")
-        cfg["allowed_ids"] = set(ids) if isinstance(ids, list) else (set(int(x) for x in str(ids).split(",") if x.strip()) if ids else set())
-    token = cfg["token"]
-    if not token:
-        logger.warning("TELEGRAM_BOT_TOKEN not set. Configure it via Web Dashboard: http://localhost:8080")
-        logger.warning("Waiting 60s before exit. Start dashboard and save token to Redis.")
-        await asyncio.sleep(60)
-        return
+    while True:
+        cfg = get_config()
+        if not cfg["token"]:
+            from assistant.dashboard.config_store import get_config_from_redis
+            redis_cfg = await get_config_from_redis(redis_url)
+            cfg["token"] = redis_cfg.get("TELEGRAM_BOT_TOKEN") or ""
+            ids = redis_cfg.get("TELEGRAM_ALLOWED_USER_IDS")
+            cfg["allowed_ids"] = set(ids) if isinstance(ids, list) else (set(int(x) for x in str(ids).split(",") if x.strip()) if ids else set())
+        token = cfg["token"]
+        if not token:
+            logger.warning("TELEGRAM_BOT_TOKEN not set. Configure via Web Dashboard: http://localhost:8080 (retry in 60s)")
+            await asyncio.sleep(60)
+            continue
+        break
     allowed: Set[int] = set(cfg["allowed_ids"]) if cfg.get("allowed_ids") else set()
     rate_limit = cfg["rate_limit_per_minute"]
     poll_timeout = cfg["poll_timeout"]
