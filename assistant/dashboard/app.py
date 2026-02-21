@@ -808,6 +808,115 @@ def _mcp_api_auth(endpoint_id: str):
     return None
 
 
+@app.route("/mcp/v1/agent/<endpoint_id>", methods=["GET"])
+def mcp_api_base_get(endpoint_id):
+    """GET базового URL: описание API (Cursor и др. могут запрашивать без суффикса)."""
+    chat_id = _mcp_api_auth(endpoint_id)
+    if not chat_id:
+        return jsonify({"error": "Unauthorized"}), 401
+    base = _mcp_agent_base_url()
+    return jsonify({
+        "protocol": "mcp",
+        "endpoint_id": endpoint_id,
+        "links": {
+            "notify": base + f"mcp/v1/agent/{endpoint_id}/notify",
+            "question": base + f"mcp/v1/agent/{endpoint_id}/question",
+            "confirmation": base + f"mcp/v1/agent/{endpoint_id}/confirmation",
+            "replies": base + f"mcp/v1/agent/{endpoint_id}/replies",
+            "events": base + f"mcp/v1/agent/{endpoint_id}/events",
+        },
+        "auth": "Authorization: Bearer <secret>",
+    })
+
+
+def _mcp_tools_call(chat_id: str, endpoint_id: str, name: str, arguments: dict) -> dict:
+    """Обработка tools/call для endpoint (chat_id из auth)."""
+    import time
+    from assistant.core.notify import (
+        get_and_clear_pending_result,
+        notify_to_chat,
+        pop_dev_feedback,
+        set_pending_confirmation,
+    )
+    from assistant.dashboard.mcp_endpoints import push_mcp_event
+
+    if name == "notify":
+        msg = (arguments.get("message") or "").strip()
+        if not msg:
+            return {"content": [{"type": "text", "text": "Ошибка: message пустой."}]}
+        ok = notify_to_chat(chat_id, msg)
+        return {"content": [{"type": "text", "text": "Отправлено." if ok else "Не удалось отправить."}]}
+
+    if name == "ask_confirmation":
+        msg = (arguments.get("message") or "").strip()
+        timeout_sec = int(arguments.get("timeout_sec") or 300)
+        if not msg:
+            return {"content": [{"type": "text", "text": "Ошибка: message пустой."}]}
+        prompt = f"{msg}\n\nОтветьте в Telegram: confirm / reject или свой текст."
+        set_pending_confirmation(chat_id, msg)
+        notify_to_chat(chat_id, prompt)
+        deadline = time.monotonic() + min(timeout_sec, 60)
+        while time.monotonic() < deadline:
+            result = get_and_clear_pending_result(chat_id)
+            if result is not None:
+                return {"content": [{"type": "text", "text": json.dumps({"confirmed": result.get("confirmed"), "rejected": result.get("rejected"), "reply": result.get("reply", "")})}]}
+            time.sleep(0.5)
+        return {"content": [{"type": "text", "text": json.dumps({"confirmed": False, "timeout": True, "reply": ""})}]}
+
+    if name == "get_user_feedback":
+        feedback = pop_dev_feedback(chat_id)
+        return {"content": [{"type": "text", "text": json.dumps(feedback)}]}
+
+    return {"content": [{"type": "text", "text": f"Неизвестный инструмент: {name}"}]}
+
+
+MCP_TOOLS_SPEC = [
+    {"name": "notify", "description": "Отправить сообщение в Telegram.", "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}},
+    {"name": "ask_confirmation", "description": "Запросить подтверждение в Telegram (confirm/reject).", "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}, "timeout_sec": {"type": "integer"}}, "required": ["message"]}},
+    {"name": "get_user_feedback", "description": "Забрать сообщения от пользователя (/dev в Telegram).", "inputSchema": {"type": "object", "properties": {}}},
+]
+
+
+@app.route("/mcp/v1/agent/<endpoint_id>", methods=["POST"])
+def mcp_api_base_post(endpoint_id):
+    """POST базового URL: JSON-RPC MCP (initialize, tools/list, tools/call) для Cursor."""
+    chat_id = _mcp_api_auth(endpoint_id)
+    if not chat_id:
+        return jsonify({"jsonrpc": "2.0", "error": {"code": -32001, "message": "Unauthorized"}}), 401
+    data = request.get_json(silent=True) or {}
+    method = data.get("method")
+    params = data.get("params") or {}
+    req_id = data.get("id")
+
+    def reply(result=None, error=None):
+        out = {"jsonrpc": "2.0", "id": req_id}
+        if error is not None:
+            out["error"] = error
+        else:
+            out["result"] = result
+        return jsonify(out)
+
+    if method == "initialize":
+        return reply({
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "assistant-mcp", "version": "0.1.0"},
+        })
+    if method == "notified" and params.get("method") == "initialized":
+        return reply()
+    if method == "tools/list":
+        return reply({"tools": MCP_TOOLS_SPEC})
+    if method == "tools/call":
+        name = params.get("name", "")
+        args = params.get("arguments") or {}
+        try:
+            result = _mcp_tools_call(chat_id, endpoint_id, name, args)
+            return reply(result)
+        except Exception as e:
+            return reply(error={"code": -32603, "message": str(e)})
+    return reply(error={"code": -32601, "message": f"Method not found: {method}"})
+
+
 @app.route("/mcp/v1/agent/<endpoint_id>/notify", methods=["POST"])
 def mcp_api_notify(endpoint_id):
     chat_id = _mcp_api_auth(endpoint_id)
