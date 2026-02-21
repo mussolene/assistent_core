@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from assistant.dashboard.auth import (
+    SESSION_COOKIE_NAME,
     SESSION_PREFIX,
     USER_PREFIX,
     USERS_SET_KEY,
@@ -12,6 +13,7 @@ from assistant.dashboard.auth import (
     create_session,
     create_user,
     delete_session,
+    get_current_user,
     get_session,
     get_user,
     setup_done,
@@ -170,7 +172,57 @@ def test_setup_creates_owner_and_redirects(client, redis_url, monkeypatch):
     })
     assert resp.status_code == 302
     assert resp.headers.get("Location", "").endswith("/")
-    from assistant.dashboard.auth import SESSION_COOKIE_NAME
     assert SESSION_COOKIE_NAME in resp.headers.get("Set-Cookie", "")
+
+
+def test_get_current_user_none_without_cookie():
+    """get_current_user returns None when no session cookie."""
+    from unittest.mock import patch
+    from flask import Flask
+    app = Flask(__name__)
+    with app.test_request_context():
+        with patch("assistant.dashboard.auth.request") as m:
+            m.cookies.get.return_value = None
+            r = MagicMock()
+            user = get_current_user(r)
+    assert user is None
+
+
+def test_get_current_user_none_when_session_invalid():
+    """get_current_user returns None when session not in Redis."""
+    from unittest.mock import patch
+    from flask import Flask
+    app = Flask(__name__)
+    with app.test_request_context():
+        with patch("assistant.dashboard.auth.request") as m:
+            m.cookies.get.return_value = "fake_sid"
+            r = MagicMock()
+            r.get = MagicMock(return_value=None)
+            user = get_current_user(r)
+    assert user is None
+
+
+def test_get_current_user_returns_user_when_valid():
+    """get_current_user returns login/role/display_name when cookie and session and user exist."""
+    from unittest.mock import patch
+    from flask import Flask
+    import json
+    app = Flask(__name__)
+    with app.test_request_context():
+        with patch("assistant.dashboard.auth.request") as m:
+            m.cookies.get.return_value = "valid_sid"
+            r = MagicMock()
+            def redis_get(k):
+                if k == SESSION_PREFIX + "valid_sid":
+                    return json.dumps({"login": "alice"})
+                if k == USER_PREFIX + "alice":
+                    return json.dumps({"role": "owner", "display_name": "Alice"})
+                return None
+            r.get = MagicMock(side_effect=redis_get)
+            user = get_current_user(r)
+    assert user is not None
+    assert user.get("login") == "alice"
+    assert user.get("role") == "owner"
+    assert user.get("display_name") == "Alice"
 
 
