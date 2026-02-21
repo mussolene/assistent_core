@@ -9,6 +9,7 @@ from assistant.skills.tasks import (
     format_tasks_for_telegram,
     format_tasks_list_readable,
     get_due_reminders_sync,
+    _format_task_created_reply,
     _normalize_action,
     _normalize_task_params,
     _parse_time_spent,
@@ -253,6 +254,17 @@ def test_normalize_action():
     assert _normalize_action("listtasks") == "list_tasks"
     assert _normalize_action("create_task") == "create_task"
     assert _normalize_action("createtask") == "create_task"
+
+
+def test_format_task_created_reply():
+    t = {"title": "Решение проблемы с репозиториями", "start_date": "2026-02-22", "end_date": "2026-03-10", "workload": "2 дня"}
+    s = _format_task_created_reply(t)
+    assert "Задача создана" in s
+    assert "Решение проблемы" in s
+    assert "22.02" in s and "10.03" in s
+    assert "Оценка: 2 дня" in s
+    t2 = {"title": "Без дат"}
+    assert "Срок:" not in _format_task_created_reply(t2)
 
 
 def test_normalize_task_params():

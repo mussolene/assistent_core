@@ -96,6 +96,19 @@ class Orchestrator:
                     continue
                 if state == "assistant":
                     tool_results = (result.metadata or {}).get("tool_results", [])
+                    for tr in tool_results:
+                        if isinstance(tr, dict) and tr.get("user_reply"):
+                            await self._bus.publish_outgoing(
+                                OutgoingReply(
+                                    task_id=task_id,
+                                    chat_id=payload.chat_id,
+                                    message_id=payload.message_id,
+                                    text=tr.get("user_reply", ""),
+                                    done=True,
+                                    channel=payload.channel,
+                                )
+                            )
+                            return
                     await self._tasks.update(
                         task_id,
                         state="assistant",

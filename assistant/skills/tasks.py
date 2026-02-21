@@ -179,6 +179,20 @@ def _human_date(iso_date: str | None) -> str:
         return iso_date[:10]
 
 
+def _format_task_created_reply(task: dict[str, Any]) -> str:
+    """Краткое сообщение пользователю после создания задачи: название, срок, оценка."""
+    title = (task.get("title") or "Без названия").replace("\n", " ")[:80]
+    parts = [f"Задача создана: «{title}»."]
+    start = _human_date(task.get("start_date"))
+    end = _human_date(task.get("end_date"))
+    if start or end:
+        parts.append(f" Срок: {start or '…'}–{end or '…'}.")
+    workload = (task.get("workload") or task.get("estimate") or "").strip()
+    if workload:
+        parts.append(f" Оценка: {workload}.")
+    return "".join(parts).strip()
+
+
 def format_tasks_list_readable(
     tasks: list[dict[str, Any]], include_workload: bool = True, include_time_spent: bool = True
 ) -> str:
@@ -385,7 +399,8 @@ class TaskSkill(BaseSkill):
         }
         await _save_task(client, task)
         await _ensure_user_list(client, user_id, task_id)
-        return {"ok": True, "task_id": task_id, "task": task}
+        user_reply = _format_task_created_reply(task)
+        return {"ok": True, "task_id": task_id, "task": task, "user_reply": user_reply}
 
     async def _delete(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         task_id = (params.get("task_id") or params.get("id") or "").strip()
