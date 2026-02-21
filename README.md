@@ -1,6 +1,6 @@
 # Assistant Core
 
-[![CI](https://github.com/YOUR_USERNAME/assistent_core/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/assistent_core/actions/workflows/ci.yml)
+[![CI](https://github.com/mussolene/assistent_core/actions/workflows/ci.yml/badge.svg)](https://github.com/mussolene/assistent_core/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Модульный персональный AI-ассистент с поддержкой Telegram, плагируемых навыков (skills), локальных и облачных моделей. Готов к развёртыванию через Docker.
