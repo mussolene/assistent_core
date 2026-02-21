@@ -81,5 +81,4 @@ jobs:
           from assistant.core.events import IncomingMessage
           from assistant.security.command_whitelist import CommandWhitelist
           from assistant.channels.telegram import sanitize_text
-          print('Imports OK')
-        "
+          print('Imports OK')"
