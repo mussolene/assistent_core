@@ -172,8 +172,11 @@ def consume_pending_confirmation(chat_id: str, user_text: str) -> bool:
         raw = r.get(key)
         r.close()
         if not raw:
-            logger.warning(
-                "consume_pending_confirmation: ключ не найден chat_id=%r key=%s", cid, key
+            # Нормальная ситуация: нет активного запроса подтверждения (старая кнопка или обычное сообщение)
+            logger.debug(
+                "consume_pending_confirmation: нет активного запроса для chat_id=%s (ключ %s отсутствует)",
+                cid,
+                key,
             )
             return False
         data = json.loads(raw)
