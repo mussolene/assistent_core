@@ -8,6 +8,7 @@
 |----------|-----------|----------|
 | **clone** | `url`, `dir?` | Клонирует репозиторий в рабочую директорию. Требует `SANDBOX_NETWORK_ENABLED=true`. |
 | **read** | `path`, `rev?`, `repo_dir?` | Читает файл из репо по ревизии (по умолчанию HEAD). |
+| **list_repos** / **list_cloned** | — | Список склонированных репо в workspace (path, remote_url). |
 | **status**, **diff**, **log** | `subcommand`, `args?` | Стандартные git-команды в контексте репо. |
 | **commit** | `message`, `paths?`, `repo_dir?` | Добавляет файлы и создаёт коммит. |
 | **push** | `remote?`, `branch`, `repo_dir?` | Пушит ветку. Требует сеть. |

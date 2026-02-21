@@ -56,6 +56,8 @@ class GitSkill(BaseSkill):
             return await self._push(params, use_network)
         if action == "create_mr":
             return await self._create_mr(params)
+        if action in ("list_repos", "list_cloned"):
+            return await self._list_repos(params)
         # status, diff, log, show, etc.
         return await self._git_subcommand(params)
 
@@ -194,6 +196,33 @@ class GitSkill(BaseSkill):
             gitlab_token=gitlab_token or None,
         )
         return result
+
+    async def _list_repos(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Scan workspace for dirs with .git, return list of path + remote origin url."""
+        if not os.path.isdir(self._workspace):
+            return {"ok": True, "repos": []}
+        repos: list[dict[str, str]] = []
+        for name in sorted(os.listdir(self._workspace)):
+            path = os.path.join(self._workspace, name)
+            if not os.path.isdir(path):
+                continue
+            git_dir = os.path.join(path, ".git")
+            if not os.path.exists(git_dir):
+                continue
+            # get remote url (whitelist checks subcommand only; path is our workspace)
+            if not self._whitelist.is_allowed("git remote get-url origin")[0]:
+                repos.append({"path": name, "remote_url": ""})
+                continue
+            code, stdout, stderr = await run_in_sandbox(
+                ["git", "-C", path, "remote", "get-url", "origin"],
+                cwd=self._workspace,
+                cpu_limit_seconds=self._cpu,
+                memory_limit_mb=self._memory,
+                network=False,
+            )
+            remote_url = (stdout or "").strip() if code == 0 else ""
+            repos.append({"path": name, "remote_url": remote_url})
+        return {"ok": True, "repos": repos}
 
     async def _git_subcommand(self, params: dict[str, Any]) -> dict[str, Any]:
         subcommand = params.get("subcommand") or params.get("action") or "status"

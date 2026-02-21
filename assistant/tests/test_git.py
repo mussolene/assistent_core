@@ -111,6 +111,40 @@ async def test_git_status_subcommand(skill_no_network):
 
 
 @pytest.mark.asyncio
+async def test_git_list_repos_empty_workspace(skill_no_network):
+    with patch("os.path.isdir", return_value=False):
+        out = await skill_no_network.run({"action": "list_repos"})
+    assert out["ok"] is True
+    assert out.get("repos") == []
+
+
+@pytest.mark.asyncio
+async def test_git_list_repos_no_repos(skill_no_network):
+    with patch("os.path.isdir", return_value=True), patch("os.listdir", return_value=[]):
+        out = await skill_no_network.run({"action": "list_repos"})
+    assert out["ok"] is True
+    assert out.get("repos") == []
+
+
+@pytest.mark.asyncio
+async def test_git_list_repos_finds_repo(skill_no_network):
+    with patch("os.path.isdir", return_value=True), patch("os.listdir", return_value=["my-repo"]), patch("os.path.exists", side_effect=lambda p: ".git" in p), patch("assistant.skills.git.run_in_sandbox", new_callable=AsyncMock, return_value=(0, "https://github.com/o/r", "")):
+        out = await skill_no_network.run({"action": "list_repos"})
+    assert out["ok"] is True
+    assert len(out["repos"]) == 1
+    assert out["repos"][0]["path"] == "my-repo"
+    assert out["repos"][0]["remote_url"] == "https://github.com/o/r"
+
+
+@pytest.mark.asyncio
+async def test_git_list_cloned_alias(skill_no_network):
+    with patch("os.path.isdir", return_value=False):
+        out = await skill_no_network.run({"action": "list_cloned"})
+    assert out["ok"] is True
+    assert out.get("repos") == []
+
+
+@pytest.mark.asyncio
 async def test_git_name():
     s = GitSkill()
     assert s.name == "git"
