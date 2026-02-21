@@ -137,6 +137,22 @@ async def test_git_list_repos_finds_repo(skill_no_network):
 
 
 @pytest.mark.asyncio
+async def test_git_search_repos_missing_query(skill_no_network):
+    out = await skill_no_network.run({"action": "search_repos"})
+    assert out["ok"] is False
+    assert "query" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_git_search_repos_github_delegates(skill_no_network):
+    with patch("assistant.skills.git.search_github_repos", new_callable=AsyncMock, return_value={"ok": True, "items": [], "total_count": 0}) as m:
+        out = await skill_no_network.run({"action": "search_repos", "query": "python", "platform": "github"})
+    assert out["ok"] is True
+    assert out.get("items") == []
+    m.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_git_list_cloned_alias(skill_no_network):
     with patch("os.path.isdir", return_value=False):
         out = await skill_no_network.run({"action": "list_cloned"})

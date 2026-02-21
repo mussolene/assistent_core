@@ -144,3 +144,50 @@ async def create_merge_request(
             return {"ok": False, "error": str(e)}
 
     return {"ok": False, "error": "Set GITHUB_TOKEN or GITLAB_TOKEN for create_mr"}
+
+
+async def search_github_repos(
+    query: str,
+    *,
+    token: str | None = None,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """Search GitHub repositories. GET /search/repositories. Returns ok, items ([{full_name, html_url, description}]), error."""
+    query = (query or "").strip()
+    if not query:
+        return {"ok": False, "error": "query is required"}
+    token = (token or "").strip()
+    if not token:
+        return {"ok": False, "error": "GITHUB_TOKEN is required for search"}
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://api.github.com/search/repositories",
+                params={"q": query, "per_page": min(per_page, 100)},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                timeout=15.0,
+            )
+        if r.status_code != 200:
+            err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            return {
+                "ok": False,
+                "error": err.get("message", r.text) or f"HTTP {r.status_code}",
+            }
+        data = r.json()
+        items = [
+            {
+                "full_name": it.get("full_name", ""),
+                "html_url": it.get("html_url", ""),
+                "description": it.get("description") or "",
+                "clone_url": it.get("clone_url", ""),
+            }
+            for it in data.get("items", [])
+        ]
+        return {"ok": True, "items": items, "total_count": data.get("total_count", 0)}
+    except Exception as e:
+        logger.exception("GitHub search repos failed: %s", e)
+        return {"ok": False, "error": str(e)}

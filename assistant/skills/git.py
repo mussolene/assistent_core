@@ -10,7 +10,7 @@ from assistant.security.command_whitelist import CommandWhitelist
 from assistant.security.sandbox import run_in_sandbox
 from assistant.skills.base import BaseSkill
 
-from assistant.skills.git_platform import create_merge_request
+from assistant.skills.git_platform import create_merge_request, search_github_repos
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,8 @@ class GitSkill(BaseSkill):
             return await self._create_mr(params)
         if action in ("list_repos", "list_cloned"):
             return await self._list_repos(params)
+        if action == "search_repos":
+            return await self._search_repos(params)
         # status, diff, log, show, etc.
         return await self._git_subcommand(params)
 
@@ -223,6 +225,27 @@ class GitSkill(BaseSkill):
             remote_url = (stdout or "").strip() if code == 0 else ""
             repos.append({"path": name, "remote_url": remote_url})
         return {"ok": True, "repos": repos}
+
+    async def _search_repos(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Search repos on GitHub (and later GitLab). platform=github|gitlab|both, query=..."""
+        platform = (params.get("platform") or "github").strip().lower()
+        query = (params.get("query") or params.get("q") or "").strip()
+        if not query:
+            return {"ok": False, "error": "query is required for search_repos"}
+        if platform == "github" or platform == "both":
+            token = os.environ.get("GITHUB_TOKEN", "").strip() or None
+            out = await search_github_repos(query, token=token)
+            if platform == "github":
+                return out
+            if not out.get("ok"):
+                return out
+            github_items = out.get("items", [])
+            # TODO 1.2: if platform == "both", also call search_gitlab_repos and merge
+            return {"ok": True, "items": github_items, "total_count": out.get("total_count", 0)}
+        if platform == "gitlab":
+            # TODO 1.2: return await search_gitlab_repos(...)
+            return {"ok": False, "error": "GitLab search not implemented yet"}
+        return {"ok": False, "error": "platform must be github, gitlab, or both"}
 
     async def _git_subcommand(self, params: dict[str, Any]) -> dict[str, Any]:
         subcommand = params.get("subcommand") or params.get("action") or "status"

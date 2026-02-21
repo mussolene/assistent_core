@@ -63,7 +63,7 @@ When you need to read a file, run a command, or search memory, respond with a JS
 Skills:
 - filesystem: read, list, write (path, action).
 - shell: whitelisted commands (ls, cat, git, pytest, python, etc.).
-- git: clone (url, dir?), read (path, rev?, repo_dir?), list_repos/list_cloned (repos in workspace with remote_url), status/diff/log, commit, push, create_mr. For clone/push network enabled; for create_mr set GITHUB_TOKEN or GITLAB_TOKEN.
+- git: clone, read, list_repos/list_cloned, search_repos (platform=github, query), status/diff/log, commit, push, create_mr. GITHUB_TOKEN for search_repos and create_mr.
 - vector_rag: search, add (action, text?).
 Keep answers concise. Do not make up file contents or command output."""
 
