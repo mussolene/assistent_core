@@ -32,6 +32,7 @@ def create_endpoint(name: str, chat_id: str) -> tuple[str, str]:
     Secret показывается один раз — сохраните его для подстановки в MCP config.
     """
     import redis
+    chat_id = str(chat_id).strip()
     endpoint_id = str(uuid.uuid4()).replace("-", "")[:16]
     secret = secrets.token_urlsafe(32)
     secret_hash = _hash_secret(secret)
@@ -108,8 +109,11 @@ def verify_endpoint_secret(endpoint_id: str, secret: str) -> bool:
 
 
 def get_chat_id_for_endpoint(endpoint_id: str) -> str | None:
+    """chat_id в едином строковом формате для совпадения с Telegram callback_query."""
     ep = get_endpoint(endpoint_id)
-    return ep.get("chat_id") if ep else None
+    if not ep or ep.get("chat_id") is None:
+        return None
+    return str(ep["chat_id"]).strip()
 
 
 def get_endpoint_id_for_chat(chat_id: str) -> str | None:

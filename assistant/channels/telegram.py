@@ -108,17 +108,47 @@ async def _answer_callback(telegram_base_url: str, callback_query_id: str, text:
         logger.debug("answerCallbackQuery failed: %s", e)
 
 
-async def _edit_message_remove_reply_markup(telegram_base_url: str, chat_id: str, message_id: int) -> None:
-    """Убрать inline-кнопки у сообщения после нажатия."""
+# Единый parse_mode для всех исходящих сообщений в Telegram
+PARSE_MODE = "Markdown"
+
+
+def _escape_markdown(text: str) -> str:
+    """Экранировать символы Markdown в пользовательском тексте (Telegram legacy Markdown)."""
+    for c in ("\\", "_", "*", "`", "["):
+        text = text.replace(c, "\\" + c)
+    return text
+
+
+def _confirmation_outcome_text(original_text: str, confirmed: bool) -> str:
+    """Текст сообщения после выбора: убираем призыв кнопку, добавляем итог в Markdown."""
+    base = (original_text or "").strip()
+    base = re.sub(r"\n\nВыберите ответ кнопкой ниже\.?\s*$", "", base)
+    base = _escape_markdown(base)
+    if confirmed:
+        return f"{base}\n\n✅ *Подтверждено*"
+    return f"{base}\n\n❌ *Отклонено*"
+
+
+async def _edit_message_confirmation_done(
+    telegram_base_url: str, chat_id: str, message_id: int, original_text: str, confirmed: bool
+) -> None:
+    """Заменить текст сообщения на итог (Подтверждено/Отклонено) и убрать кнопки."""
     try:
+        text = _confirmation_outcome_text(original_text, confirmed)
         async with httpx.AsyncClient() as client:
             await client.post(
-                f"{telegram_base_url}/editMessageReplyMarkup",
-                json={"chat_id": chat_id, "message_id": message_id, "reply_markup": {"inline_keyboard": []}},
+                f"{telegram_base_url}/editMessageText",
+                json={
+                    "chat_id": chat_id,
+                    "message_id": message_id,
+                    "text": text,
+                    "parse_mode": PARSE_MODE,
+                    "reply_markup": {"inline_keyboard": []},
+                },
                 timeout=5.0,
             )
     except Exception as e:
-        logger.debug("editMessageReplyMarkup failed: %s", e)
+        logger.debug("editMessageText confirmation done: %s", e)
 
 
 async def run_telegram_adapter() -> None:
@@ -197,7 +227,7 @@ async def run_telegram_adapter() -> None:
                     if s.get("message_id") is None:
                         r = await client.post(
                             f"{base_url}/sendMessage",
-                            json={"chat_id": chat_id, "text": text or STREAM_PLACEHOLDER},
+                            json={"chat_id": chat_id, "text": text or STREAM_PLACEHOLDER, "parse_mode": PARSE_MODE},
                             timeout=15.0,
                         )
                         if r.status_code == 200:
@@ -216,6 +246,7 @@ async def run_telegram_adapter() -> None:
                                 "chat_id": chat_id,
                                 "message_id": s["message_id"],
                                 "text": text or STREAM_PLACEHOLDER,
+                                "parse_mode": PARSE_MODE,
                             },
                             timeout=10.0,
                         )
@@ -287,6 +318,8 @@ async def run_telegram_adapter() -> None:
         text = _strip_think_blocks(payload.text or "(empty)")
         if len(text) > MAX_MESSAGE_LENGTH:
             text = text[: MAX_MESSAGE_LENGTH - 3] + "..."
+        if getattr(payload, "reply_markup", None):
+            text = _escape_markdown(text)
         reply_id = None
         if payload.message_id and payload.message_id.isdigit():
             mid = int(payload.message_id)
@@ -296,6 +329,7 @@ async def run_telegram_adapter() -> None:
             "chat_id": payload.chat_id,
             "text": text,
             "reply_to_message_id": reply_id,
+            "parse_mode": PARSE_MODE,
         }
         if getattr(payload, "reply_markup", None):
             body["reply_markup"] = payload.reply_markup
@@ -354,13 +388,25 @@ async def run_telegram_adapter() -> None:
                         if callback_data == CONFIRM_CALLBACK:
                             if consume_pending_confirmation(chat_id, "confirm"):
                                 await _answer_callback(base_url, cq["id"], "Принято.")
-                                await _edit_message_remove_reply_markup(base_url, cq["message"]["chat"]["id"], cq["message"]["message_id"])
+                                await _edit_message_confirmation_done(
+                                    base_url,
+                                    str(cq["message"]["chat"]["id"]),
+                                    cq["message"]["message_id"],
+                                    cq["message"].get("text") or "",
+                                    confirmed=True,
+                                )
                             else:
                                 await _answer_callback(base_url, cq["id"], "Нет активного запроса.")
                         elif callback_data == REJECT_CALLBACK:
                             if consume_pending_confirmation(chat_id, "reject"):
                                 await _answer_callback(base_url, cq["id"], "Отклонено.")
-                                await _edit_message_remove_reply_markup(base_url, cq["message"]["chat"]["id"], cq["message"]["message_id"])
+                                await _edit_message_confirmation_done(
+                                    base_url,
+                                    str(cq["message"]["chat"]["id"]),
+                                    cq["message"]["message_id"],
+                                    cq["message"].get("text") or "",
+                                    confirmed=False,
+                                )
                             else:
                                 await _answer_callback(base_url, cq["id"], "Нет активного запроса.")
                         else:
@@ -388,7 +434,7 @@ async def run_telegram_adapter() -> None:
                                 async with httpx.AsyncClient() as client:
                                     await client.post(
                                         f"{base_url}/sendMessage",
-                                        json={"chat_id": chat_id, "text": "Привязка выполнена. Ваш ID добавлен в разрешённые."},
+                                        json={"chat_id": chat_id, "text": "Привязка выполнена. Ваш ID добавлен в разрешённые.", "parse_mode": PARSE_MODE},
                                         timeout=5.0,
                                     )
                                 continue
@@ -406,7 +452,7 @@ async def run_telegram_adapter() -> None:
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
-                                    json={"chat_id": chat_id, "text": "Pairing выполнен. Ваш ID добавлен в разрешённые."},
+                                    json={"chat_id": chat_id, "text": "Pairing выполнен. Ваш ID добавлен в разрешённые.", "parse_mode": PARSE_MODE},
                                     timeout=5.0,
                                 )
                             continue
@@ -417,7 +463,7 @@ async def run_telegram_adapter() -> None:
                         async with httpx.AsyncClient() as client:
                             await client.post(
                                 f"{base_url}/sendMessage",
-                                json={"chat_id": chat_id, "text": "Rate limit exceeded. Try again later."},
+                                json={"chat_id": chat_id, "text": "Rate limit exceeded. Try again later.", "parse_mode": PARSE_MODE},
                                 timeout=5.0,
                             )
                         continue
@@ -432,7 +478,7 @@ async def run_telegram_adapter() -> None:
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
-                                    json={"chat_id": chat_id, "text": reply},
+                                    json={"chat_id": chat_id, "text": reply, "parse_mode": PARSE_MODE},
                                     timeout=5.0,
                                 )
                         except Exception as e:
@@ -445,7 +491,7 @@ async def run_telegram_adapter() -> None:
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
-                                    json={"chat_id": chat_id, "text": "Принято."},
+                                    json={"chat_id": chat_id, "text": "Принято.", "parse_mode": PARSE_MODE},
                                     timeout=5.0,
                                 )
                             continue
@@ -457,7 +503,7 @@ async def run_telegram_adapter() -> None:
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
-                                    json={"chat_id": chat_id, "text": "Напишите: /dev ваш текст или пожелания для агента."},
+                                    json={"chat_id": chat_id, "text": "Напишите: /dev ваш текст или пожелания для агента.", "parse_mode": PARSE_MODE},
                                     timeout=5.0,
                                 )
                         except Exception:
@@ -470,7 +516,7 @@ async def run_telegram_adapter() -> None:
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
-                                    json={"chat_id": chat_id, "text": "Передано агенту."},
+                                    json={"chat_id": chat_id, "text": "Передано агенту.", "parse_mode": PARSE_MODE},
                                     timeout=5.0,
                                 )
                         except Exception as e:

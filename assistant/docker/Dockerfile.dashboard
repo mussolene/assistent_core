@@ -25,4 +25,4 @@ ENV TMPDIR=/app/tmp
 
 USER app
 EXPOSE 8080
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "-w", "1", "--timeout", "60", "--worker-tmp-dir", "/app/tmp", "--access-logfile", "-", "assistant.dashboard.app:app"]
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "-w", "1", "--timeout", "90", "--worker-tmp-dir", "/app/tmp", "--access-logfile", "-", "assistant.dashboard.app:app"]
