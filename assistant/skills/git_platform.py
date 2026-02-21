@@ -1,0 +1,146 @@
+"""GitLab and GitHub API helpers: create Merge Request / Pull Request."""
+
+from __future__ import annotations
+
+import logging
+import re
+from typing import Any
+from urllib.parse import urlparse
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+
+def _parse_repo_url(url: str) -> tuple[str, str] | None:
+    """Return (host_type, owner/repo or project_path). host_type is 'github' or 'gitlab'."""
+    url = url.strip().rstrip("/")
+    if not url.startswith(("http://", "https://", "git@")):
+        return None
+    if url.startswith("git@"):
+        # git@github.com:owner/repo.git or git@gitlab.com:owner/repo.git
+        m = re.match(r"git@([^:]+):([^/]+/[^/]+?)(?:\.git)?$", url)
+        if m:
+            host = m.group(1).lower()
+            path = m.group(2)
+            if "github" in host:
+                return ("github", path)
+            if "gitlab" in host:
+                return ("gitlab", path)
+        return None
+    parsed = urlparse(url)
+    host = (parsed.netloc or "").lower()
+    path = (parsed.path or "").strip("/").replace(".git", "")
+    if not path:
+        return None
+    if "github" in host:
+        return ("github", path)
+    if "gitlab" in host:
+        return ("gitlab", path)
+    return None
+
+
+async def create_merge_request(
+    repo: str,
+    source_branch: str,
+    target_branch: str,
+    title: str,
+    description: str = "",
+    *,
+    github_token: str | None = None,
+    gitlab_token: str | None = None,
+) -> dict[str, Any]:
+    """
+    Create a Merge Request (GitLab) or Pull Request (GitHub).
+    repo: "owner/repo" or full clone URL.
+    Returns dict with ok, url, number/id, error.
+    """
+    # Normalize repo and detect platform from URL if needed
+    host_type: str | None = None
+    if repo.startswith(("http", "git@")):
+        parsed = _parse_repo_url(repo)
+        if not parsed:
+            return {"ok": False, "error": "Could not parse repo URL"}
+        host_type, repo_path = parsed
+    else:
+        repo_path = repo.strip()
+        if "/" in repo_path:
+            repo_path = repo_path
+
+    if not source_branch or not target_branch or not title:
+        return {"ok": False, "error": "source_branch, target_branch and title are required"}
+
+    # Prefer platform from URL; otherwise use GitHub if token present
+    use_github = (host_type == "github") or (host_type is None and github_token and "/" in repo_path)
+    use_gitlab = (host_type == "gitlab") or (host_type is None and gitlab_token)
+
+    if use_github and github_token and "/" in repo_path:
+        owner, repo_name = repo_path.split("/", 1)
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"https://api.github.com/repos/{owner}/{repo_name}/pulls",
+                    headers={
+                        "Authorization": f"Bearer {github_token}",
+                        "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28",
+                    },
+                    json={
+                        "title": title,
+                        "head": source_branch,
+                        "base": target_branch,
+                        "body": description or "",
+                    },
+                    timeout=15.0,
+                )
+            if r.status_code == 201:
+                data = r.json()
+                return {
+                    "ok": True,
+                    "url": data.get("html_url", ""),
+                    "number": data.get("number"),
+                    "platform": "github",
+                }
+            err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            return {
+                "ok": False,
+                "error": err.get("message", r.text) or f"HTTP {r.status_code}",
+            }
+        except Exception as e:
+            logger.exception("GitHub create PR failed: %s", e)
+            return {"ok": False, "error": str(e)}
+
+    if use_gitlab and gitlab_token:
+        # GitLab: project id can be path (owner/repo) URL-encoded
+        project_id = repo_path.replace("/", "%2F")
+        try:
+            async with httpx.AsyncClient() as client:
+                r = await client.post(
+                    f"https://gitlab.com/api/v4/projects/{project_id}/merge_requests",
+                    headers={"PRIVATE-TOKEN": gitlab_token},
+                    json={
+                        "source_branch": source_branch,
+                        "target_branch": target_branch,
+                        "title": title,
+                        "description": description or "",
+                    },
+                    timeout=15.0,
+                )
+            if r.status_code in (200, 201):
+                data = r.json()
+                return {
+                    "ok": True,
+                    "url": data.get("web_url", ""),
+                    "iid": data.get("iid"),
+                    "platform": "gitlab",
+                }
+            err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            return {
+                "ok": False,
+                "error": err.get("message", err.get("error", r.text)) or f"HTTP {r.status_code}",
+            }
+        except Exception as e:
+            logger.exception("GitLab create MR failed: %s", e)
+            return {"ok": False, "error": str(e)}
+
+    return {"ok": False, "error": "Set GITHUB_TOKEN or GITLAB_TOKEN for create_mr"}
