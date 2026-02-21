@@ -101,17 +101,33 @@ async def run_telegram_adapter() -> None:
         logger.warning("setMyCommands failed: %s", e)
 
     async def on_outgoing(payload: OutgoingReply) -> None:
+        text = payload.text or "(empty)"
+        if len(text) > 4096:
+            text = text[:4093] + "..."
+        reply_id = None
+        if payload.message_id and payload.message_id.isdigit():
+            mid = int(payload.message_id)
+            if mid > 0:
+                reply_id = mid
         try:
             async with httpx.AsyncClient() as client:
-                await client.post(
+                r = await client.post(
                     f"{base_url}/sendMessage",
                     json={
                         "chat_id": payload.chat_id,
-                        "text": payload.text or "(empty)",
-                        "reply_to_message_id": int(payload.message_id) if payload.message_id and payload.message_id.isdigit() else None,
+                        "text": text,
+                        "reply_to_message_id": reply_id,
                     },
-                    timeout=10.0,
+                    timeout=15.0,
                 )
+                if r.status_code != 200:
+                    body = r.text
+                    try:
+                        j = r.json()
+                        body = j.get("description", body)
+                    except Exception:
+                        pass
+                    logger.warning("sendMessage %s: %s", r.status_code, body)
         except Exception as e:
             logger.exception("sendMessage failed: %s", e)
 

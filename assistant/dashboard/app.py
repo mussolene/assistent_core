@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 
@@ -234,20 +235,23 @@ def save_model():
 # ----- MCP -----
 _MCP_BODY = """
 <h1>MCP скиллы</h1>
-<p class="sub">Подключение MCP-серверов (URL и имя). Конфигурация сохраняется в Redis.</p>
+<p class="sub">Подключение MCP-серверов: имя, URL и опциональные аргументы (JSON). Конфигурация в Redis.</p>
 <form method="post" action="/save-mcp" id="mcp-form">
   <div class="card">
     <label for="mcp_name">Имя</label>
     <input id="mcp_name" name="mcp_name" type="text" placeholder="my-mcp">
     <label for="mcp_url" style="margin-top:0.75rem">URL</label>
     <input id="mcp_url" name="mcp_url" type="url" placeholder="http://localhost:3000">
+    <label for="mcp_args" style="margin-top:0.75rem">Аргументы (JSON, опционально)</label>
+    <input id="mcp_args" name="mcp_args" type="text" placeholder='{"api_key": "..."}' style="font-family:monospace">
+    <p class="hint">Например: {"api_key": "xxx"} или {"transport": "stdio", "command": "npx", "args": ["-y", "mcp-server"]}</p>
     <button type="submit" class="btn" style="margin-top:0.75rem">Добавить</button>
   </div>
 </form>
 <ul class="mcp-list">
   {% for s in config.get('MCP_SERVERS', []) %}
   <li>
-    <span>{{ s.get('name', '') }} — {{ s.get('url', '') }}</span>
+    <span>{{ s.get('name', '') }} — {{ s.get('url', '') }}{% if s.get('args') %} <small style="color:var(--muted)">(args)</small>{% endif %}</span>
     <form method="post" action="/remove-mcp" style="display:inline" onsubmit="return confirm('Удалить?');">
       <input type="hidden" name="index" value="{{ loop.index0 }}">
       <button type="submit" class="btn btn-danger" style="padding:0.35rem 0.6rem;font-size:0.85rem">Удалить</button>
@@ -276,8 +280,21 @@ def save_mcp():
     servers = list(config.get(MCP_SERVERS_KEY) or [])
     name = (request.form.get("mcp_name") or "").strip()
     url = (request.form.get("mcp_url") or "").strip()
+    args_raw = (request.form.get("mcp_args") or "").strip()
+    args = None
+    if args_raw:
+        try:
+            args = json.loads(args_raw)
+            if not isinstance(args, dict):
+                args = None
+        except json.JSONDecodeError:
+            flash("Аргументы MCP: неверный JSON.", "error")
+            return redirect(url_for("mcp"))
     if name and url:
-        servers.append({"name": name, "url": url})
+        entry = {"name": name, "url": url}
+        if args is not None:
+            entry["args"] = args
+        servers.append(entry)
         set_config_in_redis_sync(redis_url, MCP_SERVERS_KEY, servers)
         flash("MCP-сервер добавлен.", "success")
     return redirect(url_for("mcp"))
@@ -339,6 +356,15 @@ def _redis_info() -> dict:
 
 
 # ----- API -----
+def _model_check_hint(err_text: str) -> str:
+    if not err_text:
+        return ""
+    err_lower = err_text.lower()
+    if "connection" in err_lower or "refused" in err_lower or "cannot connect" in err_lower:
+        return err_text + " Подсказка: из Docker используйте host.docker.internal вместо localhost."
+    return err_text
+
+
 @app.route("/api/test-model", methods=["POST"])
 def api_test_model():
     redis_url = get_redis_url()
@@ -349,12 +375,21 @@ def api_test_model():
 
     async def _check():
         from openai import AsyncOpenAI
-        client = AsyncOpenAI(base_url=base_url, api_key=api_key)
+        http_client = httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=8.0))
+        client = AsyncOpenAI(
+            base_url=base_url,
+            api_key=api_key,
+            http_client=http_client,
+        )
         try:
-            r = await client.chat.completions.create(model=model_name, messages=[{"role": "user", "content": "Hi"}], max_tokens=5)
+            r = await client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": "Hi"}],
+                max_tokens=5,
+            )
             return bool(r.choices)
         except Exception as e:
-            return str(e)
+            return _model_check_hint(str(e))
 
     try:
         err = asyncio.run(_check())
@@ -362,7 +397,7 @@ def api_test_model():
             return jsonify({"ok": True})
         return jsonify({"ok": False, "error": err if isinstance(err, str) else "No response"})
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)})
+        return jsonify({"ok": False, "error": _model_check_hint(str(e))})
 
 
 @app.route("/api/test-bot", methods=["POST"])
