@@ -147,7 +147,8 @@ def test_setup_page_accessible_without_auth(client, monkeypatch):
     assert "setup" in r.headers.get("Location", "")
     r2 = client.get("/setup")
     assert r2.status_code == 200
-    assert b"настройка" in r2.data.lower() or b"owner" in r2.data.lower()
+    body = r2.data.decode("utf-8", errors="replace").lower()
+    assert "настройка" in body or "owner" in body
 
 
 def test_setup_creates_owner_and_redirects(client, redis_url, monkeypatch):
