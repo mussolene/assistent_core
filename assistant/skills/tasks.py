@@ -112,6 +112,8 @@ PARAM_ALIASES = {
     "choiceaction": "choice_action",
     "taskids": "task_ids",
     "maxitems": "max_items",
+    "onlyactual": "only_actual",
+    "showdonebutton": "show_done_button",
 }
 
 
@@ -232,11 +234,15 @@ def format_tasks_list_readable(
 
 
 def format_tasks_for_telegram(
-    tasks: list[dict[str, Any]], max_items: int = 20, action: str = "view"
+    tasks: list[dict[str, Any]],
+    max_items: int = 20,
+    action: str = "view",
+    show_done_button: bool = False,
 ) -> tuple[str, list]:
     """
     Форматирует список задач для отправки в Telegram: текст сообщения и inline_keyboard.
-    action: view | delete | update | add_document | add_link — подставляется в callback_data task:{action}:{id}.
+    action: view | delete | update | add_document | add_link | done.
+    show_done_button: добавить кнопку «✓ Выполнена» (callback task:done:id) для каждой задачи.
     """
     if not tasks:
         return "Нет задач.", []
@@ -254,9 +260,12 @@ def format_tasks_for_telegram(
         tid = t.get("id", "")
         btn_label = f"{i + 1}. {title[:35]}"
         if action != "view":
-            action_label = {"delete": "Удалить", "update": "Правка", "add_document": "Документ", "add_link": "Ссылка"}.get(action, action)
+            action_label = {"delete": "Удалить", "update": "Правка", "add_document": "Документ", "add_link": "Ссылка", "done": "✓"}.get(action, action)
             btn_label = f"{action_label}: {title[:28]}"
-        keyboard.append([{"text": btn_label, "callback_data": f"task:{action}:{tid}"}])
+        row = [{"text": btn_label, "callback_data": f"task:{action}:{tid}"}]
+        if show_done_button and status == "open":
+            row.append({"text": "✓ Выполнена", "callback_data": f"task:done:{tid}"})
+        keyboard.append(row)
     text = "Задачи:\n\n" + "\n".join(lines)
     if len(tasks) > max_items:
         text += f"\n\n… и ещё {len(tasks) - max_items}."
@@ -271,6 +280,22 @@ def _task_matches_query(task: dict[str, Any], query: str) -> bool:
     title = (task.get("title") or "").lower()
     desc = (task.get("description") or "").lower()
     return q in title or q in desc
+
+
+def _is_actual_task(task: dict[str, Any]) -> bool:
+    """Актуальная задача: статус open и (нет end_date или end_date >= сегодня)."""
+    if (task.get("status") or "open") != "open":
+        return False
+    end = task.get("end_date")
+    if not end or len(end) < 10:
+        return True
+    try:
+        from datetime import date
+        end_ord = _date_to_ordinal(end)
+        today_ord = date.today().toordinal()
+        return end_ord is None or end_ord >= today_ord
+    except Exception:
+        return True
 
 
 def get_due_reminders_sync(redis_url: str) -> list[dict[str, Any]]:
@@ -448,7 +473,13 @@ class TaskSkill(BaseSkill):
                 task.get("start_date"), task.get("end_date"),
                 old_start, old_end,
             )
-        return {"ok": True, "task": task}
+        user_reply = None
+        if params.get("status") == "done":
+            user_reply = f"Задача «{(task.get('title') or 'Без названия')[:50]}» отмечена выполненной."
+        out = {"ok": True, "task": task}
+        if user_reply:
+            out["user_reply"] = user_reply
+        return out
 
     async def _cascade_reschedule(
         self,
@@ -514,8 +545,15 @@ class TaskSkill(BaseSkill):
         status_filter = (params.get("status") or "").strip()
         if status_filter:
             tasks = [t for t in tasks if (t.get("status") or "open") == status_filter]
+        only_actual = params.get("only_actual") in (True, "true", "1", "yes")
+        if only_actual:
+            tasks = [t for t in tasks if _is_actual_task(t)]
         formatted = format_tasks_list_readable(tasks)
-        return {"ok": True, "tasks": tasks, "total": len(tasks), "formatted": formatted}
+        out = {"ok": True, "tasks": tasks, "total": len(tasks), "formatted": formatted}
+        if only_actual and tasks:
+            _text, inline_keyboard = format_tasks_for_telegram(tasks, action="view", show_done_button=True)
+            out["inline_keyboard"] = inline_keyboard
+        return out
 
     async def _get_one(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         task_id = (params.get("task_id") or params.get("id") or "").strip()
@@ -607,10 +645,13 @@ class TaskSkill(BaseSkill):
                 t = await _load_task(client, tid)
                 if t and _check_owner(t, user_id):
                     tasks.append(t)
-        # Тип кнопок: view | delete | update | add_document | add_link (не путать с основным action скилла)
         button_action = (params.get("button_action") or params.get("choice_action") or "view").strip().lower() or "view"
+        show_done = params.get("show_done_button") in (True, "true", "1", "yes")
         text, keyboard = format_tasks_for_telegram(
-            tasks, max_items=int(params.get("max_items") or 20), action=button_action
+            tasks,
+            max_items=int(params.get("max_items") or 20),
+            action=button_action,
+            show_done_button=show_done,
         )
         return {"ok": True, "text": text, "inline_keyboard": keyboard, "tasks_count": len(tasks)}
 

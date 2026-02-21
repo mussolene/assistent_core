@@ -159,6 +159,16 @@ async def test_tool_agent_runs_skill():
     assert result.metadata and "tool_results" in result.metadata
 
 
+def test_assistant_parse_tool_calls_toolcalls_key():
+    """Парсит JSON с ключом 'toolcalls' (без подчёркивания) и вложенными params."""
+    agent = AssistantAgent(model_gateway=MagicMock(), memory=MagicMock())
+    text = '{"toolcalls": [{"name": "tasks", "params": {"action": "createtask", "title": "X", "startdate": "2026-02-23"}}]}'
+    calls = agent._parse_tool_calls(text)
+    assert len(calls) == 1
+    assert calls[0].get("name") == "tasks"
+    assert calls[0].get("params", {}).get("title") == "X"
+
+
 @pytest.mark.asyncio
 async def test_tool_agent_unknown_skill():
     reg = SkillRegistry()

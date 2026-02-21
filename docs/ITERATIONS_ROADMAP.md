@@ -100,6 +100,12 @@
 | **10.2** | [x] | format_for_telegram: текст списка задач + inline_keyboard с callback_data `task:view:{id}`. get_due_reminders_sync для воркера напоминаний. | Агент может вывести список задач в чат с кнопками; тесты; напоминания обрабатываются воркером. |
 | **10.3** | [ ] | Обработка callback в Telegram: при нажатии `task:view:{id}` — ответ с деталями задачи (или ссылка на дашборд). | В Telegram-адаптере обрабатывается callback; тесты. |
 | **10.4** | [ ] | Воркер напоминаний: процесс/скрипт по крону вызывает get_due_reminders_sync и шлёт уведомления в Telegram (chat_id по user_id). | Напоминания доставляются пользователю; документ или конфиг. |
+| **10.5** | [ ] | Список задач в формате Telegram API: только актуальные (open, end_date ≥ сегодня); кнопка «✓ Выполнена» (callback task:done:id); сообщение со списком можно удалять/заменять при новом вызове. | list_tasks(only_actual), format_for_telegram с кнопкой done; callback task:done в адаптере. |
+| **10.6** | [ ] | Компактный список неактуальных задач; архивация: «заархивировать выполненные» → перенос done в архив. list_archive, фильтр по периоду. | archive_completed, list_archive, хранение архива. |
+| **10.7** | [ ] | Поиск по архиву по смыслу (title/description) с фильтром по датам; результат с датами. | search_archive(query, from_date, to_date). |
+| **10.8** | [ ] | Подзадачи: parent_id в задаче, create_task(parent_id), list_subtasks(parent_id), отображение в деталях/списке. | Модель и скилл; тесты. |
+
+Требования детально: **docs/TASKS_REQUIREMENTS.md**.
 
 ---
 

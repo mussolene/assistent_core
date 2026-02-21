@@ -10,6 +10,7 @@ from assistant.skills.tasks import (
     format_tasks_list_readable,
     get_due_reminders_sync,
     _format_task_created_reply,
+    _is_actual_task,
     _normalize_action,
     _normalize_task_params,
     _parse_time_spent,
@@ -265,6 +266,27 @@ def test_format_task_created_reply():
     assert "Оценка: 2 дня" in s
     t2 = {"title": "Без дат"}
     assert "Срок:" not in _format_task_created_reply(t2)
+
+
+def test_is_actual_task():
+    from datetime import date
+    today = date.today().isoformat()
+    assert _is_actual_task({"status": "open", "end_date": None}) is True
+    assert _is_actual_task({"status": "open", "end_date": today}) is True
+    assert _is_actual_task({"status": "done"}) is False
+    assert _is_actual_task({"status": "open", "end_date": "2020-01-01"}) is False
+
+
+@pytest.mark.asyncio
+async def test_tasks_list_only_actual(skill, redis_mock):
+    with patch("assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock):
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "Open", "status": "open", "end_date": "2030-01-01"})
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "Done", "status": "done"})
+        out = await skill.run({"action": "list_tasks", "user_id": "u1", "only_actual": True})
+    assert out.get("ok") is True
+    assert out.get("total") == 1
+    assert any(t["title"] == "Open" for t in out["tasks"])
+    assert "inline_keyboard" in out
 
 
 def test_normalize_task_params():

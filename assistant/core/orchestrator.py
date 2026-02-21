@@ -82,7 +82,10 @@ class Orchestrator:
                     )
                 )
                 break
-            last_output = result.output_text
+            if result.tool_calls:
+                last_output = ""
+            else:
+                last_output = result.output_text
             if result.next_agent:
                 state = result.next_agent
                 iteration += 1
@@ -106,6 +109,19 @@ class Orchestrator:
                                     text=tr.get("user_reply", ""),
                                     done=True,
                                     channel=payload.channel,
+                                )
+                            )
+                            return
+                        if isinstance(tr, dict) and tr.get("formatted") and tr.get("inline_keyboard"):
+                            await self._bus.publish_outgoing(
+                                OutgoingReply(
+                                    task_id=task_id,
+                                    chat_id=payload.chat_id,
+                                    message_id=payload.message_id,
+                                    text=tr.get("formatted", ""),
+                                    done=True,
+                                    channel=payload.channel,
+                                    reply_markup={"inline_keyboard": tr["inline_keyboard"]},
                                 )
                             )
                             return
