@@ -60,7 +60,7 @@ class Orchestrator:
         max_iterations = self._config.orchestrator.max_iterations
         autonomous = self._config.orchestrator.autonomous_mode
         if not autonomous:
-            max_iterations = max(1, min(max_iterations, 3))
+            max_iterations = max(2, min(max_iterations, 3))
         state = "assistant"
         iteration = 0
         last_output = ""

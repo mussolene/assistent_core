@@ -10,6 +10,7 @@ from assistant.skills.tasks import (
     format_tasks_list_readable,
     get_due_reminders_sync,
     _normalize_action,
+    _normalize_task_params,
     _parse_time_spent,
 )
 
@@ -252,6 +253,14 @@ def test_normalize_action():
     assert _normalize_action("listtasks") == "list_tasks"
     assert _normalize_action("create_task") == "create_task"
     assert _normalize_action("createtask") == "create_task"
+
+
+def test_normalize_task_params():
+    assert _normalize_task_params({"startdate": "2026-02-22", "enddate": "2026-03-10"}) == {
+        "start_date": "2026-02-22",
+        "end_date": "2026-03-10",
+    }
+    assert _normalize_task_params({"title": "X", "start_date": "2025-01-01"})["start_date"] == "2025-01-01"
 
 
 def test_parse_time_spent():

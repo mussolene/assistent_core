@@ -100,6 +100,32 @@ def _normalize_action(action: str) -> str:
     return ACTION_ALIASES.get(a, action.strip().lower() if action else "")
 
 
+# Маппинг параметров без подчёркивания (модель может вернуть startdate вместо start_date)
+PARAM_ALIASES = {
+    "startdate": "start_date",
+    "enddate": "end_date",
+    "taskid": "task_id",
+    "reminderat": "reminder_at",
+    "timespent": "time_spent",
+    "timespentminutes": "time_spent_minutes",
+    "buttonaction": "button_action",
+    "choiceaction": "choice_action",
+    "taskids": "task_ids",
+    "maxitems": "max_items",
+}
+
+
+def _normalize_task_params(params: dict[str, Any]) -> dict[str, Any]:
+    """Подставляет стандартные ключи для вариантов без подчёркивания (startdate -> start_date)."""
+    out = dict(params)
+    key_lower = {k.lower(): k for k in out}
+    for alias, key in PARAM_ALIASES.items():
+        if key not in out and alias in key_lower:
+            orig = key_lower[alias]
+            out[key] = out.pop(orig, None)
+    return out
+
+
 def _date_to_ordinal(iso_date: str | None) -> int | None:
     """ISO date YYYY-MM-DD -> дни с эпохи (для вычисления сдвига)."""
     if not iso_date or len(iso_date) < 10:
