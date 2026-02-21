@@ -38,7 +38,7 @@ TOOLS_SPEC = [
             "type": "object",
             "properties": {
                 "message": {"type": "string", "description": "Вопрос или описание действия"},
-                "timeout_sec": {"type": "integer", "description": "Таймаут ожидания в секундах", "default": 300},
+                "timeout_sec": {"type": "integer", "description": "Таймаут ожидания в секундах (по умолчанию 120)", "default": 120},
             },
             "required": ["message"],
         },
@@ -82,7 +82,7 @@ def handle_tools_call(name: str, arguments: dict) -> dict:
 
     if name == "ask_confirmation":
         msg = (arguments.get("message") or "").strip()
-        timeout_sec = int(arguments.get("timeout_sec") or 300)
+        timeout_sec = int(arguments.get("timeout_sec") or 120)
         if not msg:
             return {"content": [{"type": "text", "text": "Ошибка: message пустой."}]}
         send_confirmation_request(chat_id, msg)

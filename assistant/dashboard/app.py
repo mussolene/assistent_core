@@ -95,6 +95,7 @@ INDEX_HTML = """
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Assistant — Панель</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
   <style>{{ layout_css }}</style>
 </head>
 <body>
@@ -131,6 +132,7 @@ LOGIN_HTML = """
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Вход — Assistant</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
   <style>{{ layout_css }}</style>
 </head>
 <body>
@@ -166,6 +168,7 @@ SETUP_HTML = """
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Первичная настройка — Assistant</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
   <style>{{ layout_css }}</style>
 </head>
 <body>
@@ -852,11 +855,11 @@ def _mcp_tools_call(chat_id: str, endpoint_id: str, name: str, arguments: dict) 
 
     if name == "ask_confirmation":
         msg = (arguments.get("message") or "").strip()
-        timeout_sec = int(arguments.get("timeout_sec") or 300)
+        timeout_sec = int(arguments.get("timeout_sec") or 120)
         if not msg:
             return {"content": [{"type": "text", "text": "Ошибка: message пустой."}]}
         send_confirmation_request(chat_id, msg)
-        deadline = time.monotonic() + min(timeout_sec, 60)
+        deadline = time.monotonic() + min(timeout_sec, 600)
         while time.monotonic() < deadline:
             result = get_and_clear_pending_result(chat_id)
             if result is not None:
@@ -873,7 +876,7 @@ def _mcp_tools_call(chat_id: str, endpoint_id: str, name: str, arguments: dict) 
 
 MCP_TOOLS_SPEC = [
     {"name": "notify", "description": "Отправить сообщение в Telegram.", "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}},
-    {"name": "ask_confirmation", "description": "Запросить подтверждение в Telegram (confirm/reject).", "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}, "timeout_sec": {"type": "integer"}}, "required": ["message"]}},
+    {"name": "ask_confirmation", "description": "Запросить подтверждение в Telegram (confirm/reject). Таймаут по умолчанию 120 сек.", "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}, "timeout_sec": {"type": "integer"}}, "required": ["message"]}},
     {"name": "get_user_feedback", "description": "Забрать сообщения от пользователя (/dev в Telegram).", "inputSchema": {"type": "object", "properties": {}}},
 ]
 
