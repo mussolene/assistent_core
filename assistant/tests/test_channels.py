@@ -1,8 +1,8 @@
-"""Tests for Telegram channel: sanitize, rate limit."""
+"""Tests for Telegram channel: sanitize, rate limit, strip_think."""
 
 import pytest
 
-from assistant.channels.telegram import sanitize_text, RateLimiter
+from assistant.channels.telegram import sanitize_text, RateLimiter, _strip_think_blocks
 
 
 def test_sanitize_text_empty():
@@ -34,3 +34,27 @@ def test_rate_limiter_per_user():
     assert limiter.allow("user1") is True
     assert limiter.allow("user1") is False
     assert limiter.allow("user2") is True
+
+
+def test_strip_think_blocks_empty():
+    assert _strip_think_blocks("") == ""
+    assert _strip_think_blocks("  ") == ""
+
+
+def test_strip_think_blocks_no_think():
+    assert _strip_think_blocks("Hello world") == "Hello world"
+
+
+def test_strip_think_blocks_removes_think():
+    text = "<think>\nreasoning here\n</think>\n\nСвязь проверена."
+    assert _strip_think_blocks(text) == "Связь проверена."
+
+
+def test_strip_think_blocks_unclosed_think():
+    text = "<think>\nreasoning without close"
+    assert _strip_think_blocks(text) == ""
+
+
+def test_strip_think_blocks_only_think():
+    text = "<think>\nok\n</think>"
+    assert _strip_think_blocks(text) == ""

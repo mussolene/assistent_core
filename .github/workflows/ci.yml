@@ -72,6 +72,9 @@ jobs:
           pip install -e ".[dev]"
           pip install openai httpx flask
 
+      - name: Ruff check
+        run: ruff check assistant/
+
       - name: Check imports
         run: python -c "
           from assistant.config import get_config

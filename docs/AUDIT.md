@@ -193,19 +193,19 @@
 
 ## 8. Краткая сводка для исправления замечаний
 
-| # | Действие | Файлы/места |
-|---|----------|-------------|
-| 1 | Включить pytest-cov, задать fail-under 90 (или 85), вынести исключения | pyproject.toml |
-| 2 | CI: coverage job, артефакт отчёта | .github/workflows/ci.yml |
-| 3 | Тесты: telegram (on_stream, on_outgoing, strip_think, typing) | assistant/tests/test_channels.py |
-| 4 | Тесты: dashboard save-маршруты, MCP | assistant/tests/test_dashboard.py |
-| 5 | Тесты: lm_studio (generate + stream SSE) | assistant/tests/test_lm_studio.py |
-| 6 | Тесты: gateway с use_lm_studio_native, fallback | assistant/tests/test_models.py |
-| 7 | Тесты: orchestrator stream_callback, StreamToken | assistant/tests/test_orchestrator.py |
-| 8 | Mock MCP сервер + тесты MCP config | assistant/tests/mcp_mock_server.py, test_mcp_*.py |
-| 9 | Ruff (или black) в CI | .github/workflows/ci.yml, pyproject.toml |
-| 10 | Документ приёмочных тестов | docs/ACCEPTANCE.md |
-| 11 | README: конфиг Redis/env/YAML, контракт событий | README.md, assistant/README.md |
-| 12 | Рефакторинг: streaming contract, dashboard blueprints, telegram helpers | По плану в п. 6 |
+| # | Действие | Статус | Файлы/места |
+|---|----------|--------|-------------|
+| 1 | pytest-cov, fail-under 85, исключения | ✅ | pyproject.toml |
+| 2 | CI: coverage job, артефакт | ✅ | .github/workflows/ci.yml |
+| 3 | Тесты: strip_think_blocks в telegram | ✅ | assistant/tests/test_channels.py |
+| 4 | Тесты: dashboard save-model, save-mcp, remove-mcp, MCP args | ✅ | assistant/tests/test_dashboard.py |
+| 5 | Тесты: lm_studio (generate, _native_base_url, is_lm_studio_native_url) | ✅ | assistant/tests/test_lm_studio.py |
+| 6 | Тесты: gateway use_lm_studio_native | ✅ | assistant/tests/test_models.py |
+| 7 | Тесты: orchestrator stream_callback | ⏳ | assistant/tests/test_orchestrator.py |
+| 8 | Mock MCP сервер + тесты GET /tools, POST /call | ✅ | assistant/tests/mcp_mock_server.py, test_mcp_mock.py |
+| 9 | Ruff в CI | ✅ | .github/workflows/ci.yml, pyproject.toml |
+| 10 | Документ приёмочных тестов | ✅ | docs/ACCEPTANCE.md |
+| 11 | README: конфиг Redis/env/YAML, контракт событий | ✅ | README.md |
+| 12 | Рефакторинг: streaming, dashboard, telegram | По плану в п. 6 |
 
-После выполнения пунктов 1–2 и 3–8 покрытие и стабильность CI будут соответствовать целям; пункты 9–12 улучшат поддерживаемость и ясность для разработки и релизов.
+Пункты 1–6, 8–11 выполнены. Пункт 7 (orchestrator stream_callback) и пункт 12 — по мере доработок.

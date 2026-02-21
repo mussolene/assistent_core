@@ -119,3 +119,92 @@ def test_api_test_model_returns_json(monkeypatch, client):
     assert "ok" in j
     if not j["ok"]:
         assert "error" in j
+
+
+def test_save_model_redirect(monkeypatch, client):
+    """save-model redirects to model and saves config."""
+    set_calls = []
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
+    monkeypatch.setattr(
+        "assistant.dashboard.app.set_config_in_redis_sync",
+        lambda url, key, val: set_calls.append((key, val)),
+    )
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.post(
+        "/save-model",
+        data={
+            "openai_base_url": "http://localhost:11434/v1",
+            "model_name": "llama",
+            "model_fallback_name": "",
+            "cloud_fallback_enabled": "",
+            "lm_studio_native": "1",
+            "openai_api_key": "",
+        },
+    )
+    assert r.status_code == 302
+    assert r.headers.get("Location", "").endswith("/model")
+    keys_saved = [c[0] for c in set_calls]
+    assert "OPENAI_BASE_URL" in keys_saved
+    assert "MODEL_NAME" in keys_saved
+    assert "LM_STUDIO_NATIVE" in keys_saved
+
+
+def test_save_mcp_valid(monkeypatch, client):
+    """save-mcp with name+url adds server and redirects to mcp."""
+    set_calls = []
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
+    monkeypatch.setattr(
+        "assistant.dashboard.app.set_config_in_redis_sync",
+        lambda url, key, val: set_calls.append((key, val)),
+    )
+    monkeypatch.setattr(
+        "assistant.dashboard.app.get_config_from_redis_sync",
+        lambda url: {},
+    )
+    monkeypatch.setattr("assistant.dashboard.app.load_config", lambda: {"MCP_SERVERS": []})
+    r = client.post("/save-mcp", data={"mcp_name": "mock-mcp", "mcp_url": "http://localhost:3000"})
+    assert r.status_code == 302
+    assert r.headers.get("Location", "").endswith("/mcp")
+    assert len(set_calls) == 1
+    assert set_calls[0][0] == MCP_SERVERS_KEY
+    assert set_calls[0][1] == [{"name": "mock-mcp", "url": "http://localhost:3000"}]
+
+
+def test_save_mcp_invalid_json_flash(monkeypatch, client):
+    """save-mcp with invalid JSON in args flashes error and redirects to mcp."""
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    monkeypatch.setattr("assistant.dashboard.app.load_config", lambda: {"MCP_SERVERS": []})
+    r = client.post(
+        "/save-mcp",
+        data={"mcp_name": "x", "mcp_url": "http://localhost:3000", "mcp_args": "not json"},
+    )
+    assert r.status_code == 302
+    assert r.headers.get("Location", "").endswith("/mcp")
+
+
+def test_save_mcp_with_args(monkeypatch, client):
+    """save-mcp with valid JSON args stores server with args."""
+    set_calls = []
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
+    monkeypatch.setattr(
+        "assistant.dashboard.app.set_config_in_redis_sync",
+        lambda url, key, val: set_calls.append((key, val)),
+    )
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    monkeypatch.setattr("assistant.dashboard.app.load_config", lambda: {"MCP_SERVERS": []})
+    r = client.post(
+        "/save-mcp",
+        data={
+            "mcp_name": "with-args",
+            "mcp_url": "http://localhost:3000",
+            "mcp_args": '{"api_key": "test-key"}',
+        },
+    )
+    assert r.status_code == 302
+    assert len(set_calls) == 1
+    servers = set_calls[0][1]
+    assert len(servers) == 1
+    assert servers[0]["name"] == "with-args"
+    assert servers[0]["url"] == "http://localhost:3000"
+    assert servers[0].get("args") == {"api_key": "test-key"}

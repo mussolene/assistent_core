@@ -23,6 +23,7 @@ dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
+    "ruff>=0.4.0",
 ]
 dashboard = [
     "flask>=3.0.0",
@@ -62,3 +63,12 @@ exclude_lines = [
     "if TYPE_CHECKING:",
 ]
 fail_under = 85
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.ruff.per-file-ignores]
+"assistant/tests/*" = ["S101"]

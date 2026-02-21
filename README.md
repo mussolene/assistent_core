@@ -39,6 +39,16 @@ docker compose up --build
 
 Подробная настройка и запуск без Docker — в [assistant/README.md](assistant/README.md).
 
+### Конфигурация (приоритет)
+
+Настройки берутся в порядке: **Redis (Dashboard)** → переменные окружения (`.env`) → YAML (`config/default.yaml`). Всё, что задаётся в Dashboard, хранится в Redis и переопределяет env/YAML при запуске core и telegram-adapter.
+
+### Контракт событий (для новых каналов)
+
+- **Вход:** адаптер публикует `IncomingMessage` (message_id, user_id, chat_id, text, reasoning_requested).
+- **Выход:** подписка на канал `assistant:outgoing_reply` — payload `OutgoingReply` (task_id, chat_id, message_id, text, done).
+- **Стриминг:** подписка на `assistant:stream_token` — payload `StreamToken` (task_id, chat_id, token, done). Токены дописываются в одно сообщение; при `done=True` или при приходе `OutgoingReply` с тем же task_id — финальное обновление.
+
 ## Архитектура
 
 ```
