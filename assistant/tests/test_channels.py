@@ -1,4 +1,4 @@
-"""Tests for Telegram channel: sanitize, rate limit, strip_think, send_typing."""
+"""Tests for Telegram channel: sanitize, rate limit, strip_think, send_typing, chunk, probe."""
 
 from unittest.mock import AsyncMock, patch
 
@@ -10,6 +10,7 @@ from assistant.channels.telegram import (
     RateLimiter,
     _strip_think_blocks,
     _to_telegram_html,
+    chunk_text_for_telegram,
     sanitize_text,
     send_typing,
 )
@@ -76,6 +77,13 @@ def test_bot_commands_include_settings_and_channels():
     assert "channels" in commands
 
 
+def test_bot_commands_include_repos_github_gitlab():
+    commands = {c["command"] for c in BOT_COMMANDS}
+    assert "repos" in commands
+    assert "github" in commands
+    assert "gitlab" in commands
+
+
 def test_to_telegram_html_uses_html():
     assert PARSE_MODE == "HTML"
 
@@ -101,6 +109,53 @@ def test_to_telegram_html_code():
 def test_to_telegram_html_escapes():
     assert "&lt;" in _to_telegram_html("<script>")
     assert "&amp;" in _to_telegram_html("a & b")
+
+
+def test_chunk_text_for_telegram_short():
+    assert chunk_text_for_telegram("hi") == ["hi"]
+    assert chunk_text_for_telegram("") == []
+
+
+def test_chunk_text_for_telegram_long():
+    limit = 10
+    assert chunk_text_for_telegram("a" * 5, limit=limit) == ["aaaaa"]
+    chunks = chunk_text_for_telegram("a" * 25, limit=limit)
+    assert len(chunks) >= 2
+    assert sum(len(c) for c in chunks) >= 25
+    assert all(len(c) <= limit for c in chunks)
+
+
+def test_chunk_text_for_telegram_splits_on_newline():
+    text = "line1\nline2\nline3\n"
+    chunks = chunk_text_for_telegram(text * 100, limit=50)
+    assert len(chunks) >= 2
+
+
+@pytest.mark.asyncio
+async def test_probe_telegram_ok():
+    from assistant.channels.telegram import probe_telegram
+    with patch("assistant.channels.telegram.httpx.AsyncClient") as m:
+        mock_get = AsyncMock()
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {"ok": True, "result": {"id": 1, "username": "test_bot"}}
+        m.return_value.__aenter__.return_value.get = mock_get
+        out = await probe_telegram("fake-token")
+    assert out.get("ok") is True
+    assert out.get("bot", {}).get("username") == "test_bot"
+
+
+@pytest.mark.asyncio
+async def test_probe_telegram_fail():
+    from assistant.channels.telegram import probe_telegram
+    with patch("assistant.channels.telegram.httpx.AsyncClient") as m:
+        mock_get = AsyncMock()
+        mock_get.return_value.status_code = 401
+        mock_get.return_value.json.return_value = {"ok": False, "description": "Unauthorized"}
+        mock_get.return_value.text = "Unauthorized"
+        m.return_value.__aenter__.return_value.get = mock_get
+        out = await probe_telegram("bad")
+    assert out.get("ok") is False
+    assert "error" in out
 
 
 @pytest.mark.asyncio

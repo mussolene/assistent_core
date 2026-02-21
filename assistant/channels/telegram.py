@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 STREAM_EDIT_INTERVAL = 0.2
 STREAM_PLACEHOLDER = "…"
 MAX_MESSAGE_LENGTH = 4096
+# Лимит Telegram на одно сообщение; длинные тексты режем на чанки (как в OpenClaw textChunkLimit: 4000)
+TEXT_CHUNK_LIMIT = 4000
 TYPING_ACTION_INTERVAL = 4.0
 
 
@@ -40,6 +42,9 @@ BOT_COMMANDS = [
     {"command": "reasoning", "description": "Включить режим рассуждений"},
     {"command": "settings", "description": "Ссылка на настройки"},
     {"command": "channels", "description": "Ссылка на дашборд (каналы)"},
+    {"command": "repos", "description": "Склонированные репо и поиск"},
+    {"command": "github", "description": "GitHub: репо и поиск"},
+    {"command": "gitlab", "description": "GitLab: репо и поиск"},
     {"command": "dev", "description": "Обратная связь для агента (MCP)"},
 ]
 
@@ -184,6 +189,49 @@ def _markdown_to_telegram_html(text: str) -> str:
 def _to_telegram_html(text: str) -> str:
     """Привести текст ответа к Telegram HTML (разметка отображается, без сырых знаков)."""
     return _markdown_to_telegram_html(text)
+
+
+def chunk_text_for_telegram(text: str, limit: int = TEXT_CHUNK_LIMIT) -> list[str]:
+    """
+    Разбить длинный текст на чанки по limit символов (по границам строк где возможно).
+    Как в OpenClaw: chunker + textChunkLimit для корректной отправки длинных сообщений.
+    """
+    if not text or len(text) <= limit:
+        return [text] if text else []
+    chunks: list[str] = []
+    rest = text
+    while rest:
+        if len(rest) <= limit:
+            chunks.append(rest)
+            break
+        block = rest[: limit + 1]
+        last_nl = block.rfind("\n")
+        if last_nl > limit // 2:
+            cut = last_nl + 1
+        else:
+            cut = limit
+        chunks.append(rest[:cut])
+        rest = rest[cut:].lstrip("\n")
+    return chunks
+
+
+async def probe_telegram(token: str, timeout: float = 5.0) -> dict:
+    """
+    Проверить бота (getMe). Для дашборда и при старте адаптера.
+    Возвращает {"ok": True, "bot": {"id", "username", ...}} или {"ok": False, "error": "..."}.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                f"{TELEGRAM_API}{token}/getMe",
+                timeout=timeout,
+            )
+        data = r.json() if r.status_code == 200 else {}
+        if data.get("ok") and data.get("result"):
+            return {"ok": True, "bot": data["result"]}
+        return {"ok": False, "error": data.get("description", r.text) or f"HTTP {r.status_code}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 def _confirmation_outcome_text(original_text: str, confirmed: bool) -> str:
@@ -384,37 +432,41 @@ async def run_telegram_adapter() -> None:
             await _flush_stream(payload.task_id, force=True)
             return
         text = _strip_think_blocks(payload.text or "(empty)")
-        if len(text) > MAX_MESSAGE_LENGTH:
-            text = text[: MAX_MESSAGE_LENGTH - 3] + "..."
-        text = _to_telegram_html(text)
+        reply_markup = getattr(payload, "reply_markup", None)
         reply_id = None
         if payload.message_id and payload.message_id.isdigit():
             mid = int(payload.message_id)
             if mid > 0:
                 reply_id = mid
-        body: dict = {
-            "chat_id": payload.chat_id,
-            "text": text,
-            "reply_to_message_id": reply_id,
-            "parse_mode": PARSE_MODE,
-        }
-        if getattr(payload, "reply_markup", None):
-            body["reply_markup"] = payload.reply_markup
+        # Длинные сообщения — несколькими чанками (как в OpenClaw chunker + textChunkLimit)
+        raw_chunks = chunk_text_for_telegram(text, limit=TEXT_CHUNK_LIMIT)
+        if not raw_chunks:
+            raw_chunks = ["(empty)"]
+        chunks = [_to_telegram_html(c) for c in raw_chunks]
         try:
             async with httpx.AsyncClient() as client:
-                r = await client.post(
-                    f"{base_url}/sendMessage",
-                    json=body,
-                    timeout=15.0,
-                )
-                if r.status_code != 200:
-                    body = r.text
-                    try:
-                        j = r.json()
-                        body = j.get("description", body)
-                    except Exception:
-                        pass
-                    logger.warning("sendMessage %s: %s", r.status_code, body)
+                for i, chunk_text in enumerate(chunks):
+                    body = {
+                        "chat_id": payload.chat_id,
+                        "text": chunk_text,
+                        "parse_mode": PARSE_MODE,
+                    }
+                    if i == 0 and reply_id:
+                        body["reply_to_message_id"] = reply_id
+                    if reply_markup and i == len(chunks) - 1:
+                        body["reply_markup"] = reply_markup
+                    r = await client.post(
+                        f"{base_url}/sendMessage",
+                        json=body,
+                        timeout=15.0,
+                    )
+                    if r.status_code != 200:
+                        try:
+                            err = r.json().get("description", r.text)
+                        except Exception:
+                            err = r.text
+                        logger.warning("sendMessage %s: %s", r.status_code, err)
+                        break
         except Exception as e:
             logger.exception("sendMessage failed: %s", e)
 
@@ -538,9 +590,9 @@ async def run_telegram_adapter() -> None:
                     if text in ("/settings", "/channels"):
                         dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:8080")
                         reply = (
-                            f"Настройки и каналы: {dashboard_url}\n"
+                            "Настройки и каналы: {}\n"
                             "Там можно задать токен бота, разрешённые ID, модель, MCP и т.д."
-                        )
+                        ).format(dashboard_url)
                         try:
                             async with httpx.AsyncClient() as client:
                                 await client.post(
@@ -550,6 +602,34 @@ async def run_telegram_adapter() -> None:
                                 )
                         except Exception as e:
                             logger.debug("sendMessage settings/channels: %s", e)
+                        continue
+                    # /repos, /github, /gitlab — репозитории (задел 9.2: список и поиск с кнопками)
+                    if text in ("/repos", "/github", "/gitlab"):
+                        dashboard_url = (os.getenv("DASHBOARD_URL", "http://localhost:8080")).rstrip("/")
+                        repos_url = f"{dashboard_url}/repos"
+                        label = "Репо" if text == "/repos" else ("GitHub" if text == "/github" else "GitLab")
+                        reply = (
+                            f"Репозитории ({label}).\n\n"
+                            "Список склонированных репо и поиск по имени — в дашборде. "
+                            "Скоро: список и поиск прямо в чате с кнопками «назад»/«вперёд»."
+                        )
+                        reply_markup = {
+                            "inline_keyboard": [[{"text": f"Открыть дашборд ({label})", "url": repos_url}]],
+                        }
+                        try:
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": reply,
+                                        "parse_mode": PARSE_MODE,
+                                        "reply_markup": reply_markup,
+                                    },
+                                    timeout=5.0,
+                                )
+                        except Exception as e:
+                            logger.debug("sendMessage repos: %s", e)
                         continue
                     # Ответ на запрос подтверждения от MCP/агента
                     try:
