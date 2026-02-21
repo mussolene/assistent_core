@@ -144,16 +144,15 @@ def test_mcp_replies_unauthorized(client):
 
 
 def test_mcp_confirmation_endpoint_ok(client, mcp_auth):
-    """POST /mcp/v1/agent/<id>/confirmation ставит pending и возвращает ok."""
-    with patch("assistant.core.notify.set_pending_confirmation") as set_pending:
-        with patch("assistant.core.notify.notify_to_chat", return_value=True):
-            r = client.post(
-                "/mcp/v1/agent/abc123/confirmation",
-                headers={"Authorization": "Bearer secret123", "Content-Type": "application/json"},
-                json={"message": "Deploy?"},
-            )
+    """POST /mcp/v1/agent/<id>/confirmation шлёт запрос с кнопками и возвращает ok."""
+    with patch("assistant.core.notify.send_confirmation_request", return_value=True) as send_conf:
+        r = client.post(
+            "/mcp/v1/agent/abc123/confirmation",
+            headers={"Authorization": "Bearer secret123", "Content-Type": "application/json"},
+            json={"message": "Deploy?"},
+        )
     assert r.status_code == 200
     j = r.get_json()
     assert j.get("ok") is True
     assert j.get("pending") is True
-    set_pending.assert_called_once_with("test_chat_123", "Deploy?")
+    send_conf.assert_called_once_with("test_chat_123", "Deploy?")

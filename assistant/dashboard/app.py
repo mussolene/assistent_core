@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 
 import httpx
+
+logger = logging.getLogger(__name__)
 from flask import (
     Flask,
     flash,
@@ -836,7 +839,7 @@ def _mcp_tools_call(chat_id: str, endpoint_id: str, name: str, arguments: dict) 
         get_and_clear_pending_result,
         notify_to_chat,
         pop_dev_feedback,
-        set_pending_confirmation,
+        send_confirmation_request,
     )
     from assistant.dashboard.mcp_endpoints import push_mcp_event
 
@@ -852,9 +855,7 @@ def _mcp_tools_call(chat_id: str, endpoint_id: str, name: str, arguments: dict) 
         timeout_sec = int(arguments.get("timeout_sec") or 300)
         if not msg:
             return {"content": [{"type": "text", "text": "Ошибка: message пустой."}]}
-        prompt = f"{msg}\n\nОтветьте в Telegram: confirm / reject или свой текст."
-        set_pending_confirmation(chat_id, msg)
-        notify_to_chat(chat_id, prompt)
+        send_confirmation_request(chat_id, msg)
         deadline = time.monotonic() + min(timeout_sec, 60)
         while time.monotonic() < deadline:
             result = get_and_clear_pending_result(chat_id)
@@ -913,6 +914,13 @@ def mcp_api_base_post(endpoint_id):
             result = _mcp_tools_call(chat_id, endpoint_id, name, args)
             return reply(result)
         except Exception as e:
+            logger.exception(
+                "MCP tools/call %s (endpoint_id=%s): %s",
+                name,
+                endpoint_id,
+                e,
+                exc_info=True,
+            )
             return reply(error={"code": -32603, "message": str(e)})
     return reply(error={"code": -32601, "message": f"Method not found: {method}"})
 
@@ -955,11 +963,9 @@ def mcp_api_confirmation(endpoint_id):
     message = (data.get("message") or "").strip()
     if not message:
         return jsonify({"ok": False, "error": "message required"}), 400
-    from assistant.core.notify import notify_to_chat, set_pending_confirmation
-    set_pending_confirmation(chat_id, message)
-    prompt = message + "\n\nОтветьте: confirm / reject или свой текст."
-    notify_to_chat(chat_id, prompt)
-    return jsonify({"ok": True, "pending": True, "message": "Ожидайте ответ в SSE /events или в следующем запросе /replies."})
+    from assistant.core.notify import send_confirmation_request
+    ok = send_confirmation_request(chat_id, message)
+    return jsonify({"ok": ok, "pending": True, "message": "Сообщение с кнопками Подтвердить/Отклонить отправлено. Ожидайте ответ в SSE /events или в следующем запросе /replies."})
 
 
 @app.route("/mcp/v1/agent/<endpoint_id>/replies", methods=["GET"])

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import time
 
@@ -51,13 +52,22 @@ TOOLS_SPEC = [
 
 
 def handle_tools_call(name: str, arguments: dict) -> dict:
+    try:
     from assistant.core.notify import (
         get_dev_chat_id,
         get_and_clear_pending_result,
         notify_main_channel,
         pop_dev_feedback,
-        set_pending_confirmation,
+        send_confirmation_request,
     )
+    except (ImportError, ModuleNotFoundError) as e:
+        logger.error(
+            "MCP tools/call: не удалось импортировать assistant.core.notify: %s; sys.path=%s",
+            e,
+            sys.path,
+            exc_info=True,
+        )
+        raise
 
     chat_id = get_dev_chat_id()
     if not chat_id:
@@ -75,9 +85,7 @@ def handle_tools_call(name: str, arguments: dict) -> dict:
         timeout_sec = int(arguments.get("timeout_sec") or 300)
         if not msg:
             return {"content": [{"type": "text", "text": "Ошибка: message пустой."}]}
-        prompt = f"{msg}\n\nОтветьте в Telegram: confirm / reject или свой текст."
-        set_pending_confirmation(chat_id, msg)
-        notify_main_channel(prompt)
+        send_confirmation_request(chat_id, msg)
         deadline = time.monotonic() + timeout_sec
         while time.monotonic() < deadline:
             result = get_and_clear_pending_result(chat_id)
@@ -140,7 +148,13 @@ def run_stdio() -> None:
                 result = handle_tools_call(name, args)
                 reply(result)
             except Exception as e:
-                logger.exception("tools/call %s: %s", name, e)
+                logger.exception(
+                    "MCP tools/call %s: %s (cwd=%s, sys.path[:3]=%s)",
+                    name,
+                    e,
+                    os.getcwd(),
+                    sys.path[:3],
+                )
                 reply(error={"code": -32603, "message": str(e)})
             continue
         if req_id is not None:

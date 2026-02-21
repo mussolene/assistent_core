@@ -95,6 +95,32 @@ async def send_typing(telegram_base_url: str, chat_id: str) -> None:
         logger.debug("sendChatAction failed: %s", e)
 
 
+async def _answer_callback(telegram_base_url: str, callback_query_id: str, text: str = "") -> None:
+    """Answer callback_query (убирает «часики» на кнопке, опционально показывает text)."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{telegram_base_url}/answerCallbackQuery",
+                json={"callback_query_id": callback_query_id, "text": text[:200] if text else None},
+                timeout=5.0,
+            )
+    except Exception as e:
+        logger.debug("answerCallbackQuery failed: %s", e)
+
+
+async def _edit_message_remove_reply_markup(telegram_base_url: str, chat_id: str, message_id: int) -> None:
+    """Убрать inline-кнопки у сообщения после нажатия."""
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{telegram_base_url}/editMessageReplyMarkup",
+                json={"chat_id": chat_id, "message_id": message_id, "reply_markup": {"inline_keyboard": []}},
+                timeout=5.0,
+            )
+    except Exception as e:
+        logger.debug("editMessageReplyMarkup failed: %s", e)
+
+
 async def run_telegram_adapter() -> None:
     setup_logging()
     redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -266,15 +292,18 @@ async def run_telegram_adapter() -> None:
             mid = int(payload.message_id)
             if mid > 0:
                 reply_id = mid
+        body: dict = {
+            "chat_id": payload.chat_id,
+            "text": text,
+            "reply_to_message_id": reply_id,
+        }
+        if getattr(payload, "reply_markup", None):
+            body["reply_markup"] = payload.reply_markup
         try:
             async with httpx.AsyncClient() as client:
                 r = await client.post(
                     f"{base_url}/sendMessage",
-                    json={
-                        "chat_id": payload.chat_id,
-                        "text": text,
-                        "reply_to_message_id": reply_id,
-                    },
+                    json=body,
                     timeout=15.0,
                 )
                 if r.status_code != 200:
@@ -308,6 +337,35 @@ async def run_telegram_adapter() -> None:
                     continue
                 for upd in data.get("result", []):
                     offset = upd["update_id"] + 1
+                    # Нажатие inline-кнопки (подтверждение MCP: mcp:confirm / mcp:reject)
+                    cq = upd.get("callback_query")
+                    if cq:
+                        from assistant.core.notify import (
+                            CONFIRM_CALLBACK,
+                            REJECT_CALLBACK,
+                            consume_pending_confirmation,
+                        )
+                        chat_id = str(cq["message"]["chat"]["id"])
+                        callback_data = (cq.get("data") or "").strip()
+                        uid_int = int(cq["from"]["id"])
+                        if allowed and uid_int not in allowed:
+                            await _answer_callback(base_url, cq["id"], "Доступ запрещён.")
+                            continue
+                        if callback_data == CONFIRM_CALLBACK:
+                            if consume_pending_confirmation(chat_id, "confirm"):
+                                await _answer_callback(base_url, cq["id"], "Принято.")
+                                await _edit_message_remove_reply_markup(base_url, cq["message"]["chat"]["id"], cq["message"]["message_id"])
+                            else:
+                                await _answer_callback(base_url, cq["id"], "Нет активного запроса.")
+                        elif callback_data == REJECT_CALLBACK:
+                            if consume_pending_confirmation(chat_id, "reject"):
+                                await _answer_callback(base_url, cq["id"], "Отклонено.")
+                                await _edit_message_remove_reply_markup(base_url, cq["message"]["chat"]["id"], cq["message"]["message_id"])
+                            else:
+                                await _answer_callback(base_url, cq["id"], "Нет активного запроса.")
+                        else:
+                            await _answer_callback(base_url, cq["id"])
+                        continue
                     msg = upd.get("message") or upd.get("edited_message")
                     if not msg:
                         continue

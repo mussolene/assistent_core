@@ -41,8 +41,13 @@ def get_dev_chat_id() -> str | None:
         return None
 
 
-def notify_to_chat(chat_id: str, text: str) -> bool:
-    """Отправить сообщение в Telegram в указанный chat_id."""
+# callback_data для inline-кнопок подтверждения (обрабатываются в Telegram-адаптере)
+CONFIRM_CALLBACK = "mcp:confirm"
+REJECT_CALLBACK = "mcp:reject"
+
+
+def notify_to_chat(chat_id: str, text: str, reply_markup: dict | None = None) -> bool:
+    """Отправить сообщение в Telegram в указанный chat_id. Опционально — reply_markup (inline_keyboard и т.д.)."""
     if not chat_id:
         return False
     try:
@@ -56,6 +61,7 @@ def notify_to_chat(chat_id: str, text: str) -> bool:
             text=text,
             done=True,
             channel=ChannelKind.TELEGRAM,
+            reply_markup=reply_markup,
         )
         r.publish(CH_OUTGOING, payload.model_dump_json())
         r.close()
@@ -63,6 +69,18 @@ def notify_to_chat(chat_id: str, text: str) -> bool:
     except Exception as e:
         logger.exception("notify_to_chat: %s", e)
         return False
+
+
+def send_confirmation_request(chat_id: str, message: str) -> bool:
+    """Отправить запрос подтверждения с кнопками Подтвердить/Отклонить. Ставит pending и шлёт сообщение с inline-кнопками."""
+    set_pending_confirmation(chat_id, message)
+    prompt = f"{message}\n\nВыберите ответ кнопкой ниже."
+    reply_markup = {
+        "inline_keyboard": [
+            [{"text": "✅ Подтвердить", "callback_data": CONFIRM_CALLBACK}, {"text": "❌ Отклонить", "callback_data": REJECT_CALLBACK}],
+        ]
+    }
+    return notify_to_chat(chat_id, prompt, reply_markup=reply_markup)
 
 
 def notify_main_channel(text: str) -> bool:
