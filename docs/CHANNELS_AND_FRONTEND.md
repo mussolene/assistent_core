@@ -87,7 +87,8 @@
 
 ### Вариант B: Отдельное SPA-приложение
 
-- **Стек (пример):** React или Vue 3 + Vite, Tailwind CSS, TypeScript.
+- **Стек:** см. детальное сравнение и рекомендации в [docs/FRONTEND_STACK.md](FRONTEND_STACK.md) (Vue + Vuetify vs React + MUI vs Svelte, Material Design, маловесность, риски).
+- **Пример:** Vue 3 или React + Vite, Material-библиотека (Vuetify/MUI), TypeScript по желанию.
 - **Бэкенд:** текущий Flask дашборд остаётся API (REST + опционально WebSocket для чата и стриминга).
 - **Чат в браузере:** страница чата шлёт POST с текстом, получает ответ стримом (SSE/WebSocket) и публикует в Event Bus как канал WEB.
 - **Настройки:** те же экраны (Telegram, Модель, MCP, Мониторинг) как страницы SPA, запросы к `/api/...` Flask.
@@ -107,6 +108,6 @@
 |--------|----------|
 | Каналы | Добавить в код только нужные `ChannelKind`; новые адаптеры — по одному (Slack → WEB → Email → при необходимости iMessage/WhatsApp мосты). |
 | Фронт (минимально) | Вынести CSS/HTML в шаблоны и static; подключить Pico/Bootstrap; добавить страницу «Чат» с отправкой сообщения и отображением ответа (без стрима — ок). |
-| Фронт (полноценно) | Отдельный SPA (Vite + React/Vue), Tailwind, страницы: Чат, Настройки (Telegram, Модель, MCP), Мониторинг; API на Flask; для стриминга — SSE или WebSocket. |
+| Фронт (полноценно) | Отдельный SPA (см. [FRONTEND_STACK.md](FRONTEND_STACK.md)): Vite + Vue/Vuetify или React/MUI, страницы Чат, Настройки, Мониторинг; API на Flask; стриминг — SSE или WebSocket. |
 
 Текущий код уже готов к нескольким каналам: в событиях есть `channel`, оркестратор прокидывает его в ответы, Telegram-адаптер обрабатывает только `ChannelKind.TELEGRAM`.
