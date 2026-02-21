@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import shlex
-import logging
 from typing import Sequence
 
 logger = logging.getLogger(__name__)
@@ -55,5 +55,5 @@ class CommandWhitelist:
             return None
         try:
             return (shlex.split(raw_command), "")
-        except ValueError as e:
+        except ValueError:
             return None

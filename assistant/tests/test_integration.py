@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from assistant.agents.assistant import AssistantAgent
 from assistant.core.events import IncomingMessage, OutgoingReply, StreamToken
 from assistant.core.orchestrator import Orchestrator
 from assistant.core.task_manager import TaskManager
-from assistant.agents.assistant import AssistantAgent
 
 
 @pytest.mark.asyncio

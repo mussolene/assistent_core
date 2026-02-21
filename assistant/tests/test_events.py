@@ -1,6 +1,6 @@
 """Tests for event payloads."""
 
-from assistant.core.events import IncomingMessage, OutgoingReply, ChannelKind
+from assistant.core.events import IncomingMessage, OutgoingReply
 
 
 def test_incoming_message_roundtrip():

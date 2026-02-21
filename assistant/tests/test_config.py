@@ -1,8 +1,6 @@
 """Tests for config loading."""
 
-from pathlib import Path
 
-import pytest
 
 from assistant.config.loader import Config, _load_yaml
 

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from assistant.skills.base import BaseSkill
+
+if TYPE_CHECKING:
+    from assistant.skills.runner import SandboxRunner
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +29,7 @@ class SkillRegistry:
     def list_skills(self) -> list[str]:
         return list(self._skills.keys())
 
-    async def run(self, name: str, params: dict[str, Any], sandbox_runner: "SandboxRunner") -> dict[str, Any]:
+    async def run(self, name: str, params: dict[str, Any], sandbox_runner: SandboxRunner) -> dict[str, Any]:
         """Resolve skill by name and run inside sandbox_runner. Returns result dict."""
         skill = self.get(name)
         if not skill:

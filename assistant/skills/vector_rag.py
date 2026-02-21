@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from assistant.skills.base import BaseSkill
+
+if TYPE_CHECKING:
+    from assistant.memory.vector import VectorMemory
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +16,7 @@ logger = logging.getLogger(__name__)
 class VectorRagSkill(BaseSkill):
     """Delegates to a VectorMemory instance. No direct network."""
 
-    def __init__(self, vector_memory: "assistant.memory.vector.VectorMemory") -> None:
+    def __init__(self, vector_memory: VectorMemory) -> None:
         self._vector = vector_memory
 
     @property

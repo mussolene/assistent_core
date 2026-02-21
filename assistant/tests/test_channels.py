@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from assistant.channels.telegram import (
-    sanitize_text,
     RateLimiter,
     _strip_think_blocks,
+    sanitize_text,
     send_typing,
 )
 

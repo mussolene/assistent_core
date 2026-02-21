@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from assistant.agents.base import BaseAgent, TaskContext, AgentResult
+from assistant.agents.base import AgentResult, BaseAgent, TaskContext
 
 if TYPE_CHECKING:
     pass

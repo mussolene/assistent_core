@@ -6,8 +6,8 @@ import logging
 from typing import Any
 
 from assistant.memory.short_term import ShortTermMemory
-from assistant.memory.task_memory import TaskMemory
 from assistant.memory.summary import SummaryMemory
+from assistant.memory.task_memory import TaskMemory
 from assistant.memory.vector import VectorMemory
 
 logger = logging.getLogger(__name__)

@@ -5,9 +5,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from typing import TYPE_CHECKING
 
 from assistant.config import get_config
 from assistant.core.logging_config import setup_logging
+
+if TYPE_CHECKING:
+    from assistant.config.loader import Config
 
 logger = logging.getLogger(__name__)
 
@@ -21,21 +25,21 @@ def main() -> None:
     asyncio.run(run_core(config))
 
 
-async def run_core(config: "assistant.config.loader.Config") -> None:
-    from assistant.core.bus import EventBus
-    from assistant.core.orchestrator import Orchestrator
-    from assistant.core.agent_registry import AgentRegistry
-    from assistant.memory.manager import MemoryManager
-    from assistant.models.gateway import ModelGateway
-    from assistant.skills.registry import SkillRegistry
-    from assistant.skills.runner import SandboxRunner
-    from assistant.skills.filesystem import FilesystemSkill
-    from assistant.skills.shell import ShellSkill
-    from assistant.skills.git import GitSkill
-    from assistant.skills.vector_rag import VectorRagSkill
-    from assistant.skills.mcp_adapter import McpAdapterSkill
+async def run_core(config: Config) -> None:
     from assistant.agents.assistant import AssistantAgent
     from assistant.agents.tool_agent import ToolAgent
+    from assistant.core.agent_registry import AgentRegistry
+    from assistant.core.bus import EventBus
+    from assistant.core.orchestrator import Orchestrator
+    from assistant.memory.manager import MemoryManager
+    from assistant.models.gateway import ModelGateway
+    from assistant.skills.filesystem import FilesystemSkill
+    from assistant.skills.git import GitSkill
+    from assistant.skills.mcp_adapter import McpAdapterSkill
+    from assistant.skills.registry import SkillRegistry
+    from assistant.skills.runner import SandboxRunner
+    from assistant.skills.shell import ShellSkill
+    from assistant.skills.vector_rag import VectorRagSkill
 
     bus = EventBus(config.redis.url)
     memory = MemoryManager(

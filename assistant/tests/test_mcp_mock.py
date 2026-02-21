@@ -1,8 +1,7 @@
 """Tests for mock MCP server and MCP config with server URL/args."""
 
-import pytest
-
 import httpx
+import pytest
 
 from assistant.tests.mcp_mock_server import run_mock_mcp_server
 

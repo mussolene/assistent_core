@@ -2,8 +2,8 @@
 
 import pytest
 
+from assistant.core.bus import _deserialize, _serialize
 from assistant.core.events import IncomingMessage, OutgoingReply
-from assistant.core.bus import _serialize, _deserialize, CH_INCOMING
 
 
 def test_serialize_deserialize_incoming():
@@ -15,7 +15,6 @@ def test_serialize_deserialize_incoming():
 
 
 def test_serialize_deserialize_outgoing():
-    from assistant.core.events import OutgoingReply
     payload = OutgoingReply(task_id="t1", chat_id="c1", text="ok", done=True)
     raw = _serialize(payload)
     back = _deserialize(raw.encode("utf-8"), OutgoingReply)

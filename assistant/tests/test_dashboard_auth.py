@@ -4,6 +4,21 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from assistant.dashboard.auth import (
+    SESSION_PREFIX,
+    USER_PREFIX,
+    USERS_SET_KEY,
+    _hash_password,
+    create_session,
+    create_user,
+    delete_session,
+    get_session,
+    get_user,
+    setup_done,
+    verify_password,
+    verify_user,
+)
+
 
 @pytest.fixture
 def redis_url():
@@ -15,22 +30,6 @@ def redis_url():
         return "redis://localhost:6379/13"
     except Exception:
         pytest.skip("Redis not available")
-
-
-from assistant.dashboard.auth import (
-    create_user,
-    verify_user,
-    verify_password,
-    create_session,
-    get_session,
-    delete_session,
-    setup_done,
-    get_user,
-    _hash_password,
-    USERS_SET_KEY,
-    USER_PREFIX,
-    SESSION_PREFIX,
-)
 
 
 def test_hash_password_deterministic_with_salt():

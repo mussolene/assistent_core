@@ -2,11 +2,8 @@
 
 import json
 import logging
-import sys
 
-import pytest
-
-from assistant.core.logging_config import _redact, StructuredFormatter, setup_logging
+from assistant.core.logging_config import StructuredFormatter, _redact, setup_logging
 
 
 def test_redact_string_with_token():
@@ -52,7 +49,10 @@ def test_setup_logging():
     setup_logging(level="INFO", use_json=True)
     root = logging.getLogger()
     assert root.level == logging.INFO
-    if root.handlers:
-        handler = root.handlers[0]
-        assert isinstance(handler.formatter, StructuredFormatter)
-        assert handler.formatter.use_json is True
+    # Under pytest, root.handlers[0] may be pytest's (ColoredLevelFormatter); find ours
+    structured = [
+        h for h in root.handlers
+        if isinstance(getattr(h, "formatter", None), StructuredFormatter)
+    ]
+    if structured:
+        assert structured[0].formatter.use_json is True

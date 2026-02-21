@@ -3,15 +3,14 @@
 import pytest
 
 from assistant.dashboard.config_store import (
-    REDIS_PREFIX,
     MCP_SERVERS_KEY,
-    PAIRING_MODE_KEY,
     PAIRING_CODE_PREFIX,
-    set_config_in_redis_sync,
-    get_config_from_redis_sync,
+    PAIRING_MODE_KEY,
     add_telegram_allowed_user,
-    create_pairing_code,
     consume_pairing_code,
+    create_pairing_code,
+    get_config_from_redis_sync,
+    set_config_in_redis_sync,
 )
 
 

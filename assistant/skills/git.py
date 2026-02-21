@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from assistant.skills.base import BaseSkill
 from assistant.security.command_whitelist import CommandWhitelist
 from assistant.security.sandbox import run_in_sandbox
+from assistant.skills.base import BaseSkill
 
 logger = logging.getLogger(__name__)
 

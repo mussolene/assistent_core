@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from assistant.core.task_manager import TaskManager, KEY_PREFIX
+from assistant.core.task_manager import KEY_PREFIX, TaskManager
 
 
 @pytest.mark.asyncio

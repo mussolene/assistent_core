@@ -6,11 +6,11 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING
 
-from assistant.core.bus import EventBus, CH_INCOMING, CH_OUTGOING
+from assistant.agents.base import TaskContext
+from assistant.core.agent_registry import AgentRegistry
+from assistant.core.bus import EventBus
 from assistant.core.events import IncomingMessage, OutgoingReply, StreamToken
 from assistant.core.task_manager import TaskManager
-from assistant.core.agent_registry import AgentRegistry
-from assistant.agents.base import TaskContext
 
 if TYPE_CHECKING:
     from assistant.config.loader import Config

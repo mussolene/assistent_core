@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from assistant.agents.base import TaskContext, AgentResult
 from assistant.agents.assistant import AssistantAgent
+from assistant.agents.base import TaskContext
 from assistant.agents.tool_agent import ToolAgent
 from assistant.skills.registry import SkillRegistry
 from assistant.skills.runner import SandboxRunner
@@ -46,8 +46,9 @@ async def test_tool_agent_runs_skill():
     runner = SandboxRunner()
     memory = MagicMock()
     memory.append_tool_result = AsyncMock()
-    from assistant.skills.filesystem import FilesystemSkill
     import tempfile
+
+    from assistant.skills.filesystem import FilesystemSkill
     with tempfile.TemporaryDirectory() as d:
         reg.register(FilesystemSkill(workspace_dir=d))
         agent = ToolAgent(reg, runner, memory)

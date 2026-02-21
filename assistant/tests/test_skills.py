@@ -1,14 +1,11 @@
 """Tests for skills: registry, filesystem, shell whitelist, mcp stub."""
 
-import tempfile
-from pathlib import Path
 
 import pytest
 
-from assistant.skills.base import BaseSkill
-from assistant.skills.registry import SkillRegistry
 from assistant.skills.filesystem import FilesystemSkill
 from assistant.skills.mcp_adapter import McpAdapterSkill
+from assistant.skills.registry import SkillRegistry
 from assistant.skills.runner import SandboxRunner
 
 

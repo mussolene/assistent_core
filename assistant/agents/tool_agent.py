@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from assistant.agents.base import AgentResult, BaseAgent, TaskContext
 from assistant.memory.manager import MemoryManager

@@ -63,7 +63,6 @@ def stream_lm_studio(
     reasoning: str = "on",
 ) -> AsyncIterator[str]:
     """Stream via SSE: only yield message.delta content (reasoning.delta ignored)."""
-    import asyncio
 
     async def _stream() -> AsyncIterator[str]:
         root = _native_base_url(base_url)

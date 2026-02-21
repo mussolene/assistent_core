@@ -9,7 +9,7 @@ import secrets
 from functools import wraps
 from typing import Any
 
-from flask import request, redirect, url_for, session as flask_session
+from flask import redirect, request, url_for
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ def verify_password(password: str, stored_hash: str, stored_salt_hex: str) -> bo
 def get_redis():
     """Sync Redis client for auth (used in request context)."""
     import redis
+
     from assistant.dashboard.config_store import get_redis_url
     return redis.from_url(get_redis_url(), decode_responses=True)
 

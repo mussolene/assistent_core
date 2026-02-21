@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-from typing import Any, AsyncIterator, Callable, Awaitable
+from typing import Awaitable, Callable
 
 import redis.asyncio as aioredis
 from pydantic import BaseModel

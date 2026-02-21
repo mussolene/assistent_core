@@ -1,13 +1,13 @@
 """Tests for memory: short-term, task, summary, manager (Redis or mocks)."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from assistant.memory.short_term import ShortTermMemory
-from assistant.memory.task_memory import TaskMemory
-from assistant.memory.summary import SummaryMemory
 from assistant.memory.manager import MemoryManager
+from assistant.memory.short_term import ShortTermMemory
+from assistant.memory.summary import SummaryMemory
+from assistant.memory.task_memory import TaskMemory
 
 
 @pytest.mark.asyncio

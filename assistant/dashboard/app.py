@@ -10,34 +10,34 @@ import re
 import httpx
 from flask import (
     Flask,
-    request,
-    render_template_string,
-    redirect,
-    url_for,
     flash,
     jsonify,
     make_response,
+    redirect,
+    render_template_string,
+    request,
+    url_for,
 )
 
-from assistant.dashboard.config_store import (
-    REDIS_PREFIX,
-    MCP_SERVERS_KEY,
-    PAIRING_MODE_KEY,
-    get_redis_url,
-    get_config_from_redis_sync,
-    set_config_in_redis_sync,
-    create_pairing_code,
-)
 from assistant.dashboard.auth import (
-    get_redis,
-    setup_done,
-    create_user,
-    verify_user,
-    create_session,
-    delete_session,
-    get_current_user,
     SESSION_COOKIE_NAME,
     SESSION_TTL,
+    create_session,
+    create_user,
+    delete_session,
+    get_current_user,
+    get_redis,
+    setup_done,
+    verify_user,
+)
+from assistant.dashboard.config_store import (
+    MCP_SERVERS_KEY,
+    PAIRING_MODE_KEY,
+    REDIS_PREFIX,
+    create_pairing_code,
+    get_config_from_redis_sync,
+    get_redis_url,
+    set_config_in_redis_sync,
 )
 
 app = Flask(__name__)

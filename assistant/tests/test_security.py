@@ -1,9 +1,8 @@
 """Tests for security: whitelist, audit."""
 
-import pytest
 
-from assistant.security.command_whitelist import CommandWhitelist, FORBIDDEN_PATTERNS
-from assistant.security.audit import audit, _redact
+from assistant.security.audit import _redact
+from assistant.security.command_whitelist import CommandWhitelist
 
 
 def test_whitelist_allows():

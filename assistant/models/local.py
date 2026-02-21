@@ -52,8 +52,6 @@ class LocalModelGateway:
         system: str | None = None,
     ) -> AsyncIterator[str]:
         """Async generator of content deltas."""
-        import asyncio
-        from typing import Any
 
         async def _stream() -> AsyncIterator[str]:
             model_name = model or self._model_name

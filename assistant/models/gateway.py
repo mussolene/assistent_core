@@ -8,9 +8,9 @@ from __future__ import annotations
 import logging
 from typing import AsyncIterator
 
-from assistant.models.local import LocalModelGateway
-from assistant.models.cloud import CloudModelGateway
 from assistant.models import lm_studio
+from assistant.models.cloud import CloudModelGateway
+from assistant.models.local import LocalModelGateway
 
 logger = logging.getLogger(__name__)
 

@@ -10,6 +10,7 @@ import time
 from typing import Optional, Set
 
 import httpx
+
 from assistant.core.bus import EventBus
 from assistant.core.events import IncomingMessage, OutgoingReply, StreamToken
 from assistant.core.logging_config import setup_logging
@@ -312,7 +313,10 @@ async def run_telegram_adapter() -> None:
                     if text.startswith("/start ") or text.startswith("/pair "):
                         code = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
                         if code:
-                            from assistant.dashboard.config_store import consume_pairing_code, add_telegram_allowed_user
+                            from assistant.dashboard.config_store import (
+                                add_telegram_allowed_user,
+                                consume_pairing_code,
+                            )
                             if consume_pairing_code(redis_url, code):
                                 await add_telegram_allowed_user(redis_url, uid_int)
                                 allowed.add(uid_int)
@@ -325,8 +329,11 @@ async def run_telegram_adapter() -> None:
                                 continue
                     # Pairing: /start or /pair when global pairing mode is on
                     if text in ("/start", "/pair"):
-                        from assistant.dashboard.config_store import get_config_from_redis, add_telegram_allowed_user
-                        from assistant.dashboard.config_store import PAIRING_MODE_KEY
+                        from assistant.dashboard.config_store import (
+                            PAIRING_MODE_KEY,
+                            add_telegram_allowed_user,
+                            get_config_from_redis,
+                        )
                         redis_cfg = await get_config_from_redis(redis_url)
                         if (redis_cfg.get(PAIRING_MODE_KEY) or "").lower() in ("true", "1", "yes"):
                             await add_telegram_allowed_user(redis_url, uid_int)

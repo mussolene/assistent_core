@@ -2,9 +2,7 @@
 
 import logging
 
-import pytest
-
-from assistant.security.audit import _redact, audit, REDACT_KEYS
+from assistant.security.audit import _redact, audit
 
 
 def test_redact_dict_redacts_sensitive_keys():
