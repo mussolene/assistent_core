@@ -110,7 +110,7 @@ async def run_telegram_adapter() -> None:
                     r = await client.get(
                         f"{base_url}/getUpdates",
                         params={"timeout": poll_timeout, "offset": offset},
-                        timeout=poll_timeout + 5,
+                        timeout=float(poll_timeout + 15),
                     )
                     data = r.json()
                 if not data.get("ok"):
@@ -152,6 +152,9 @@ async def run_telegram_adapter() -> None:
                     )
             except asyncio.CancelledError:
                 break
+            except (httpx.ConnectTimeout, httpx.ReadTimeout) as e:
+                logger.warning("Telegram API timeout, retry in 5s: %s", e)
+                await asyncio.sleep(5)
             except Exception as e:
                 logger.exception("poll error: %s", e)
                 await asyncio.sleep(5)

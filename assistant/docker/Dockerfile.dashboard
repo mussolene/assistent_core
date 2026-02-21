@@ -1,16 +1,19 @@
 FROM python:3.11-slim
 
-RUN groupadd -r app && useradd -r -g app app
+RUN groupadd -r -g 1000 app && useradd -r -u 1000 -g app -m -d /app app
 WORKDIR /app
 
-RUN pip install --no-cache-dir flask redis
+RUN pip install --no-cache-dir "flask>=3.0" "redis>=5" gunicorn
 
 COPY assistant/__init__.py /app/assistant/__init__.py
 COPY assistant/dashboard /app/assistant/dashboard
 
+RUN mkdir -p /app/tmp && chown -R app:app /app
+
 ENV PYTHONPATH=/app
 ENV PORT=8080
+ENV TMPDIR=/app/tmp
 
 USER app
 EXPOSE 8080
-CMD ["python", "-m", "assistant.dashboard.app"]
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "-w", "1", "--worker-tmp-dir", "/app/tmp", "--access-logfile", "-", "assistant.dashboard.app:app"]

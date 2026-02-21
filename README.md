@@ -34,7 +34,7 @@ docker compose up --build
 1. Откройте **http://localhost:8080** — Web Dashboard.
 2. Введите токен бота и при необходимости список разрешённых User ID, нажмите «Сохранить».
 3. Перезапустите Telegram-адаптер: `docker compose restart telegram-adapter`.
-4. Запустите Ollama на хосте (при необходимости укажите `OPENAI_BASE_URL` в `.env`, например `http://host.docker.internal:11434/v1`).
+4. Запустите Ollama на хосте и при необходимости создайте `.env` с `OPENAI_BASE_URL=http://host.docker.internal:11434/v1` (для Docker на Mac/Windows хост доступен по этому адресу). Если бот отвечает «Модель недоступна» — проверьте, что Ollama запущена и URL доступен из контейнера.
 
 Подробная настройка и запуск без Docker — в [assistant/README.md](assistant/README.md).
 

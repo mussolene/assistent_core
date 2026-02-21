@@ -1,7 +1,8 @@
 FROM python:3.11-slim
 
-RUN groupadd -r app && useradd -r -g app app
+RUN groupadd -r -g 1000 app && useradd -r -u 1000 -g app -m -d /app app
 WORKDIR /app
+ENV HOME=/app
 
 COPY pyproject.toml ./
 COPY assistant ./assistant

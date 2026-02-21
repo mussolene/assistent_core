@@ -72,7 +72,15 @@ class AssistantAgent(BaseAgent):
             )
         except Exception as e:
             logger.exception("model generate failed: %s", e)
-            return AgentResult(success=False, error=str(e))
+            err_msg = str(e).lower()
+            if "connection" in err_msg or "connect" in err_msg or "refused" in err_msg:
+                user_msg = (
+                    "Модель недоступна. Убедитесь, что Ollama запущена на хосте и в .env задан "
+                    "OPENAI_BASE_URL (например http://host.docker.internal:11434/v1 для Docker)."
+                )
+            else:
+                user_msg = f"Ошибка модели: {e}"
+            return AgentResult(success=True, output_text=user_msg, error=str(e))
         if context.text and not context.tool_results:
             await self._memory.append_message(context.user_id, "assistant", text)
         tool_calls = self._parse_tool_calls(text)
