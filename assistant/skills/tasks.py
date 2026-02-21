@@ -572,7 +572,7 @@ class TaskSkill(BaseSkill):
         formatted = format_tasks_list_readable(tasks)
         out = {"ok": True, "tasks": tasks, "total": len(tasks), "formatted": formatted}
         if only_actual and tasks:
-            _text, inline_keyboard = format_tasks_for_telegram(tasks, action="view", show_done_button=True)
+            _text, inline_keyboard = format_tasks_for_telegram(tasks, action="view", show_done_button=False)
             out["inline_keyboard"] = inline_keyboard
         return out
 

@@ -35,7 +35,7 @@ class VectorMemory:
                 from sentence_transformers import SentenceTransformer
                 self._model = SentenceTransformer("all-MiniLM-L6-v2")
             except Exception as e:
-                logger.warning("sentence_transformers not available: %s. Vector memory disabled.", e)
+                logger.info("sentence_transformers not available: %s. Vector memory disabled (optional).", e)
         return self._model
 
     def _load(self) -> None:
