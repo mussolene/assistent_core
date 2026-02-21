@@ -16,6 +16,9 @@ from flask import (
     redirect,
     render_template_string,
     request,
+    Response,
+    session,
+    stream_with_context,
     url_for,
 )
 
@@ -98,6 +101,7 @@ INDEX_HTML = """
     <a href="{{ url_for('mcp') }}" class="{{ 'active' if section == 'mcp' else '' }}">MCP</a>
     <a href="{{ url_for('monitor') }}" class="{{ 'active' if section == 'monitor' else '' }}">Мониторинг</a>
     <a href="{{ url_for('email_settings') }}" class="{{ 'active' if section == 'email' else '' }}">Email</a>
+    <a href="{{ url_for('mcp_agent') }}" class="{{ 'active' if section == 'mcp_agent' else '' }}">MCP (агент)</a>
     {% if current_user %}
     <span style="margin-left:auto;color:var(--muted);font-size:0.9rem">{{ current_user.display_name or current_user.login }} ({{ current_user.role }})</span>
     <a href="{{ url_for('logout') }}" style="margin-left:0.5rem">Выйти</a>
@@ -215,6 +219,8 @@ def _require_auth():
     """Redirect to setup or login when needed."""
     path = request.path
     if path in ("/login", "/logout", "/api/session"):
+        return None
+    if path.startswith("/mcp/v1/"):
         return None
     if path == "/setup" and request.method in ("GET", "POST"):
         return None
@@ -680,6 +686,206 @@ def remove_mcp():
     except ValueError:
         pass
     return redirect(url_for("mcp"))
+
+
+# ----- MCP Agent (URL + secret для Cursor) -----
+_MCP_AGENT_BODY = """
+<h1>MCP (агент)</h1>
+<p class="sub">Endpoint'ы для доступа агента (Cursor и др.) по HTTP/SSE: URL и секрет для подстановки в MCP config.</p>
+{% if new_secret %}
+<div class="card flash success">
+  <strong>Новый endpoint создан.</strong> Скопируйте данные — секрет больше не отображается.
+  <p style="margin-top:0.75rem"><label>URL</label><br>
+  <input type="text" id="new-url" value="{{ new_secret.url }}" readonly style="width:100%%;font-family:monospace"></p>
+  <p><label>Секрет (Authorization: Bearer)</label><br>
+  <input type="text" id="new-secret" value="{{ new_secret.secret }}" readonly style="width:100%%;font-family:monospace"></p>
+  <button type="button" class="btn btn-secondary" onclick="navigator.clipboard.writeText(document.getElementById('new-secret').value); this.textContent='Скопировано'">Скопировать секрет</button>
+</div>
+{% endif %}
+<form method="post" action="/mcp-agent/create">
+  <div class="card">
+    <label for="mcp_agent_name">Имя (например: Cursor)</label>
+    <input id="mcp_agent_name" name="name" type="text" placeholder="Cursor" required>
+    <label for="mcp_agent_chat_id" style="margin-top:0.75rem">Telegram Chat ID (личный чат = User ID)</label>
+    <input id="mcp_agent_chat_id" name="chat_id" type="text" placeholder="123456789" required>
+    <p class="hint">Куда слать уведомления и запросы подтверждения.</p>
+    <button type="submit" class="btn" style="margin-top:0.75rem">Создать endpoint</button>
+  </div>
+</form>
+<ul class="mcp-list">
+  {% for ep in mcp_endpoints %}
+  <li>
+    <div>
+      <strong>{{ ep.name }}</strong> — chat {{ ep.chat_id }}<br>
+      <small style="color:var(--muted)">URL: {{ base_url }}mcp/v1/agent/{{ ep.id }}</small>
+    </div>
+    <form method="post" action="/mcp-agent/regenerate" style="display:inline">
+      <input type="hidden" name="endpoint_id" value="{{ ep.id }}">
+      <button type="submit" class="btn btn-secondary" style="padding:0.35rem 0.6rem;font-size:0.85rem">Новый секрет</button>
+    </form>
+    <form method="post" action="/mcp-agent/delete" style="display:inline" onsubmit="return confirm('Удалить endpoint?');">
+      <input type="hidden" name="endpoint_id" value="{{ ep.id }}">
+      <button type="submit" class="btn btn-danger" style="padding:0.35rem 0.6rem;font-size:0.85rem">Удалить</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% if not mcp_endpoints and not new_secret %}<p class="hint">Создайте endpoint: укажите имя и Telegram Chat ID. В ответ получите URL и секрет для MCP config.</p>{% endif %}
+<p class="hint" style="margin-top:1rem">API: POST /mcp/v1/agent/&lt;id&gt;/notify, /question, /confirmation; GET /replies, /events (SSE). Заголовок: Authorization: Bearer &lt;секрет&gt;.</p>
+"""
+
+
+def _mcp_agent_base_url():
+    return request.host_url.rstrip("/") + "/"
+
+
+@app.route("/mcp-agent")
+def mcp_agent():
+    from assistant.dashboard.mcp_endpoints import list_endpoints
+    config = load_config()
+    new_secret = None
+    if "mcp_new_secret" in session:
+        new_secret = session.pop("mcp_new_secret", None)
+    base_url = _mcp_agent_base_url()
+    return render_template_string(
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace("{% block content %}{% endblock %}", _MCP_AGENT_BODY),
+        config=config,
+        section="mcp_agent",
+        mcp_endpoints=list_endpoints(),
+        new_secret=new_secret,
+        base_url=base_url,
+    )
+
+
+@app.route("/mcp-agent/create", methods=["POST"])
+def mcp_agent_create():
+    from assistant.dashboard.mcp_endpoints import create_endpoint
+    name = (request.form.get("name") or "").strip()
+    chat_id = (request.form.get("chat_id") or "").strip()
+    if not name or not chat_id:
+        flash("Укажите имя и Chat ID.", "error")
+        return redirect(url_for("mcp_agent"))
+    endpoint_id, secret = create_endpoint(name, chat_id)
+    base_url = _mcp_agent_base_url()
+    session["mcp_new_secret"] = {"url": base_url + "mcp/v1/agent/" + endpoint_id, "secret": secret}
+    flash("Endpoint создан. Скопируйте URL и секрет ниже.", "success")
+    return redirect(url_for("mcp_agent"))
+
+
+@app.route("/mcp-agent/regenerate", methods=["POST"])
+def mcp_agent_regenerate():
+    from assistant.dashboard.mcp_endpoints import regenerate_endpoint_secret
+    endpoint_id = (request.form.get("endpoint_id") or "").strip()
+    if not endpoint_id:
+        return redirect(url_for("mcp_agent"))
+    new_secret = regenerate_endpoint_secret(endpoint_id)
+    if new_secret:
+        session["mcp_new_secret"] = {"url": _mcp_agent_base_url() + "mcp/v1/agent/" + endpoint_id, "secret": new_secret}
+        flash("Секрет обновлён. Скопируйте новый секрет ниже.", "success")
+    return redirect(url_for("mcp_agent"))
+
+
+@app.route("/mcp-agent/delete", methods=["POST"])
+def mcp_agent_delete():
+    from assistant.dashboard.mcp_endpoints import delete_endpoint
+    endpoint_id = (request.form.get("endpoint_id") or "").strip()
+    if endpoint_id:
+        delete_endpoint(endpoint_id)
+        flash("Endpoint удалён.", "success")
+    return redirect(url_for("mcp_agent"))
+
+
+def _mcp_api_auth(endpoint_id: str):
+    """Проверка Bearer для MCP API. Возвращает chat_id или None."""
+    from assistant.dashboard.mcp_endpoints import verify_endpoint_secret, get_chat_id_for_endpoint
+    if not endpoint_id:
+        return None
+    auth = request.headers.get("Authorization") or ""
+    if auth.startswith("Bearer "):
+        secret = auth[7:].strip()
+        if verify_endpoint_secret(endpoint_id, secret):
+            return get_chat_id_for_endpoint(endpoint_id)
+    return None
+
+
+@app.route("/mcp/v1/agent/<endpoint_id>/notify", methods=["POST"])
+def mcp_api_notify(endpoint_id):
+    chat_id = _mcp_api_auth(endpoint_id)
+    if not chat_id:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    if not message:
+        return jsonify({"ok": False, "error": "message required"}), 400
+    from assistant.core.notify import notify_to_chat
+    ok = notify_to_chat(chat_id, message)
+    return jsonify({"ok": ok})
+
+
+@app.route("/mcp/v1/agent/<endpoint_id>/question", methods=["POST"])
+def mcp_api_question(endpoint_id):
+    chat_id = _mcp_api_auth(endpoint_id)
+    if not chat_id:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    if not message:
+        return jsonify({"ok": False, "error": "message required"}), 400
+    from assistant.core.notify import notify_to_chat
+    prompt = message + "\n\nОтветьте в Telegram (confirm/reject или свой текст)."
+    ok = notify_to_chat(chat_id, prompt)
+    return jsonify({"ok": ok})
+
+
+@app.route("/mcp/v1/agent/<endpoint_id>/confirmation", methods=["POST"])
+def mcp_api_confirmation(endpoint_id):
+    chat_id = _mcp_api_auth(endpoint_id)
+    if not chat_id:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    message = (data.get("message") or "").strip()
+    if not message:
+        return jsonify({"ok": False, "error": "message required"}), 400
+    from assistant.core.notify import notify_to_chat, set_pending_confirmation
+    set_pending_confirmation(chat_id, message)
+    prompt = message + "\n\nОтветьте: confirm / reject или свой текст."
+    notify_to_chat(chat_id, prompt)
+    return jsonify({"ok": True, "pending": True, "message": "Ожидайте ответ в SSE /events или в следующем запросе /replies."})
+
+
+@app.route("/mcp/v1/agent/<endpoint_id>/replies", methods=["GET"])
+def mcp_api_replies(endpoint_id):
+    chat_id = _mcp_api_auth(endpoint_id)
+    if not chat_id:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    from assistant.core.notify import pop_dev_feedback
+    replies = pop_dev_feedback(chat_id)
+    return jsonify({"ok": True, "replies": replies})
+
+
+@app.route("/mcp/v1/agent/<endpoint_id>/events", methods=["GET"])
+def mcp_api_events(endpoint_id):
+    chat_id = _mcp_api_auth(endpoint_id)
+    if not chat_id:
+        return jsonify({"ok": False, "error": "Unauthorized"}), 401
+
+    from assistant.dashboard.mcp_endpoints import pop_mcp_events
+
+    def event_stream():
+        while True:
+            events = pop_mcp_events(endpoint_id, timeout_sec=25.0)
+            for ev in events:
+                ev_type = ev.get("type", "")
+                data = ev.get("data", {})
+                yield f"event: {ev_type}\ndata: {json.dumps(data)}\n\n"
+            if not events:
+                yield ": keepalive\n\n"
+
+    return Response(
+        stream_with_context(event_stream()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ----- Monitor -----

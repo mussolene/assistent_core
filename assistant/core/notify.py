@@ -41,11 +41,9 @@ def get_dev_chat_id() -> str | None:
         return None
 
 
-def notify_main_channel(text: str) -> bool:
-    """Отправить сообщение в основной канал (Telegram). Синхронно, для вызова из MCP."""
-    chat_id = get_dev_chat_id()
+def notify_to_chat(chat_id: str, text: str) -> bool:
+    """Отправить сообщение в Telegram в указанный chat_id."""
     if not chat_id:
-        logger.warning("notify_main_channel: no dev chat id")
         return False
     try:
         import redis
@@ -63,8 +61,17 @@ def notify_main_channel(text: str) -> bool:
         r.close()
         return True
     except Exception as e:
-        logger.exception("notify_main_channel: %s", e)
+        logger.exception("notify_to_chat: %s", e)
         return False
+
+
+def notify_main_channel(text: str) -> bool:
+    """Отправить сообщение в основной канал (Telegram). Синхронно, для вызова из MCP."""
+    chat_id = get_dev_chat_id()
+    if not chat_id:
+        logger.warning("notify_main_channel: no dev chat id")
+        return False
+    return notify_to_chat(chat_id, text)
 
 
 def set_pending_confirmation(chat_id: str, message: str) -> None:
@@ -137,11 +144,19 @@ def consume_pending_confirmation(chat_id: str, user_text: str) -> bool:
         text = (user_text or "").strip().lower()
         confirmed = text in ("confirm", "ok", "yes", "да", "подтверждаю")
         rejected = text in ("reject", "no", "cancel", "нет", "отмена")
-        set_pending_confirmation_result(chat_id, {
+        result = {
             "confirmed": confirmed and not rejected,
             "rejected": rejected,
             "reply": user_text.strip() if user_text else "",
-        })
+        }
+        set_pending_confirmation_result(chat_id, result)
+        try:
+            from assistant.dashboard.mcp_endpoints import get_endpoint_id_for_chat, push_mcp_event
+            eid = get_endpoint_id_for_chat(chat_id)
+            if eid:
+                push_mcp_event(eid, "confirmation", result)
+        except Exception as e:
+            logger.debug("push_mcp_event confirmation: %s", e)
         return True
     except Exception as e:
         logger.exception("consume_pending_confirmation: %s", e)
@@ -157,6 +172,13 @@ def push_dev_feedback(chat_id: str, text: str) -> None:
         r.rpush(key, text)
         r.expire(key, 86400 * 7)  # 7 days
         r.close()
+        try:
+            from assistant.dashboard.mcp_endpoints import get_endpoint_id_for_chat, push_mcp_event
+            eid = get_endpoint_id_for_chat(chat_id)
+            if eid:
+                push_mcp_event(eid, "feedback", {"text": text})
+        except Exception:
+            pass
     except Exception as e:
         logger.exception("push_dev_feedback: %s", e)
 
