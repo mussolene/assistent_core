@@ -54,7 +54,7 @@
   - `dashboard/app.py`: только API test-bot/test-model/monitor и config_store; нет тестов маршрутов сохранения (save_telegram, save_model, save_mcp, remove_mcp), редиректов, flash.
   - `models/lm_studio.py`: нет тестов (generate_lm_studio, stream_lm_studio, парсинг SSE).
   - `models/gateway.py`: только local mock; нет тестов с use_lm_studio_native, fallback на cloud.
-  - `core/orchestrator.py`: частичное; нет тестов со stream_callback и публикацией StreamToken.
+  - `core/orchestrator.py`: добавлены тесты _task_to_context со stream_callback и публикацией StreamToken (state=assistant/stream, state=tool, stream=False).
   - `core/task_manager.py`: нет тестов create/update/get (нужен Redis или mock).
   - `memory/*`: test_memory есть; проверить покрытие summary, vector (с моком sentence_transformers).
   - `security/audit.py`, `core/logging_config.py`: нет тестов.
@@ -201,11 +201,11 @@
 | 4 | Тесты: dashboard save-model, save-mcp, remove-mcp, MCP args | ✅ | assistant/tests/test_dashboard.py |
 | 5 | Тесты: lm_studio (generate, _native_base_url, is_lm_studio_native_url) | ✅ | assistant/tests/test_lm_studio.py |
 | 6 | Тесты: gateway use_lm_studio_native | ✅ | assistant/tests/test_models.py |
-| 7 | Тесты: orchestrator stream_callback | ⏳ | assistant/tests/test_orchestrator.py |
+| 7 | Тесты: orchestrator stream_callback, StreamToken | ✅ | assistant/tests/test_orchestrator.py |
 | 8 | Mock MCP сервер + тесты GET /tools, POST /call | ✅ | assistant/tests/mcp_mock_server.py, test_mcp_mock.py |
 | 9 | Ruff в CI | ✅ | .github/workflows/ci.yml, pyproject.toml |
 | 10 | Документ приёмочных тестов | ✅ | docs/ACCEPTANCE.md |
 | 11 | README: конфиг Redis/env/YAML, контракт событий | ✅ | README.md |
 | 12 | Рефакторинг: streaming, dashboard, telegram | По плану в п. 6 |
 
-Пункты 1–6, 8–11 выполнены. Пункт 7 (orchestrator stream_callback) и пункт 12 — по мере доработок.
+Пункты 1–11 выполнены. Пункт 12 (рефакторинг) — по плану в п. 6.

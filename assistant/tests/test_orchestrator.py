@@ -4,8 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from assistant.core.events import IncomingMessage, StreamToken
 from assistant.core.task_manager import TaskManager
 from assistant.core.agent_registry import AgentRegistry
+from assistant.core.orchestrator import Orchestrator
 from assistant.agents.base import TaskContext, AgentResult
 
 
@@ -67,3 +69,93 @@ async def test_agent_registry_mock():
     result = await reg.handle("assistant", ctx)
     assert result.success is True
     assert result.output_text == "ok"
+
+
+# --- Orchestrator stream_callback and StreamToken ---
+
+
+def _make_orchestrator_with_mock_bus():
+    config = MagicMock()
+    config.orchestrator.max_iterations = 5
+    config.orchestrator.autonomous_mode = False
+    bus = MagicMock()
+    bus.publish_stream_token = AsyncMock()
+    orch = Orchestrator(config=config, bus=bus)
+    return orch, bus
+
+
+def _make_incoming_payload(chat_id: str = "chat_1", message_id: str = "msg_1"):
+    return IncomingMessage(
+        message_id=message_id,
+        user_id="user_1",
+        chat_id=chat_id,
+        text="hello",
+    )
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_task_to_context_stream_callback_set_when_assistant_and_stream():
+    """When state is assistant and stream True, stream_callback is set and publishes StreamToken."""
+    orch, bus = _make_orchestrator_with_mock_bus()
+    payload = _make_incoming_payload(chat_id="c1")
+    task_data = {
+        "state": "assistant",
+        "stream": True,
+        "chat_id": "c1",
+        "task_id": "tid_1",
+        "user_id": "u1",
+        "message_id": "m1",
+    }
+    ctx = orch._task_to_context("tid_1", task_data, payload)
+    stream_cb = ctx.metadata.get("stream_callback")
+    assert stream_cb is not None
+
+    await stream_cb("hi", False)
+    bus.publish_stream_token.assert_called_once()
+    call_arg = bus.publish_stream_token.call_args[0][0]
+    assert isinstance(call_arg, StreamToken)
+    assert call_arg.task_id == "tid_1"
+    assert call_arg.chat_id == "c1"
+    assert call_arg.token == "hi"
+    assert call_arg.done is False
+
+    bus.publish_stream_token.reset_mock()
+    await stream_cb("", True)
+    bus.publish_stream_token.assert_called_once()
+    call_arg = bus.publish_stream_token.call_args[0][0]
+    assert call_arg.token == ""
+    assert call_arg.done is True
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_task_to_context_stream_callback_none_when_not_assistant():
+    """When state is not assistant, stream_callback is None."""
+    orch, _ = _make_orchestrator_with_mock_bus()
+    payload = _make_incoming_payload()
+    task_data = {
+        "state": "tool",
+        "stream": True,
+        "chat_id": "c1",
+        "task_id": "tid_1",
+        "user_id": "u1",
+        "message_id": "m1",
+    }
+    ctx = orch._task_to_context("tid_1", task_data, payload)
+    assert ctx.metadata.get("stream_callback") is None
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_task_to_context_stream_callback_none_when_stream_disabled():
+    """When stream is False, stream_callback is None."""
+    orch, _ = _make_orchestrator_with_mock_bus()
+    payload = _make_incoming_payload()
+    task_data = {
+        "state": "assistant",
+        "stream": False,
+        "chat_id": "c1",
+        "task_id": "tid_1",
+        "user_id": "u1",
+        "message_id": "m1",
+    }
+    ctx = orch._task_to_context("tid_1", task_data, payload)
+    assert ctx.metadata.get("stream_callback") is None
