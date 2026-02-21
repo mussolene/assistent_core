@@ -12,6 +12,8 @@ logger = logging.getLogger(__name__)
 REDIS_PREFIX = "assistant:config:"
 MCP_SERVERS_KEY = "MCP_SERVERS"
 PAIRING_MODE_KEY = "PAIRING_MODE"
+PAIRING_CODE_PREFIX = "assistant:pairing:"
+PAIRING_CODE_TTL = 600  # 10 min
 
 
 def get_redis_url() -> str:
@@ -110,6 +112,41 @@ async def add_telegram_allowed_user(redis_url: str, user_id: int) -> None:
         return
     current = list(current) + [user_id]
     await set_config_in_redis(redis_url, "TELEGRAM_ALLOWED_USER_IDS", current)
+
+
+def create_pairing_code(redis_url: str) -> tuple[str, int]:
+    """Create one-time pairing code. Returns (code, expires_in_sec). Code is 6 alphanumeric."""
+    import secrets
+    import string
+    code = "".join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(6))
+    try:
+        import redis
+        client = redis.from_url(redis_url, decode_responses=True)
+        key = PAIRING_CODE_PREFIX + code
+        client.setex(key, PAIRING_CODE_TTL, "1")
+        client.close()
+        return code, PAIRING_CODE_TTL
+    except Exception as e:
+        logger.exception("Could not create pairing code: %s", e)
+        raise
+
+
+def consume_pairing_code(redis_url: str, code: str) -> bool:
+    """Use pairing code (one-time). Returns True if code was valid and consumed."""
+    if not code or len(code) > 32:
+        return False
+    code = code.strip().upper()
+    try:
+        import redis
+        client = redis.from_url(redis_url, decode_responses=True)
+        key = PAIRING_CODE_PREFIX + code
+        if client.delete(key):
+            client.close()
+            return True
+        client.close()
+        return False
+    except Exception:
+        return False
 
 
 def set_config_in_redis_sync(redis_url: str, key: str, value: str | list[int] | list[dict]) -> None:

@@ -287,7 +287,22 @@ async def run_telegram_adapter() -> None:
                     chat_id = str(msg["chat"]["id"])
                     message_id = str(msg.get("message_id", ""))
                     text = (msg.get("text") or "").strip()
-                    # Pairing: /start or /pair when pairing mode is on
+                    # Pairing: /start CODE or /pair CODE (one-time code from dashboard)
+                    if text.startswith("/start ") or text.startswith("/pair "):
+                        code = text.split(maxsplit=1)[1].strip() if len(text.split(maxsplit=1)) > 1 else ""
+                        if code:
+                            from assistant.dashboard.config_store import consume_pairing_code, add_telegram_allowed_user
+                            if consume_pairing_code(redis_url, code):
+                                await add_telegram_allowed_user(redis_url, uid_int)
+                                allowed.add(uid_int)
+                                async with httpx.AsyncClient() as client:
+                                    await client.post(
+                                        f"{base_url}/sendMessage",
+                                        json={"chat_id": chat_id, "text": "Привязка выполнена. Ваш ID добавлен в разрешённые."},
+                                        timeout=5.0,
+                                    )
+                                continue
+                    # Pairing: /start or /pair when global pairing mode is on
                     if text in ("/start", "/pair"):
                         from assistant.dashboard.config_store import get_config_from_redis, add_telegram_allowed_user
                         from assistant.dashboard.config_store import PAIRING_MODE_KEY

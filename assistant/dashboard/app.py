@@ -1,4 +1,4 @@
-"""Web dashboard: Telegram, Model, MCP, monitoring. Config in Redis."""
+"""Web dashboard: Telegram, Model, MCP, monitoring. Config in Redis. Auth: users/sessions in Redis."""
 
 from __future__ import annotations
 
@@ -8,7 +8,16 @@ import os
 import re
 
 import httpx
-from flask import Flask, request, render_template_string, redirect, url_for, flash, jsonify
+from flask import (
+    Flask,
+    request,
+    render_template_string,
+    redirect,
+    url_for,
+    flash,
+    jsonify,
+    make_response,
+)
 
 from assistant.dashboard.config_store import (
     REDIS_PREFIX,
@@ -17,10 +26,28 @@ from assistant.dashboard.config_store import (
     get_redis_url,
     get_config_from_redis_sync,
     set_config_in_redis_sync,
+    create_pairing_code,
+)
+from assistant.dashboard.auth import (
+    get_redis,
+    setup_done,
+    create_user,
+    verify_user,
+    create_session,
+    delete_session,
+    get_current_user,
+    SESSION_COOKIE_NAME,
+    SESSION_TTL,
 )
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "change-me-in-production")
+_secret_key = os.getenv("SECRET_KEY", "change-me-in-production")
+app.secret_key = _secret_key
+if _secret_key == "change-me-in-production":
+    import logging
+    logging.getLogger(__name__).warning(
+        "SECRET_KEY not set; using default. Set SECRET_KEY in production."
+    )
 
 LAYOUT_CSS = """
 :root { --bg: #0c0c0f; --card: #16161a; --text: #e4e4e7; --muted: #71717a; --accent: #22c55e; --border: #27272a; --danger: #ef4444; }
@@ -70,6 +97,10 @@ INDEX_HTML = """
     <a href="{{ url_for('model') }}" class="{{ 'active' if section == 'model' else '' }}">Модель</a>
     <a href="{{ url_for('mcp') }}" class="{{ 'active' if section == 'mcp' else '' }}">MCP</a>
     <a href="{{ url_for('monitor') }}" class="{{ 'active' if section == 'monitor' else '' }}">Мониторинг</a>
+    {% if current_user %}
+    <span style="margin-left:auto;color:var(--muted);font-size:0.9rem">{{ current_user.display_name or current_user.login }} ({{ current_user.role }})</span>
+    <a href="{{ url_for('logout') }}" style="margin-left:0.5rem">Выйти</a>
+    {% endif %}
   </nav>
   <div class="container">
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -80,6 +111,77 @@ INDEX_HTML = """
       {% endif %}
     {% endwith %}
     {% block content %}{% endblock %}
+  </div>
+</body>
+</html>
+"""
+
+LOGIN_HTML = """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Вход — Assistant</title>
+  <style>{{ layout_css }}</style>
+</head>
+<body>
+  <div class="container" style="max-width:360px;padding-top:4rem">
+    <h1>Вход</h1>
+    <p class="sub">Введите логин и пароль.</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for cat, msg in messages %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="post" action="{{ url_for('login') }}">
+      <input type="hidden" name="next" value="{{ next or '' }}">
+      <div class="card">
+        <label for="login">Логин</label>
+        <input id="login" name="login" type="text" required autocomplete="username">
+        <label for="password" style="margin-top:0.75rem">Пароль</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn">Войти</button>
+    </form>
+  </div>
+</body>
+</html>
+"""
+
+SETUP_HTML = """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Первичная настройка — Assistant</title>
+  <style>{{ layout_css }}</style>
+</head>
+<body>
+  <div class="container" style="max-width:400px;padding-top:3rem">
+    <h1>Первичная настройка</h1>
+    <p class="sub">Создайте учётную запись владельца (owner).</p>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for cat, msg in messages %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="post" action="{{ url_for('setup') }}">
+      <div class="card">
+        <label for="login">Логин</label>
+        <input id="login" name="login" type="text" required autocomplete="username" minlength="2">
+        <label for="password" style="margin-top:0.75rem">Пароль</label>
+        <input id="password" name="password" type="password" required autocomplete="new-password" minlength="6">
+        <label for="password2" style="margin-top:0.75rem">Подтверждение пароля</label>
+        <input id="password2" name="password2" type="password" required autocomplete="new-password">
+      </div>
+      <button type="submit" class="btn">Создать и войти</button>
+    </form>
   </div>
 </body>
 </html>
@@ -96,6 +198,141 @@ def load_config() -> dict:
     data.setdefault("PAIRING_MODE", "false")
     data.setdefault(MCP_SERVERS_KEY, [])
     return data
+
+
+@app.context_processor
+def _inject_current_user():
+    try:
+        user = get_current_user(get_redis())
+        return {"current_user": user}
+    except Exception:
+        return {"current_user": None}
+
+
+@app.before_request
+def _require_auth():
+    """Redirect to setup or login when needed."""
+    path = request.path
+    if path in ("/login", "/logout"):
+        return None
+    if path == "/setup" and request.method in ("GET", "POST"):
+        return None
+    try:
+        r = get_redis()
+    except Exception:
+        return None
+    if not setup_done(r):
+        if path.startswith("/setup"):
+            return None
+        return redirect(url_for("setup"))
+    user = get_current_user(r)
+    if user:
+        return None
+    if path.startswith("/setup"):
+        return None
+    return redirect(url_for("login", next=request.url))
+
+
+# ----- Auth routes -----
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "GET":
+        return render_template_string(
+            LOGIN_HTML.replace("{{ layout_css }}", LAYOUT_CSS),
+            next=request.args.get("next"),
+        )
+    login_name = (request.form.get("login") or "").strip()
+    password = request.form.get("password") or ""
+    next_url = request.form.get("next") or url_for("index")
+    if not login_name or not password:
+        flash("Укажите логин и пароль.", "error")
+        return redirect(url_for("login", next=next_url))
+    r = get_redis()
+    user = verify_user(r, login_name, password)
+    if not user:
+        try:
+            from assistant.security.audit import audit
+            audit("login_failed")
+        except Exception:
+            pass
+        flash("Неверный логин или пароль.", "error")
+        return redirect(url_for("login", next=next_url))
+    sid = create_session(r, login_name)
+    resp = make_response(redirect(next_url))
+    _set_session_cookie(resp, sid)
+    try:
+        from assistant.security.audit import audit
+        audit("login_ok", login=login_name)
+    except Exception:
+        pass
+    return resp
+
+
+def _set_session_cookie(resp, sid: str) -> None:
+    """Set session cookie; use secure=True when HTTPS or production."""
+    secure = os.getenv("HTTPS", "").lower() in ("1", "true", "yes") or os.getenv("FLASK_ENV") == "production"
+    resp.set_cookie(
+        SESSION_COOKIE_NAME,
+        sid,
+        max_age=SESSION_TTL,
+        httponly=True,
+        samesite="Lax",
+        secure=secure,
+    )
+
+
+@app.route("/logout")
+def logout():
+    sid = request.cookies.get(SESSION_COOKIE_NAME)
+    if sid:
+        try:
+            delete_session(get_redis(), sid)
+            from assistant.security.audit import audit
+            audit("logout")
+        except Exception:
+            pass
+    resp = make_response(redirect(url_for("login")))
+    resp.delete_cookie(SESSION_COOKIE_NAME)
+    return resp
+
+
+@app.route("/setup", methods=["GET", "POST"])
+def setup():
+    try:
+        r = get_redis()
+    except Exception as e:
+        flash(f"Ошибка подключения к Redis: {e}", "error")
+        return render_template_string(SETUP_HTML.replace("{{ layout_css }}", LAYOUT_CSS))
+    if setup_done(r):
+        return redirect(url_for("index"))
+    if request.method == "GET":
+        return render_template_string(SETUP_HTML.replace("{{ layout_css }}", LAYOUT_CSS))
+    login_name = (request.form.get("login") or "").strip()
+    password = request.form.get("password") or ""
+    password2 = request.form.get("password2") or ""
+    if not login_name or len(login_name) < 2:
+        flash("Логин не менее 2 символов.", "error")
+        return redirect(url_for("setup"))
+    if len(password) < 6:
+        flash("Пароль не менее 6 символов.", "error")
+        return redirect(url_for("setup"))
+    if password != password2:
+        flash("Пароли не совпадают.", "error")
+        return redirect(url_for("setup"))
+    try:
+        create_user(r, login_name, password, role="owner")
+    except ValueError as e:
+        flash(str(e), "error")
+        return redirect(url_for("setup"))
+    sid = create_session(r, login_name)
+    resp = make_response(redirect(url_for("index")))
+    _set_session_cookie(resp, sid)
+    try:
+        from assistant.security.audit import audit
+        audit("setup_completed", login=login_name)
+    except Exception:
+        pass
+    return resp
 
 
 # ----- Telegram body (no extends) -----
@@ -123,6 +360,16 @@ _TELEGRAM_BODY = """
     <input id="users" name="telegram_allowed_user_ids" type="text" value="{{ config.get('TELEGRAM_ALLOWED_USER_IDS_STR', '') }}" placeholder="123456789, 987654321">
     <p class="hint">Пусто — разрешить всех (только для разработки).</p>
   </div>
+  <div class="card">
+    <label>Быстрая привязка</label>
+    <p class="hint">Сгенерируйте код. Отправьте боту в Telegram: /start КОД или /pair КОД — пользователь будет добавлен в разрешённые без глобального режима pairing.</p>
+    <button type="button" class="btn btn-secondary" onclick="genPairingCode()">Сгенерировать код</button>
+    <span id="pairing-result" style="margin-left:0.5rem;font-size:0.9rem"></span>
+    <div id="pairing-code-block" style="margin-top:0.75rem;display:none">
+      <p class="hint">Код: <strong id="pairing-code"></strong> (действует <span id="pairing-expires"></span> с)</p>
+      <p class="hint">Ссылка: <a id="pairing-link" href="#" target="_blank" rel="noopener"></a></p>
+    </div>
+  </div>
   <button type="submit" class="btn">Сохранить</button>
 </form>
 <script>
@@ -133,6 +380,25 @@ function testBot() {
     .then(function(res) { return res.json(); })
     .then(function(d) { r.textContent = d.ok ? 'OK: ' + (d.username || '') : 'Ошибка: ' + (d.error || 'unknown'); })
     .catch(function(e) { r.textContent = 'Ошибка: ' + e.message; });
+}
+function genPairingCode() {
+  var block = document.getElementById('pairing-code-block');
+  var result = document.getElementById('pairing-result');
+  result.textContent = '…';
+  block.style.display = 'none';
+  fetch('/api/pairing-code', { method: 'POST' })
+    .then(function(res) { return res.json(); })
+    .then(function(d) {
+      if (d.error) { result.textContent = 'Ошибка: ' + d.error; return; }
+      document.getElementById('pairing-code').textContent = d.code;
+      document.getElementById('pairing-expires').textContent = d.expires_in_sec || 600;
+      var linkEl = document.getElementById('pairing-link');
+      if (d.link) { linkEl.href = d.link; linkEl.textContent = d.link; linkEl.style.display = ''; }
+      else { linkEl.style.display = 'none'; }
+      block.style.display = 'block';
+      result.textContent = 'Готово';
+    })
+    .catch(function(e) { result.textContent = 'Ошибка: ' + e.message; });
 }
 </script>
 """
@@ -423,6 +689,30 @@ def api_test_bot():
         return jsonify({"ok": False, "error": data.get("description", "unknown")})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/pairing-code", methods=["POST"])
+def api_pairing_code():
+    """Create one-time pairing code. Returns code, link (if bot username known), expires_in_sec."""
+    redis_url = get_redis_url()
+    try:
+        code, expires = create_pairing_code(redis_url)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    link = None
+    cfg = get_config_from_redis_sync(redis_url)
+    token = (cfg.get("TELEGRAM_BOT_TOKEN") or "").strip()
+    if token:
+        try:
+            r = httpx.get(f"https://api.telegram.org/bot{token}/getMe", timeout=5.0)
+            data = r.json()
+            if data.get("ok"):
+                username = data.get("result", {}).get("username", "")
+                if username:
+                    link = f"https://t.me/{username}?start={code}"
+        except Exception:
+            pass
+    return jsonify({"ok": True, "code": code, "link": link, "expires_in_sec": expires})
 
 
 @app.route("/api/monitor")

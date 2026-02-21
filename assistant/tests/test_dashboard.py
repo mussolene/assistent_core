@@ -6,9 +6,12 @@ from assistant.dashboard.config_store import (
     REDIS_PREFIX,
     MCP_SERVERS_KEY,
     PAIRING_MODE_KEY,
+    PAIRING_CODE_PREFIX,
     set_config_in_redis_sync,
     get_config_from_redis_sync,
     add_telegram_allowed_user,
+    create_pairing_code,
+    consume_pairing_code,
 )
 
 
@@ -72,7 +75,19 @@ def client():
     return app.test_client()
 
 
-def test_api_test_bot_no_token(monkeypatch, client):
+@pytest.fixture
+def auth_mock(monkeypatch):
+    """Bypass auth: setup_done True, current user owner. Use with client for protected routes."""
+    monkeypatch.setattr("assistant.dashboard.app.setup_done", lambda r: True)
+    monkeypatch.setattr(
+        "assistant.dashboard.app.get_current_user",
+        lambda r: {"login": "test", "role": "owner", "display_name": "test"},
+    )
+    from unittest.mock import MagicMock
+    monkeypatch.setattr("assistant.dashboard.app.get_redis", lambda: MagicMock())
+
+
+def test_api_test_bot_no_token(monkeypatch, client, auth_mock):
     """Dashboard API test-bot returns error when token not set."""
     monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
     r = client.post("/api/test-bot")
@@ -82,7 +97,7 @@ def test_api_test_bot_no_token(monkeypatch, client):
     assert "token" in (j.get("error") or "").lower() or "set" in (j.get("error") or "").lower()
 
 
-def test_api_test_bot_mock(monkeypatch, client):
+def test_api_test_bot_mock(monkeypatch, client, auth_mock):
     """Dashboard API test-bot returns ok when getMe succeeds."""
     monkeypatch.setattr(
         "assistant.dashboard.app.get_config_from_redis_sync",
@@ -99,7 +114,7 @@ def test_api_test_bot_mock(monkeypatch, client):
     assert j.get("username") == "test_bot"
 
 
-def test_api_monitor(client):
+def test_api_monitor(client, auth_mock):
     """Dashboard API monitor returns dict (may be empty if no Redis)."""
     r = client.get("/api/monitor")
     assert r.status_code == 200
@@ -107,7 +122,7 @@ def test_api_monitor(client):
     assert isinstance(j, dict)
 
 
-def test_api_test_model_returns_json(monkeypatch, client):
+def test_api_test_model_returns_json(monkeypatch, client, auth_mock):
     """Dashboard API test-model returns JSON with ok key (may fail without real model)."""
     monkeypatch.setattr(
         "assistant.dashboard.app.get_config_from_redis_sync",
@@ -121,7 +136,7 @@ def test_api_test_model_returns_json(monkeypatch, client):
         assert "error" in j
 
 
-def test_save_model_redirect(monkeypatch, client):
+def test_save_model_redirect(monkeypatch, client, auth_mock):
     """save-model redirects to model and saves config."""
     set_calls = []
     monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
@@ -149,7 +164,7 @@ def test_save_model_redirect(monkeypatch, client):
     assert "LM_STUDIO_NATIVE" in keys_saved
 
 
-def test_save_mcp_valid(monkeypatch, client):
+def test_save_mcp_valid(monkeypatch, client, auth_mock):
     """save-mcp with name+url adds server and redirects to mcp."""
     set_calls = []
     monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
@@ -170,7 +185,7 @@ def test_save_mcp_valid(monkeypatch, client):
     assert set_calls[0][1] == [{"name": "mock-mcp", "url": "http://localhost:3000"}]
 
 
-def test_save_mcp_invalid_json_flash(monkeypatch, client):
+def test_save_mcp_invalid_json_flash(monkeypatch, client, auth_mock):
     """save-mcp with invalid JSON in args flashes error and redirects to mcp."""
     monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
     monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
@@ -183,7 +198,7 @@ def test_save_mcp_invalid_json_flash(monkeypatch, client):
     assert r.headers.get("Location", "").endswith("/mcp")
 
 
-def test_save_mcp_with_args(monkeypatch, client):
+def test_save_mcp_with_args(monkeypatch, client, auth_mock):
     """save-mcp with valid JSON args stores server with args."""
     set_calls = []
     monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
@@ -208,3 +223,29 @@ def test_save_mcp_with_args(monkeypatch, client):
     assert servers[0]["name"] == "with-args"
     assert servers[0]["url"] == "http://localhost:3000"
     assert servers[0].get("args") == {"api_key": "test-key"}
+
+
+def test_create_and_consume_pairing_code(redis_url):
+    code, expires = create_pairing_code(redis_url)
+    assert len(code) == 6
+    assert code.isalnum()
+    assert expires == 600
+    import redis
+    r = redis.from_url(redis_url, decode_responses=True)
+    assert r.get(PAIRING_CODE_PREFIX + code) == "1"
+    assert consume_pairing_code(redis_url, code) is True
+    assert r.get(PAIRING_CODE_PREFIX + code) is None
+    assert consume_pairing_code(redis_url, code) is False
+    r.close()
+
+
+def test_api_pairing_code_returns_code_and_link(client, auth_mock, monkeypatch):
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
+    monkeypatch.setattr("assistant.dashboard.app.create_pairing_code", lambda url: ("ABC123", 600))
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.post("/api/pairing-code")
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j.get("ok") is True
+    assert j.get("code") == "ABC123"
+    assert j.get("expires_in_sec") == 600

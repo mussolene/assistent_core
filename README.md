@@ -43,6 +43,11 @@ docker compose up --build
 
 Настройки берутся в порядке: **Redis (Dashboard)** → переменные окружения (`.env`) → YAML (`config/default.yaml`). Всё, что задаётся в Dashboard, хранится в Redis и переопределяет env/YAML при запуске core и telegram-adapter.
 
+### Безопасность Dashboard (продакшен)
+
+- **SECRET_KEY** — в продакшене обязательно задайте в `.env`: `SECRET_KEY=<случайная строка>`. Иначе сессии могут быть предсказуемы. При запуске без SECRET_KEY в логах выводится предупреждение.
+- **HTTPS** — при работе через HTTPS задайте `HTTPS=1` или `FLASK_ENV=production`, чтобы cookie сессии передавались только по защищённому каналу (secure).
+
 ### Контракт событий (для новых каналов)
 
 - **Вход:** адаптер публикует `IncomingMessage` (message_id, user_id, chat_id, text, reasoning_requested).
@@ -116,6 +121,7 @@ pytest assistant/tests -v --cov=assistant --cov-report=html --cov-fail-under=90
 - **Аудит и план доработок:** [docs/AUDIT.md](docs/AUDIT.md)
 - **Приёмочное тестирование:** [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 - **План развития (многопользовательский режим, спаривание Telegram, Dashboard, роли):** [docs/ROADMAP.md](docs/ROADMAP.md)
+- **Повторный аудит (безопасность, юзабилити, риски после этапов A–C):** [docs/AUDIT_V2.md](docs/AUDIT_V2.md)
 
 ## Лицензия
 
