@@ -11,7 +11,7 @@
 - **Опциональное облако** — fallback на OpenAI-совместимый API при отключённой по умолчанию отправке в облако
 - **Слоистая архитектура** — Channel → Event Bus (Redis) → Orchestrator → Agents → Skills → Model Gateway
 - **Stateless-агенты** — AssistantAgent и ToolAgent, всё состояние в Redis
-- **Навыки (skills)** — песочница для файловой системы, whitelist для shell, **git** (clone, read, commit, push, MR/PR через GitLab/GitHub API), vector RAG, заглушка MCP — см. [docs/GIT_SKILL.md](docs/GIT_SKILL.md)
+- **Навыки (skills)** — песочница для файловой системы, whitelist для shell, **git** (clone, read, commit, push, MR/PR через GitLab/GitHub API), vector RAG, **задачи (tasks)** — персональные задачи с датами, документами, ссылками и напоминаниями ([docs/TASKS_SKILL.md](docs/TASKS_SKILL.md)), заглушка MCP — см. [docs/GIT_SKILL.md](docs/GIT_SKILL.md)
 - **Безопасность** — контейнеры без root, лимиты ресурсов, whitelist команд, аудит, whitelist пользователей Telegram, rate limiting
 - **Web Dashboard** — настройка Telegram (токен, pairing), проверка подключения к модели, MCP-скиллы, мониторинг Redis
 - **MCP-сервер для агента** — проект можно подключить в Cursor как MCP: уведомления в Telegram, запрос confirm/reject, обратная связь через `/dev` ([docs/MCP_DEV_SERVER.md](docs/MCP_DEV_SERVER.md))
@@ -76,7 +76,7 @@ Orchestrator (state machine, без LLM в жизненном цикле)
 Agent Registry ──► AssistantAgent ──► Model Gateway (Ollama / OpenAI)
         │
         ▼
-        ToolAgent ──► Skill Registry ──► filesystem, shell, git, vector_rag, mcp
+        ToolAgent ──► Skill Registry ──► filesystem, shell, git, vector_rag, tasks, mcp
 ```
 
 ## Структура репозитория
@@ -97,7 +97,7 @@ assistent_core/
     ├── config/            # конфигурация (YAML + env)
     ├── core/              # Event Bus, Orchestrator, Task Manager, Agent Registry
     ├── agents/            # AssistantAgent, ToolAgent
-    ├── skills/            # filesystem, shell, git, vector_rag, mcp_adapter
+    ├── skills/            # filesystem, shell, git, vector_rag, tasks, mcp_adapter
     ├── channels/          # Telegram-адаптер
     ├── models/            # Model Gateway (local / cloud)
     ├── memory/            # short-term, task, summary, vector
@@ -122,6 +122,7 @@ pytest assistant/tests -v --cov=assistant --cov-report=html --cov-fail-under=90
 
 Тесты, требующие Redis, помечаются как skipped при его отсутствии.
 
+- **Скилл «Задачи»:** [docs/TASKS_SKILL.md](docs/TASKS_SKILL.md) — создание, даты, документы/ссылки, напоминания, список в Telegram.
 - **Аудит и план доработок:** [docs/AUDIT.md](docs/AUDIT.md)
 - **Приёмочное тестирование:** [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md)
 - **План развития (многопользовательский режим, спаривание Telegram, Dashboard, роли):** [docs/ROADMAP.md](docs/ROADMAP.md)

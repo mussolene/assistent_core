@@ -65,6 +65,7 @@ Skills:
 - shell: whitelisted commands (ls, cat, git, pytest, python, etc.).
 - git: clone, read, list_repos/list_cloned, search_repos (platform=github, query), status/diff/log, commit, push, create_mr. GITHUB_TOKEN for search_repos and create_mr.
 - vector_rag: search, add (action, text?).
+- tasks: create_task (title, description?, start_date?, end_date?), delete_task (task_id), update_task (task_id, title?, description?, start_date?, end_date?, status?), list_tasks, get_task (task_id), add_document (task_id, document), add_link (task_id, link), set_reminder (task_id, reminder_at ISO), format_for_telegram (получить текст и кнопки для списка задач в чат). user_id подставляется автоматически. Помогай с решением задач: предлагай шаги, напоминай о дедлайнах.
 Keep answers concise. Do not make up file contents or command output."""
 
 

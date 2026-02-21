@@ -7,7 +7,7 @@ Production-ready modular AI assistant with Telegram, pluggable skills, local/clo
 - **Local-first**: Ollama or OpenAI-compatible local API by default; cloud fallback optional.
 - **Layered architecture**: Channel → Event Bus (Redis) → Orchestrator → Agents → Skills → Model Gateway.
 - **Stateless agents**: AssistantAgent and ToolAgent; all state in Redis.
-- **Skills**: Sandboxed filesystem, whitelisted shell, git, vector RAG, MCP adapter (stub).
+- **Skills**: Sandboxed filesystem, whitelisted shell, git, vector RAG, **tasks** (personal tasks with dates, documents, links, reminders; user-scoped in Redis), MCP adapter (stub).
 - **Security**: Non-root containers, resource limits, command whitelist, audit logging, user whitelist, rate limiting.
 
 ## Architecture (ASCII)
@@ -28,7 +28,7 @@ Orchestrator (state machine, no LLM in lifecycle)
 Agent Registry --> AssistantAgent --> Model Gateway (Ollama / OpenAI)
         |
         v
-        ToolAgent --> Skill Registry --> filesystem, shell, git, vector_rag, mcp
+        ToolAgent --> Skill Registry --> filesystem, shell, git, vector_rag, tasks, mcp
 ```
 
 ## Requirements

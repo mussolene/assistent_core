@@ -39,6 +39,7 @@ async def run_core(config: Config) -> None:
     from assistant.skills.registry import SkillRegistry
     from assistant.skills.runner import SandboxRunner
     from assistant.skills.shell import ShellSkill
+    from assistant.skills.tasks import TaskSkill
     from assistant.skills.vector_rag import VectorRagSkill
 
     bus = EventBus(config.redis.url)
@@ -92,6 +93,7 @@ async def run_core(config: Config) -> None:
         network_enabled=config.sandbox.network_enabled,
     ))
     skills.register(VectorRagSkill(memory.get_vector()))
+    skills.register(TaskSkill())
     skills.register(McpAdapterSkill())
     runner = SandboxRunner()
     agent_registry = AgentRegistry()
