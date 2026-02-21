@@ -327,13 +327,27 @@ class TaskSkill(BaseSkill):
             return {"ok": False, "error": "title обязателен"}
         task_id = str(uuid.uuid4())
         now = _now_iso()
+        current_year = datetime.now(timezone.utc).year
+        start_date = (params.get("start_date") or "").strip() or None
+        end_date = (params.get("end_date") or "").strip() or None
+        def _year_of(iso: str | None) -> int | None:
+            if not iso or len(iso) < 10:
+                return None
+            try:
+                return datetime.fromisoformat(iso[:10] + "T12:00:00+00:00").year
+            except ValueError:
+                return None
+        if start_date and (_year_of(start_date) or current_year) < current_year:
+            start_date = None
+        if end_date and (_year_of(end_date) or current_year) < current_year:
+            end_date = None
         task = {
             "id": task_id,
             "user_id": user_id,
             "title": title,
             "description": (params.get("description") or "").strip(),
-            "start_date": (params.get("start_date") or "").strip() or None,
-            "end_date": (params.get("end_date") or "").strip() or None,
+            "start_date": start_date,
+            "end_date": end_date,
             "documents": list(params.get("documents") or []),
             "links": list(params.get("links") or []),
             "reminder_at": None,

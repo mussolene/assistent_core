@@ -78,6 +78,30 @@ async def test_tasks_create_requires_title(skill):
 
 
 @pytest.mark.asyncio
+async def test_tasks_create_without_dates_keeps_none(skill, redis_mock):
+    with patch("assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock):
+        out = await skill.run({"action": "create_task", "user_id": "u1", "title": "Без дат"})
+    assert out.get("ok") is True
+    assert out["task"].get("start_date") is None
+    assert out["task"].get("end_date") is None
+
+
+@pytest.mark.asyncio
+async def test_tasks_create_drops_past_year_dates(skill, redis_mock):
+    with patch("assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock):
+        out = await skill.run({
+            "action": "create_task",
+            "user_id": "u1",
+            "title": "С датой 2024",
+            "start_date": "2024-01-15",
+            "end_date": "2024-02-01",
+        })
+    assert out.get("ok") is True
+    assert out["task"].get("start_date") is None
+    assert out["task"].get("end_date") is None
+
+
+@pytest.mark.asyncio
 async def test_tasks_create_and_list(skill, redis_mock):
     with patch("assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock):
         out = await skill.run({

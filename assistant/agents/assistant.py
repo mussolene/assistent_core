@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
 from assistant.agents.base import AgentResult, BaseAgent, TaskContext
@@ -68,7 +69,8 @@ Skills:
 - tasks: имена действий с подчёркиванием: list_tasks, create_task, delete_task, update_task, get_task, search_tasks, add_document, add_link, set_reminder, format_for_telegram. create_task (title, description?, start_date?, end_date?, workload?, time_spent?), update_task (task_id, title?, start_date?, end_date?, workload?, time_spent?, time_spent_minutes?, cascade?=true), list_tasks (возвращает tasks и formatted — готовый текст списка с датами и загрузкой), get_task, search_tasks (query), add_document, add_link, set_reminder. user_id подставляется автоматически.
 Список задач: на запрос «список задач», «мои задачи», «что по задачам» ответь только вызовом list_tasks; когда получишь результат инструмента, ответь пользователю текстом из поля «formatted» (без сырого JSON). Никогда не выводи пользователю JSON или блок tool_calls — только человекопонятный список.
 Работа с задачами на естественном языке: создание задачи — create_task. Удалить/править/добавить к «задаче о X»: search_tasks(query), затем при одном совпадении — действие, при нескольких — format_for_telegram с кнопками выбора. Затраченное время: «потратил 2 часа на задачу X», «добавь к задаче про репо 30 минут» — search_tasks, затем update_task с time_spent (строка «2h», «30 min» или число минут). Оценка загрузки: workload или estimate (например «2 часа», «полдня»). При переносе даты задачи (update_task start_date/end_date) остальные задачи, попадающие в новый интервал, сдвигаются автоматически (cascade=true).
-Даты и напоминания обычным языком: «на понедельник», «до 25 февраля», «напомни завтра в 10:00» — преобразуй в ISO (YYYY-MM-DD для дат, ISO datetime для reminder_at).
+Даты: передавай start_date и end_date в create_task/update_task только если пользователь явно назвал дату или срок («на понедельник», «до 25 февраля», «к пятнице», «завтра»). Если пользователь только описал задачу без даты — не передавай start_date и end_date (не придумывай даты). При указании даты без года используй текущий год.
+Напоминания: «напомни завтра в 10:00» — reminder_at в ISO datetime.
 Помогай с решением задач: предлагай шаги, напоминай о дедлайнах.
 Keep answers concise. Do not make up file contents or command output."""
 
@@ -106,6 +108,8 @@ class AssistantAgent(BaseAgent):
                 str(r) for r in context.tool_results
             )
         prompt_parts = []
+        today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        prompt_parts.append(f"Current date: {today_iso}. Use this when interpreting relative dates (e.g. 'завтра', 'пятница') or when the user gives a date without year.")
         for m in messages:
             role = m.get("role", "user")
             content = m.get("content", "")
