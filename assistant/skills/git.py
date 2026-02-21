@@ -10,7 +10,7 @@ from assistant.security.command_whitelist import CommandWhitelist
 from assistant.security.sandbox import run_in_sandbox
 from assistant.skills.base import BaseSkill
 
-from assistant.skills.git_platform import create_merge_request, search_github_repos
+from assistant.skills.git_platform import create_merge_request, search_github_repos, search_gitlab_repos
 
 logger = logging.getLogger(__name__)
 
@@ -232,19 +232,19 @@ class GitSkill(BaseSkill):
         query = (params.get("query") or params.get("q") or "").strip()
         if not query:
             return {"ok": False, "error": "query is required for search_repos"}
-        if platform == "github" or platform == "both":
+        if platform == "github":
             token = os.environ.get("GITHUB_TOKEN", "").strip() or None
-            out = await search_github_repos(query, token=token)
-            if platform == "github":
-                return out
-            if not out.get("ok"):
-                return out
-            github_items = out.get("items", [])
-            # TODO 1.2: if platform == "both", also call search_gitlab_repos and merge
-            return {"ok": True, "items": github_items, "total_count": out.get("total_count", 0)}
+            return await search_github_repos(query, token=token)
         if platform == "gitlab":
-            # TODO 1.2: return await search_gitlab_repos(...)
-            return {"ok": False, "error": "GitLab search not implemented yet"}
+            token = os.environ.get("GITLAB_TOKEN", "").strip() or os.environ.get("GITLAB_PRIVATE_TOKEN", "").strip() or None
+            return await search_gitlab_repos(query, token=token)
+        if platform == "both":
+            gh_token = os.environ.get("GITHUB_TOKEN", "").strip() or None
+            gl_token = os.environ.get("GITLAB_TOKEN", "").strip() or os.environ.get("GITLAB_PRIVATE_TOKEN", "").strip() or None
+            gh_out = await search_github_repos(query, token=gh_token) if gh_token else {"ok": True, "items": [], "total_count": 0}
+            gl_out = await search_gitlab_repos(query, token=gl_token) if gl_token else {"ok": True, "items": [], "total_count": 0}
+            items = (gh_out.get("items") or []) + (gl_out.get("items") or [])
+            return {"ok": True, "items": items, "total_count": len(items)}
         return {"ok": False, "error": "platform must be github, gitlab, or both"}
 
     async def _git_subcommand(self, params: dict[str, Any]) -> dict[str, Any]:

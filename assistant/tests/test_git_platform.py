@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from assistant.skills.git_platform import create_merge_request, search_github_repos
+from assistant.skills.git_platform import create_merge_request, search_github_repos, search_gitlab_repos
 
 
 def _mock_httpx_client(status_code: int = 201, json_data: dict | None = None):
@@ -140,6 +140,35 @@ async def test_search_github_repos_missing_token():
     out = await search_github_repos("q", token=None)
     assert out["ok"] is False
     assert "token" in out.get("error", "").lower() or "GITHUB" in out.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_search_gitlab_repos_success():
+    response = MagicMock()
+    response.status_code = 200
+    response.headers = {"content-type": "application/json"}
+    response.json = MagicMock(
+        return_value=[
+            {"path_with_namespace": "g/r", "web_url": "https://gitlab.com/g/r", "description": "d", "http_url_to_repo": "https://gitlab.com/g/r.git"},
+        ]
+    )
+    client = MagicMock()
+    client.get = AsyncMock(return_value=response)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=None)
+    with patch("assistant.skills.git_platform.httpx.AsyncClient", return_value=client):
+        out = await search_gitlab_repos("test", token="gl")
+    assert out["ok"] is True
+    assert len(out["items"]) == 1
+    assert out["items"][0]["full_name"] == "g/r"
+    assert "gitlab" in out["items"][0]["html_url"]
+
+
+@pytest.mark.asyncio
+async def test_search_gitlab_repos_missing_token():
+    out = await search_gitlab_repos("q", token=None)
+    assert out["ok"] is False
+    assert "GITLAB" in out.get("error", "")
 
 
 @pytest.mark.asyncio

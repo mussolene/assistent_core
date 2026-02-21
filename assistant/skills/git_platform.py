@@ -191,3 +191,49 @@ async def search_github_repos(
     except Exception as e:
         logger.exception("GitHub search repos failed: %s", e)
         return {"ok": False, "error": str(e)}
+
+
+async def search_gitlab_repos(
+    query: str,
+    *,
+    token: str | None = None,
+    per_page: int = 30,
+) -> dict[str, Any]:
+    """Search GitLab projects. GET /projects?search=... Returns ok, items ([{full_name, web_url, description, clone_url}]), error."""
+    query = (query or "").strip()
+    if not query:
+        return {"ok": False, "error": "query is required"}
+    token = (token or "").strip()
+    if not token:
+        return {"ok": False, "error": "GITLAB_TOKEN is required for search"}
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://gitlab.com/api/v4/projects",
+                params={"search": query, "per_page": min(per_page, 100)},
+                headers={"PRIVATE-TOKEN": token},
+                timeout=15.0,
+            )
+        if r.status_code != 200:
+            err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            return {
+                "ok": False,
+                "error": err.get("message", err.get("error", r.text)) or f"HTTP {r.status_code}",
+            }
+        data = r.json()
+        if not isinstance(data, list):
+            data = []
+        items = [
+            {
+                "full_name": it.get("path_with_namespace", ""),
+                "html_url": it.get("web_url", ""),
+                "web_url": it.get("web_url", ""),
+                "description": it.get("description") or "",
+                "clone_url": it.get("http_url_to_repo", "") or it.get("ssh_url_to_repo", ""),
+            }
+            for it in data
+        ]
+        return {"ok": True, "items": items, "total_count": len(items)}
+    except Exception as e:
+        logger.exception("GitLab search repos failed: %s", e)
+        return {"ok": False, "error": str(e)}

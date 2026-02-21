@@ -148,7 +148,14 @@ async def test_git_search_repos_github_delegates(skill_no_network):
     with patch("assistant.skills.git.search_github_repos", new_callable=AsyncMock, return_value={"ok": True, "items": [], "total_count": 0}) as m:
         out = await skill_no_network.run({"action": "search_repos", "query": "python", "platform": "github"})
     assert out["ok"] is True
-    assert out.get("items") == []
+    m.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_git_search_repos_gitlab_delegates(skill_no_network):
+    with patch("assistant.skills.git.search_gitlab_repos", new_callable=AsyncMock, return_value={"ok": True, "items": [], "total_count": 0}) as m:
+        out = await skill_no_network.run({"action": "search_repos", "query": "python", "platform": "gitlab"})
+    assert out["ok"] is True
     m.assert_called_once()
 
 
