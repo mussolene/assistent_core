@@ -2,11 +2,7 @@
 
 import pytest
 
-from assistant.channels.email_adapter import (
-    get_email_config,
-    send_email,
-    DEFAULT_SUBJECT,
-)
+from assistant.channels.email_adapter import get_email_config, send_email
 from assistant.core.events import ChannelKind, OutgoingReply
 
 
