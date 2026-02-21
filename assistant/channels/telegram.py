@@ -108,25 +108,92 @@ async def _answer_callback(telegram_base_url: str, callback_query_id: str, text:
         logger.debug("answerCallbackQuery failed: %s", e)
 
 
-# Единый parse_mode для всех исходящих сообщений в Telegram
-PARSE_MODE = "Markdown"
+# Telegram принимает HTML — корректное отображение без «сырых» знаков разметки
+PARSE_MODE = "HTML"
 
 
-def _escape_markdown(text: str) -> str:
-    """Экранировать символы Markdown в пользовательском тексте (Telegram legacy Markdown)."""
-    for c in ("\\", "_", "*", "`", "["):
-        text = text.replace(c, "\\" + c)
-    return text
+def _escape_html(s: str) -> str:
+    """Экранировать для Telegram HTML: & < >"""
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _markdown_to_telegram_html(text: str) -> str:
+    """Конвертировать типичный Markdown (LLM/CommonMark) в Telegram HTML для красивого отображения в чате."""
+    if not text:
+        return ""
+    # Сначала экранируем HTML, чтобы не сломать теги
+    out: list[str] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        # Блок кода ```...```
+        if i + 3 <= n and text[i : i + 3] == "```":
+            j = text.find("```", i + 3)
+            if j == -1:
+                out.append(_escape_html(text[i:]))
+                break
+            code = text[i + 3 : j].strip()
+            out.append("<pre>")
+            out.append(_escape_html(code))
+            out.append("</pre>")
+            i = j + 3
+            continue
+        # Инлайн `code`
+        if text[i] == "`":
+            j = i + 1
+            while j < n and text[j] != "`":
+                j += 1
+            if j < n:
+                out.append("<code>")
+                out.append(_escape_html(text[i + 1 : j]))
+                out.append("</code>")
+                i = j + 1
+                continue
+        # **bold** или __bold__ (только двухсимвольные разделители)
+        if i + 2 <= n and text[i : i + 2] in ("**", "__"):
+            delim = text[i : i + 2]
+            j = i + 2
+            while j <= n - 2 and text[j : j + 2] != delim:
+                j += 1
+            if j <= n - 2:
+                inner = text[i + 2 : j]
+                out.append("<b>")
+                out.append(_markdown_to_telegram_html(inner))
+                out.append("</b>")
+                i = j + 2
+                continue
+        # *italic* или _italic_ (одиночный * или _)
+        if i + 1 <= n and text[i] in ("*", "_") and (i + 2 > n or text[i + 1] != text[i]):
+            ch = text[i]
+            j = i + 1
+            while j < n and text[j] != ch and text[j] != "\n":
+                j += 1
+            if j < n and text[j] == ch:
+                inner = text[i + 1 : j]
+                out.append("<i>")
+                out.append(_escape_html(inner))
+                out.append("</i>")
+                i = j + 1
+                continue
+        # Обычный символ
+        out.append(_escape_html(text[i]))
+        i += 1
+    return "".join(out)
+
+
+def _to_telegram_html(text: str) -> str:
+    """Привести текст ответа к Telegram HTML (разметка отображается, без сырых знаков)."""
+    return _markdown_to_telegram_html(text)
 
 
 def _confirmation_outcome_text(original_text: str, confirmed: bool) -> str:
-    """Текст сообщения после выбора: убираем призыв кнопку, добавляем итог в Markdown."""
+    """Текст сообщения после выбора: убираем призыв кнопку, добавляем итог в HTML."""
     base = (original_text or "").strip()
     base = re.sub(r"\n\nВыберите ответ кнопкой ниже\.?\s*$", "", base)
-    base = _escape_markdown(base)
+    base = _to_telegram_html(base)
     if confirmed:
-        return f"{base}\n\n✅ *Подтверждено*"
-    return f"{base}\n\n❌ *Отклонено*"
+        return f"{base}\n\n✅ <b>Подтверждено</b>"
+    return f"{base}\n\n❌ <b>Отклонено</b>"
 
 
 async def _edit_message_confirmation_done(
@@ -222,6 +289,7 @@ async def run_telegram_adapter() -> None:
             text = (visible or STREAM_PLACEHOLDER)[:MAX_MESSAGE_LENGTH]
             if len(visible) > MAX_MESSAGE_LENGTH:
                 text = text[: MAX_MESSAGE_LENGTH - 3] + "..."
+            text = _to_telegram_html(text)
             try:
                 async with httpx.AsyncClient() as client:
                     if s.get("message_id") is None:
@@ -318,8 +386,7 @@ async def run_telegram_adapter() -> None:
         text = _strip_think_blocks(payload.text or "(empty)")
         if len(text) > MAX_MESSAGE_LENGTH:
             text = text[: MAX_MESSAGE_LENGTH - 3] + "..."
-        if getattr(payload, "reply_markup", None):
-            text = _escape_markdown(text)
+        text = _to_telegram_html(text)
         reply_id = None
         if payload.message_id and payload.message_id.isdigit():
             mid = int(payload.message_id)

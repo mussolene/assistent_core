@@ -6,8 +6,10 @@ import pytest
 
 from assistant.channels.telegram import (
     BOT_COMMANDS,
+    PARSE_MODE,
     RateLimiter,
     _strip_think_blocks,
+    _to_telegram_html,
     sanitize_text,
     send_typing,
 )
@@ -72,6 +74,33 @@ def test_bot_commands_include_settings_and_channels():
     commands = {c["command"] for c in BOT_COMMANDS}
     assert "settings" in commands
     assert "channels" in commands
+
+
+def test_to_telegram_html_uses_html():
+    assert PARSE_MODE == "HTML"
+
+
+def test_to_telegram_html_plain():
+    assert _to_telegram_html("Hello") == "Hello"
+    assert _to_telegram_html("Принято.") == "Принято."
+
+
+def test_to_telegram_html_bold():
+    assert _to_telegram_html("**bold**") == "<b>bold</b>"
+    assert _to_telegram_html("Hello **world**!") == "Hello <b>world</b>!"
+
+
+def test_to_telegram_html_italic():
+    assert _to_telegram_html("*italic*") == "<i>italic</i>"
+
+
+def test_to_telegram_html_code():
+    assert _to_telegram_html("`code`") == "<code>code</code>"
+
+
+def test_to_telegram_html_escapes():
+    assert "&lt;" in _to_telegram_html("<script>")
+    assert "&amp;" in _to_telegram_html("a & b")
 
 
 @pytest.mark.asyncio
