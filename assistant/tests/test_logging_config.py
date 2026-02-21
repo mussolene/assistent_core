@@ -56,3 +56,26 @@ def test_setup_logging():
     ]
     if structured:
         assert structured[0].formatter.use_json is True
+
+
+def test_structured_formatter_with_exc_info():
+    import traceback
+    fmt = StructuredFormatter(use_json=True)
+    try:
+        raise ValueError("test error")
+    except ValueError:
+        exc_info = __import__("sys").exc_info()
+    record = logging.LogRecord(
+        name="test", level=logging.ERROR, pathname="", lineno=0,
+        msg="failed", args=(), exc_info=exc_info,
+    )
+    out = fmt.format(record)
+    data = json.loads(out)
+    assert "exception" in data
+    assert "ValueError" in data["exception"] or "test error" in data["exception"]
+
+
+def test_setup_logging_level_warning():
+    setup_logging(level="WARNING", use_json=False)
+    root = logging.getLogger()
+    assert root.level == logging.WARNING

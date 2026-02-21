@@ -11,6 +11,14 @@ from assistant.skills.registry import SkillRegistry
 from assistant.skills.runner import SandboxRunner
 
 
+def test_assistant_agent_init_requires_exactly_one():
+    """AssistantAgent requires exactly one of model_gateway or gateway_factory."""
+    with pytest.raises(ValueError, match="exactly one"):
+        AssistantAgent()
+    with pytest.raises(ValueError, match="exactly one"):
+        AssistantAgent(model_gateway=MagicMock(), gateway_factory=lambda: None)
+
+
 def _ctx(**kwargs):
     return TaskContext(
         task_id=kwargs.get("task_id", "t1"),
@@ -34,10 +42,71 @@ async def test_assistant_agent_returns_text():
     memory = MagicMock()
     memory.get_context_for_user = AsyncMock(return_value=[])
     memory.append_message = AsyncMock()
-    agent = AssistantAgent(model, memory)
+    agent = AssistantAgent(model_gateway=model, memory=memory)
     result = await agent.handle(_ctx())
     assert result.success is True
     assert "Hi there" in result.output_text
+
+
+@pytest.mark.asyncio
+async def test_assistant_agent_uses_gateway_factory():
+    model = MagicMock()
+    model.generate = AsyncMock(return_value="From factory")
+    memory = MagicMock()
+    memory.get_context_for_user = AsyncMock(return_value=[])
+    memory.append_message = AsyncMock()
+    async def get_gw():
+        return model
+    agent = AssistantAgent(gateway_factory=get_gw, memory=memory)
+    result = await agent.handle(_ctx())
+    assert result.success is True
+    assert "From factory" in result.output_text
+
+
+@pytest.mark.asyncio
+async def test_assistant_agent_handle_with_tool_results():
+    model = MagicMock()
+    model.generate = AsyncMock(return_value="Done with tools")
+    memory = MagicMock()
+    memory.get_context_for_user = AsyncMock(return_value=[{"role": "user", "content": "hi"}])
+    memory.append_message = AsyncMock()
+    agent = AssistantAgent(model_gateway=model, memory=memory)
+    ctx = _ctx(tool_results=[{"tool": "fs", "result": "file content"}])
+    result = await agent.handle(ctx)
+    assert result.success is True
+    assert "Tool results" in (model.generate.call_args[0][0] or "")
+
+
+@pytest.mark.asyncio
+async def test_assistant_agent_handle_stream_callback():
+    async def stream_gen():
+        yield "Hello"
+        yield " world"
+
+    model = MagicMock()
+    model.generate = MagicMock(return_value=stream_gen())
+    memory = MagicMock()
+    memory.get_context_for_user = AsyncMock(return_value=[])
+    memory.append_message = AsyncMock()
+    agent = AssistantAgent(model_gateway=model, memory=memory)
+    ctx = _ctx(metadata={"stream_callback": AsyncMock()})
+    result = await agent.handle(ctx)
+    assert result.success is True
+    assert "Hello" in result.output_text and "world" in result.output_text
+
+
+@pytest.mark.asyncio
+async def test_assistant_agent_handle_model_error_connection():
+    """When model.generate raises connection error, returns user-friendly message."""
+    model = MagicMock()
+    model.generate = AsyncMock(side_effect=ConnectionError("Connection refused"))
+    memory = MagicMock()
+    memory.get_context_for_user = AsyncMock(return_value=[])
+    memory.append_message = AsyncMock()
+    agent = AssistantAgent(model_gateway=model, memory=memory)
+    result = await agent.handle(_ctx())
+    assert result.success is True
+    assert "refused" in result.output_text.lower() or "недоступна" in result.output_text or "model" in result.output_text.lower()
 
 
 @pytest.mark.asyncio

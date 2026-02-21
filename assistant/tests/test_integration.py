@@ -1,5 +1,7 @@
 """Integration test: incoming -> orchestrator -> assistant -> stream/outgoing (mocked bus and model)."""
 
+from __future__ import annotations
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

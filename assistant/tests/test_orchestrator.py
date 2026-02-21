@@ -1,6 +1,6 @@
 """Tests for orchestrator state and task manager (with mocks)."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -159,3 +159,31 @@ async def test_orchestrator_task_to_context_stream_callback_none_when_stream_dis
     }
     ctx = orch._task_to_context("tid_1", task_data, payload)
     assert ctx.metadata.get("stream_callback") is None
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_start_stop():
+    """start() connects bus and tasks, stop() disconnects."""
+    config = MagicMock()
+    config.redis.url = "redis://localhost:6379/0"
+    config.orchestrator.max_iterations = 5
+    config.orchestrator.autonomous_mode = False
+    bus = MagicMock()
+    bus.connect = AsyncMock()
+    bus.disconnect = AsyncMock()
+    bus.stop = MagicMock()
+    bus.subscribe_incoming = MagicMock()
+    with patch("assistant.core.orchestrator.TaskManager") as TM:
+        tasks = MagicMock()
+        tasks.connect = AsyncMock()
+        TM.return_value = tasks
+        orch = Orchestrator(config=config, bus=bus)
+        await orch.start()
+        bus.connect.assert_called_once()
+        tasks.connect.assert_called_once()
+        bus.subscribe_incoming.assert_called_once()
+        assert orch._running is True
+        await orch.stop()
+        assert orch._running is False
+        bus.stop.assert_called_once()
+        bus.disconnect.assert_called_once()

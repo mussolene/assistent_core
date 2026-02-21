@@ -1,6 +1,8 @@
 """Tests for memory: short-term, task, summary, manager (Redis or mocks)."""
 
-from unittest.mock import AsyncMock, MagicMock
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -83,3 +85,99 @@ async def test_memory_manager_get_context_no_vector():
     ctx = await mgr.get_context_for_user("u1", "task1", include_vector=True)
     assert any("Old summary" in str(m.get("content", "")) for m in ctx)
     assert any(m.get("content") == "hi" for m in ctx)
+
+
+@pytest.mark.asyncio
+async def test_memory_manager_get_context_with_vector_and_tool_results():
+    """get_context_for_user with vector model and tool_results."""
+    mgr = MemoryManager("redis://localhost:6379/0")
+    mgr._short = MagicMock()
+    mgr._short.get_messages = AsyncMock(return_value=[{"role": "user", "content": "hi"}])
+    mgr._summary = MagicMock()
+    mgr._summary.get_summary = AsyncMock(return_value=None)
+    mgr._vector = MagicMock()
+    mgr._vector._get_model = MagicMock(return_value=MagicMock())
+    mgr._vector.search = MagicMock(return_value=[{"text": "relevant memory"}])
+    mgr._task = MagicMock()
+    mgr._task.get_tool_results = AsyncMock(return_value=[{"result": "file content"}])
+    ctx = await mgr.get_context_for_user("u1", "task1", include_vector=True)
+    assert any("relevant memory" in str(m.get("content", "")) for m in ctx)
+
+
+@pytest.mark.asyncio
+async def test_memory_manager_append_store_append_tool_add_vector():
+    """append_message, store_task_fact, append_tool_result, add_to_vector."""
+    mgr = MemoryManager("redis://localhost:6379/0")
+    mgr._short = MagicMock()
+    mgr._short.append = AsyncMock()
+    mgr._task = MagicMock()
+    mgr._task.set = AsyncMock()
+    mgr._task.append_tool_result = AsyncMock()
+    mgr._vector = MagicMock()
+    mgr._vector.add = MagicMock()
+    await mgr.append_message("u1", "user", "hello")
+    mgr._short.append.assert_called_once_with("u1", "user", "hello", "default")
+    await mgr.store_task_fact("t1", "key", "value")
+    mgr._task.set.assert_called_once_with("t1", "key", "value")
+    await mgr.append_tool_result("t1", "fs", {"path": "/x"})
+    mgr._task.append_tool_result.assert_called_once_with("t1", "fs", {"path": "/x"})
+    await mgr.add_to_vector("some text", {"source": "test"})
+    mgr._vector.add.assert_called_once_with("some text", {"source": "test"})
+
+
+@pytest.mark.asyncio
+async def test_short_term_with_mock_redis():
+    """ShortTermMemory get_messages skips bad json; clear calls delete."""
+    import json as _json
+
+    mock_client = MagicMock()
+    mock_client.ping = AsyncMock()
+    mock_client.rpush = AsyncMock()
+    mock_client.lrange = AsyncMock(return_value=[
+        _json.dumps({"role": "user", "content": "ok"}),
+        "not-valid-json",
+    ])
+    mock_client.delete = AsyncMock()
+    mock_client.pipeline = MagicMock(return_value=MagicMock(
+        rpush=MagicMock(),
+        ltrim=MagicMock(),
+        expire=MagicMock(),
+        execute=AsyncMock(),
+    ))
+
+    with patch("assistant.memory.short_term.aioredis") as m:
+        m.from_url = MagicMock(return_value=mock_client)
+        mem = ShortTermMemory("redis://fake:6379/0", window=5)
+        await mem.connect()
+        await mem.append("u1", "user", "hello")
+        mock_client.pipeline.return_value.rpush.assert_called()
+        msgs = await mem.get_messages("u1")
+        assert len(msgs) == 1
+        assert msgs[0]["content"] == "ok"
+        await mem.clear("u1")
+        mock_client.delete.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_memory_manager_connect_and_getters():
+    """connect() and get_short_term, get_task_memory, get_summary, get_vector."""
+    mock_short = MagicMock()
+    mock_short.connect = AsyncMock()
+    mock_task = MagicMock()
+    mock_task.connect = AsyncMock()
+    mock_summary = MagicMock()
+    mock_summary.connect = AsyncMock()
+    mock_vector = MagicMock()
+    with patch("assistant.memory.manager.ShortTermMemory", return_value=mock_short):
+        with patch("assistant.memory.manager.TaskMemory", return_value=mock_task):
+            with patch("assistant.memory.manager.SummaryMemory", return_value=mock_summary):
+                with patch("assistant.memory.manager.VectorMemory", return_value=mock_vector):
+                    mgr = MemoryManager("redis://localhost:6379/0")
+                    await mgr.connect()
+                    mock_short.connect.assert_called_once()
+                    mock_task.connect.assert_called_once()
+                    mock_summary.connect.assert_called_once()
+                    assert mgr.get_short_term() is mock_short
+                    assert mgr.get_task_memory() is mock_task
+                    assert mgr.get_summary() is mock_summary
+                    assert mgr.get_vector() is mock_vector

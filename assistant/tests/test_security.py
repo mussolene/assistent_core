@@ -30,3 +30,24 @@ def test_redact():
     out = _redact({"token": "secret123", "user": "alice"})
     assert out["token"] == "[REDACTED]"
     assert out["user"] == "alice"
+
+
+def test_whitelist_parse_command_allowed():
+    w = CommandWhitelist(["ls", "cat"])
+    out = w.parse_command("ls -la /tmp")
+    assert out is not None
+    args, err = out
+    assert args == ["ls", "-la", "/tmp"]
+    assert err == ""
+
+
+def test_whitelist_parse_command_denied():
+    w = CommandWhitelist(["ls"])
+    out = w.parse_command("curl https://x.com")
+    assert out is None
+
+
+def test_whitelist_parse_command_empty_returns_none():
+    w = CommandWhitelist(["ls"])
+    out = w.parse_command("")
+    assert out is None
