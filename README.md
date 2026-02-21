@@ -13,7 +13,7 @@
 - **Stateless-агенты** — AssistantAgent и ToolAgent, всё состояние в Redis
 - **Навыки (skills)** — песочница для файловой системы, whitelist для shell, git, vector RAG, заглушка MCP
 - **Безопасность** — контейнеры без root, лимиты ресурсов, whitelist команд, аудит, whitelist пользователей Telegram, rate limiting
-- **Web Dashboard** — первичная настройка (токен бота, список пользователей) без запроса секретов при запуске
+- **Web Dashboard** — настройка Telegram (токен, pairing), проверка подключения к модели, MCP-скиллы, мониторинг Redis
 
 ## Быстрый старт
 
@@ -31,10 +31,11 @@ cd assistent_core
 docker compose up --build
 ```
 
-1. Откройте **http://localhost:8080** — Web Dashboard.
-2. Введите токен бота и при необходимости список разрешённых User ID, нажмите «Сохранить».
-3. Перезапустите Telegram-адаптер: `docker compose restart telegram-adapter`.
-4. Запустите Ollama на хосте и при необходимости создайте `.env` с `OPENAI_BASE_URL=http://host.docker.internal:11434/v1` (для Docker на Mac/Windows хост доступен по этому адресу). Если бот отвечает «Модель недоступна» — проверьте, что Ollama запущена и URL доступен из контейнера.
+1. Откройте **http://localhost:8080** — Web Dashboard (вкладки: Telegram, Модель, MCP, Мониторинг).
+2. В разделе Telegram введите токен бота; можно включить **Pairing** и отправить боту в Telegram команду `/start` — ваш ID добавится в разрешённые. Либо укажите User ID вручную и нажмите «Сохранить».
+3. В разделе Модель укажите URL API и имя модели, при необходимости нажмите «Проверить подключение». Сохраните и перезапустите: `docker compose restart assistant-core`.
+4. Перезапустите Telegram-адаптер при смене токена: `docker compose restart telegram-adapter`.
+5. Запустите Ollama на хосте и при необходимости создайте `.env` с `OPENAI_BASE_URL=http://host.docker.internal:11434/v1` (для Docker на Mac/Windows хост доступен по этому адресу). Если бот отвечает «Модель недоступна» — проверьте, что Ollama запущена и URL доступен из контейнера.
 
 Подробная настройка и запуск без Docker — в [assistant/README.md](assistant/README.md).
 
@@ -69,7 +70,7 @@ assistent_core/
 │   └── workflows/
 │       ├── ci.yml         # тесты
 │       └── deploy.yml     # сборка и публикация Docker-образов
-├── docker-compose.yml     # redis, dashboard, assistant-core, telegram-adapter, vector-db
+├── docker-compose.yml     # redis, dashboard, assistant-core, telegram-adapter
 ├── pyproject.toml
 ├── .env.example
 └── assistant/

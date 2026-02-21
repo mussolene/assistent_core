@@ -3,7 +3,7 @@ FROM python:3.11-slim
 RUN groupadd -r -g 1000 app && useradd -r -u 1000 -g app -m -d /app app
 WORKDIR /app
 
-RUN pip install --no-cache-dir "flask>=3.0" "redis>=5" gunicorn
+RUN pip install --no-cache-dir "flask>=3.0" "redis>=5" "httpx>=0.27" "openai>=1.12" gunicorn
 
 COPY assistant/__init__.py /app/assistant/__init__.py
 COPY assistant/dashboard /app/assistant/dashboard

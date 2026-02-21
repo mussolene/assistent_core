@@ -9,13 +9,19 @@ import time
 from typing import Optional, Set
 
 import httpx
-from assistant.core.bus import EventBus, CH_OUTGOING, CH_STREAM
+from assistant.core.bus import EventBus
 from assistant.core.events import IncomingMessage, OutgoingReply, StreamToken
 from assistant.core.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
 TELEGRAM_API = "https://api.telegram.org/bot"
+
+BOT_COMMANDS = [
+    {"command": "start", "description": "Начать / pairing"},
+    {"command": "help", "description": "Справка"},
+    {"command": "reasoning", "description": "Включить режим рассуждений"},
+]
 
 
 def get_config() -> dict:
@@ -81,6 +87,19 @@ async def run_telegram_adapter() -> None:
     limiter = RateLimiter(max_per_minute=rate_limit)
     base_url = f"{TELEGRAM_API}{token}"
 
+    # Register bot commands (menu)
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.post(
+                f"{base_url}/setMyCommands",
+                json={"commands": BOT_COMMANDS},
+                timeout=10.0,
+            )
+            if not r.json().get("ok"):
+                logger.debug("setMyCommands: %s", r.json())
+    except Exception as e:
+        logger.warning("setMyCommands failed: %s", e)
+
     async def on_outgoing(payload: OutgoingReply) -> None:
         try:
             async with httpx.AsyncClient() as client:
@@ -123,10 +142,26 @@ async def run_telegram_adapter() -> None:
                     if not msg:
                         continue
                     user_id = str(msg["from"]["id"])
+                    uid_int = int(msg["from"]["id"])
                     chat_id = str(msg["chat"]["id"])
                     message_id = str(msg.get("message_id", ""))
-                    text = msg.get("text") or ""
-                    if allowed and int(msg["from"]["id"]) not in allowed:
+                    text = (msg.get("text") or "").strip()
+                    # Pairing: /start or /pair when pairing mode is on
+                    if text in ("/start", "/pair"):
+                        from assistant.dashboard.config_store import get_config_from_redis, add_telegram_allowed_user
+                        from assistant.dashboard.config_store import PAIRING_MODE_KEY
+                        redis_cfg = await get_config_from_redis(redis_url)
+                        if (redis_cfg.get(PAIRING_MODE_KEY) or "").lower() in ("true", "1", "yes"):
+                            await add_telegram_allowed_user(redis_url, uid_int)
+                            allowed.add(uid_int)
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={"chat_id": chat_id, "text": "Pairing выполнен. Ваш ID добавлен в разрешённые."},
+                                    timeout=5.0,
+                                )
+                            continue
+                    if allowed and uid_int not in allowed:
                         logger.debug("user not in whitelist: %s", user_id)
                         continue
                     if not limiter.allow(user_id):

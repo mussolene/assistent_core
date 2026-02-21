@@ -82,23 +82,8 @@ services:
           memory: 128M
     user: "1000:1000"
 
-  vector-db:
-    image: qdrant/qdrant:v1.7.4
-    volumes:
-      - qdrant_storage:/qdrant/storage
-    networks:
-      - assistant
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 512M
-    # Qdrant пишет в /qdrant/storage; без user образ работает от root и volume доступен
-
 volumes:
   redis_data:
-  qdrant_storage:
 
 networks:
   assistant:

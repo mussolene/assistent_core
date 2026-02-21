@@ -61,12 +61,12 @@ docker compose up --build
 This starts:
 
 - **redis**: Event bus and task state (with healthcheck).
-- **dashboard**: Web UI for initial setup on http://localhost:8080 — задайте токен бота и список разрешённых User ID; данные сохраняются в Redis, токен при запуске не запрашивается.
+- **dashboard**: Web UI on http://localhost:8080 — Telegram (token, pairing), Model (URL, test connection), MCP skills, Redis monitoring. Config stored in Redis.
 - **assistant-core**: Orchestrator, agents, skills, model gateway client.
-- **telegram-adapter**: Long polling; читает токен из Redis (если не задан в env). Если токена нет — выводит сообщение и ждёт настройки через Dashboard.
-- **vector-db**: Qdrant for optional vector memory.
+- **telegram-adapter**: Long polling; reads token from Redis. Registers bot commands (/start, /help, /reasoning). Pairing: enable in Dashboard, then user sends /start to bot to be added to allowed list.
+- Vector memory is in-process (optional `sentence-transformers`); no separate vector-db service by default.
 
-**Первичная настройка:** откройте http://localhost:8080, введите токен бота и при необходимости User ID, нажмите «Сохранить». Затем перезапустите telegram-adapter: `docker compose restart telegram-adapter`.
+**Setup:** open http://localhost:8080, set bot token and optionally enable Pairing (then send /start to the bot), set model URL and name, save. Restart telegram-adapter after token change, assistant-core after model change.
 
 Ensure Ollama (or your OpenAI-compatible server) is running on the host; set `OPENAI_BASE_URL` in `.env` if needed (e.g. `http://host.docker.internal:11434/v1`).
 

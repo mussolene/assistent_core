@@ -10,6 +10,8 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 REDIS_PREFIX = "assistant:config:"
+MCP_SERVERS_KEY = "MCP_SERVERS"
+PAIRING_MODE_KEY = "PAIRING_MODE"
 
 
 def get_redis_url() -> str:
@@ -33,6 +35,11 @@ async def get_config_from_redis(redis_url: str) -> dict[str, Any]:
                         out[name] = [int(x.strip()) for x in val.split(",") if x.strip()]
                     except ValueError:
                         out[name] = val
+                elif name == MCP_SERVERS_KEY:
+                    try:
+                        out[name] = json.loads(val) if val else []
+                    except json.JSONDecodeError:
+                        out[name] = []
                 else:
                     out[name] = val
         await client.close()
@@ -59,6 +66,11 @@ def get_config_from_redis_sync(redis_url: str) -> dict[str, Any]:
                         out[name] = [int(x.strip()) for x in val.split(",") if x.strip()]
                     except ValueError:
                         out[name] = val
+                elif name == MCP_SERVERS_KEY:
+                    try:
+                        out[name] = json.loads(val) if val else []
+                    except json.JSONDecodeError:
+                        out[name] = []
                 else:
                     out[name] = val
         client.close()
@@ -68,26 +80,44 @@ def get_config_from_redis_sync(redis_url: str) -> dict[str, Any]:
         return {}
 
 
-async def set_config_in_redis(redis_url: str, key: str, value: str | list[int]) -> None:
+def _serialize_value(key: str, value: Any) -> str:
+    if key == MCP_SERVERS_KEY:
+        return json.dumps(value) if not isinstance(value, str) else value
     if isinstance(value, list):
-        value = ",".join(str(x) for x in value)
+        return ",".join(str(x) for x in value)
+    return str(value)
+
+
+async def set_config_in_redis(redis_url: str, key: str, value: str | list[int] | list[dict]) -> None:
+    val_str = _serialize_value(key, value)
     try:
         import redis.asyncio as aioredis
         client = aioredis.from_url(redis_url, decode_responses=True)
-        await client.set(REDIS_PREFIX + key, value)
+        await client.set(REDIS_PREFIX + key, val_str)
         await client.close()
     except Exception as e:
         logger.exception("Could not save config to Redis: %s", e)
         raise
 
 
-def set_config_in_redis_sync(redis_url: str, key: str, value: str | list[int]) -> None:
-    if isinstance(value, list):
-        value = ",".join(str(x) for x in value)
+async def add_telegram_allowed_user(redis_url: str, user_id: int) -> None:
+    """Append user_id to TELEGRAM_ALLOWED_USER_IDS in Redis."""
+    cfg = await get_config_from_redis(redis_url)
+    current = cfg.get("TELEGRAM_ALLOWED_USER_IDS") or []
+    if not isinstance(current, list):
+        current = [int(x.strip()) for x in str(current).split(",") if x.strip()]
+    if user_id in current:
+        return
+    current = list(current) + [user_id]
+    await set_config_in_redis(redis_url, "TELEGRAM_ALLOWED_USER_IDS", current)
+
+
+def set_config_in_redis_sync(redis_url: str, key: str, value: str | list[int] | list[dict]) -> None:
+    val_str = _serialize_value(key, value)
     try:
         import redis
         client = redis.from_url(redis_url, decode_responses=True)
-        client.set(REDIS_PREFIX + key, value)
+        client.set(REDIS_PREFIX + key, val_str)
         client.close()
     except Exception as e:
         logger.exception("Could not save config to Redis: %s", e)
