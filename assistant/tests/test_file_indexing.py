@@ -186,6 +186,66 @@ def test_extract_text_unknown_suffix_returns_empty(tmp_path):
     assert out == ""
 
 
+def test_extract_text_pdf_import_error_returns_empty(tmp_path):
+    """_extract_text for PDF when pypdf is not installed returns ''."""
+    (tmp_path / "x.pdf").write_bytes(b"dummy")
+    import sys
+    class FakePypdf:
+        def __getattr__(self, name):
+            raise ImportError("No module named 'pypdf'")
+    with patch.dict(sys.modules, {"pypdf": FakePypdf()}):
+        out = fi._extract_text(tmp_path / "x.pdf", "application/pdf", "x.pdf")
+    assert out == ""
+
+
+def test_extract_text_pdf_exception_returns_empty(tmp_path):
+    """_extract_text for PDF when extraction raises returns ''."""
+    pytest.importorskip("pypdf")
+    (tmp_path / "x.pdf").write_bytes(b"dummy")
+    with patch("pypdf.PdfReader", side_effect=RuntimeError("corrupt pdf")):
+        out = fi._extract_text(tmp_path / "x.pdf", "application/pdf", "x.pdf")
+    assert out == ""
+
+
+def test_extract_text_csv_exception_returns_empty(tmp_path):
+    """_extract_text for CSV when read fails returns ''."""
+    p = tmp_path / "x.csv"
+    p.write_text("a,b", encoding="utf-8")
+    with patch("builtins.open", side_effect=OSError("Permission denied")):
+        out = fi._extract_text(p, "text/csv", "x.csv")
+    assert out == ""
+
+
+def test_extract_text_html_exception_returns_empty(tmp_path):
+    """_extract_text for HTML when read fails returns ''."""
+    p = tmp_path / "x.html"
+    p.write_text("<p>Hi</p>", encoding="utf-8")
+    with patch.object(Path, "read_text", side_effect=OSError("Permission denied")):
+        out = fi._extract_text(p, "text/html", "x.html")
+    assert out == ""
+
+
+def test_extract_text_md_exception_returns_empty(tmp_path):
+    """_extract_text for MD when read fails returns ''."""
+    p = tmp_path / "x.md"
+    p.write_text("# Hi", encoding="utf-8")
+    with patch.object(Path, "read_text", side_effect=OSError("Permission denied")):
+        out = fi._extract_text(p, "", "x.md")
+    assert out == ""
+
+
+def test_extract_text_xlsx_import_error_returns_empty(tmp_path):
+    """_extract_text for XLSX when openpyxl is not installed returns ''."""
+    (tmp_path / "x.xlsx").write_bytes(b"dummy")
+    import sys
+    class FakeOpenpyxl:
+        def __getattr__(self, name):
+            raise ImportError("No module named 'openpyxl'")
+    with patch.dict(sys.modules, {"openpyxl": FakeOpenpyxl()}):
+        out = fi._extract_text(tmp_path / "x.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml", "x.xlsx")
+    assert out == ""
+
+
 @pytest.mark.asyncio
 async def test_index_telegram_attachments_empty():
     ref_ids, text = await fi.index_telegram_attachments(
