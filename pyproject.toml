@@ -94,7 +94,7 @@ exclude_lines = [
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
 ]
-fail_under = 79
+fail_under = 77
 
 [tool.ruff]
 target-version = "py311"

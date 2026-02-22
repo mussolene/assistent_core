@@ -73,6 +73,34 @@ async def test_file_ref_send_without_ref_id():
 
 
 @pytest.mark.asyncio
+async def test_file_ref_send_with_ref_id():
+    with patch("assistant.skills.file_ref.get_file_ref", return_value={"file_id": "tg_file_123", "filename": "doc.pdf"}):
+        skill = FileRefSkill("redis://localhost:6379/99")
+        out = await skill.run({"user_id": "u1", "action": "send", "file_ref_id": "ref1"})
+    assert out.get("ok") is True
+    assert out.get("send_document") == {"file_id": "tg_file_123"}
+    assert out.get("filename") == "doc.pdf"
+
+
+@pytest.mark.asyncio
+async def test_file_ref_send_ref_not_found():
+    with patch("assistant.skills.file_ref.get_file_ref", return_value=None):
+        skill = FileRefSkill("redis://localhost:6379/99")
+        out = await skill.run({"user_id": "u1", "action": "send", "file_ref_id": "bad"})
+    assert out.get("ok") is False
+    assert "найден" in out.get("error", "") or "not found" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_file_ref_send_no_file_id_in_ref():
+    with patch("assistant.skills.file_ref.get_file_ref", return_value={"filename": "x.txt"}):
+        skill = FileRefSkill("redis://localhost:6379/99")
+        out = await skill.run({"user_id": "u1", "action": "send", "file_ref_id": "r1"})
+    assert out.get("ok") is False
+    assert "file_id" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
 async def test_checklist_create():
     skill = ChecklistSkill()
     out = await skill.run(
@@ -86,11 +114,52 @@ async def test_checklist_create():
 
 
 @pytest.mark.asyncio
+async def test_checklist_create_with_others_flags():
+    skill = ChecklistSkill()
+    out = await skill.run(
+        {
+            "action": "create",
+            "title": "T",
+            "tasks": [{"text": "One"}],
+            "others_can_add_tasks": True,
+            "others_can_mark_tasks_as_done": False,
+        }
+    )
+    assert out.get("ok") is True
+    assert out["send_checklist"].get("others_can_add_tasks") is True
+    assert out["send_checklist"].get("others_can_mark_tasks_as_done") is False
+
+
+@pytest.mark.asyncio
 async def test_checklist_create_no_title():
     skill = ChecklistSkill()
     out = await skill.run({"action": "create", "tasks": [{"text": "X"}]})
     assert out.get("ok") is False
     assert "title" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_checklist_action_not_create():
+    skill = ChecklistSkill()
+    out = await skill.run({"action": "list", "title": "X", "tasks": [{"text": "Y"}]})
+    assert out.get("ok") is False
+    assert "create" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_checklist_tasks_not_list():
+    skill = ChecklistSkill()
+    out = await skill.run({"action": "create", "title": "T", "tasks": "not a list"})
+    assert out.get("ok") is False
+    assert "tasks" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_checklist_empty_tasks():
+    skill = ChecklistSkill()
+    out = await skill.run({"action": "create", "title": "T", "tasks": []})
+    assert out.get("ok") is False
+    assert "одна" in out.get("error", "") or "task" in out.get("error", "").lower()
 
 
 @pytest.mark.asyncio

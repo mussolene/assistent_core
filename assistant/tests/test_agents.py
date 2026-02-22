@@ -147,6 +147,32 @@ async def test_assistant_agent_handle_model_error_connection():
 
 
 @pytest.mark.asyncio
+async def test_tool_agent_no_tool_calls():
+    reg = SkillRegistry()
+    runner = SandboxRunner()
+    memory = MagicMock()
+    agent = ToolAgent(reg, runner, memory)
+    ctx = _ctx(metadata={})
+    result = await agent.handle(ctx)
+    assert result.success is False
+    assert "no tool_calls" in result.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_tool_agent_missing_skill_name():
+    reg = SkillRegistry()
+    runner = SandboxRunner()
+    memory = MagicMock()
+    memory.append_tool_result = AsyncMock()
+    agent = ToolAgent(reg, runner, memory)
+    ctx = _ctx(metadata={"pending_tool_calls": [{"params": {"x": 1}}]})
+    result = await agent.handle(ctx)
+    assert result.success is True
+    assert result.metadata["tool_results"][0].get("error") == "missing skill name"
+    assert result.metadata["tool_results"][0].get("ok") is False
+
+
+@pytest.mark.asyncio
 async def test_tool_agent_runs_skill():
     reg = SkillRegistry()
     runner = SandboxRunner()
@@ -194,3 +220,5 @@ async def test_tool_agent_unknown_skill():
     assert result.success is True
     assert result.metadata
     assert any(r.get("ok") is False for r in result.metadata.get("tool_results", []))
+
+

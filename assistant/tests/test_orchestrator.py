@@ -172,6 +172,68 @@ async def test_orchestrator_task_to_context_stream_callback_none_when_stream_dis
     assert ctx.metadata.get("stream_callback") is None
 
 
+def test_orchestrator_is_only_file_content_question():
+    assert Orchestrator._is_only_file_content_question("что написано тут") is True
+    assert Orchestrator._is_only_file_content_question("Что в файле?") is True
+    assert Orchestrator._is_only_file_content_question("опиши документ") is True
+    assert Orchestrator._is_only_file_content_question("содержимое файла") is True
+    assert Orchestrator._is_only_file_content_question("") is False  # пустой обрабатывается отдельно в caller
+    assert Orchestrator._is_only_file_content_question("напомни завтра про встречу") is False
+    assert Orchestrator._is_only_file_content_question("x" * 150) is False
+
+
+def test_orchestrator_get_send_document_from_tool_results():
+    assert Orchestrator._get_send_document_from_tool_results(None) is None
+    assert Orchestrator._get_send_document_from_tool_results({}) is None
+    assert Orchestrator._get_send_document_from_tool_results(
+        {"tool_results": [{"send_document": {"file_id": "abc"}}]}
+    ) == {"file_id": "abc"}
+    assert Orchestrator._get_send_document_from_tool_results(
+        {"tool_results": [{"x": 1}, {"send_document": {"file_id": "last"}}]}
+    ) == {"file_id": "last"}
+
+
+def test_orchestrator_get_send_checklist_from_tool_results():
+    assert Orchestrator._get_send_checklist_from_tool_results(None) is None
+    assert Orchestrator._get_send_checklist_from_tool_results(
+        {"tool_results": [{"send_checklist": {"title": "T", "tasks": []}}]}
+    ) == {"title": "T", "tasks": []}
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_file_summary_for_user_no_gateway():
+    config = MagicMock()
+    bus = MagicMock()
+    orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=None)
+    out = await orch._file_summary_for_user("some text", ["ref1"])
+    assert "проиндексирован" in out or "Можешь спросить" in out
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_file_summary_for_user_with_gateway_returns_summary():
+    config = MagicMock()
+    bus = MagicMock()
+    gateway = MagicMock()
+    gateway.generate = AsyncMock(return_value="Краткое содержание документа.")
+    async def get_gw():
+        return gateway
+    orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=get_gw)
+    out = await orch._file_summary_for_user("Document text here.", ["ref1"])
+    assert "Краткое содержание" in out
+    gateway.generate.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_file_summary_for_user_gateway_raises_fallback():
+    config = MagicMock()
+    bus = MagicMock()
+    async def get_gw():
+        raise RuntimeError("model unavailable")
+    orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=get_gw)
+    out = await orch._file_summary_for_user("text", ["ref1"])
+    assert "проиндексирован" in out or "Можешь спросить" in out
+
+
 @pytest.mark.asyncio
 async def test_orchestrator_start_stop():
     """start() connects bus and tasks, stop() disconnects."""
