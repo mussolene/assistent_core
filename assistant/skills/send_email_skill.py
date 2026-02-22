@@ -36,7 +36,9 @@ def _get_allowed_recipients(redis_url: str) -> list[str]:
             try:
                 data = json.loads(raw)
                 if isinstance(data, list):
-                    return [str(e).strip().lower() for e in data if str(e).strip() and "@" in str(e)]
+                    return [
+                        str(e).strip().lower() for e in data if str(e).strip() and "@" in str(e)
+                    ]
             except json.JSONDecodeError:
                 return [e.strip().lower() for e in raw.split(",") if e.strip() and "@" in e]
         return []
@@ -79,7 +81,10 @@ class SendEmailSkill(BaseSkill):
                 client.expire(rate_key, RATE_WINDOW_SEC)
             client.close()
             if n > RATE_MAX_PER_WINDOW:
-                return {"ok": False, "error": f"Превышен лимит отправки писем ({RATE_MAX_PER_WINDOW} в час)."}
+                return {
+                    "ok": False,
+                    "error": f"Превышен лимит отправки писем ({RATE_MAX_PER_WINDOW} в час).",
+                }
         except Exception as e:
             logger.warning("send_email rate limit check: %s", e)
             # Продолжаем без rate limit при недоступности Redis
@@ -92,5 +97,8 @@ class SendEmailSkill(BaseSkill):
             lambda: send_email(to, subject, body, self._redis_url),
         )
         if not ok:
-            return {"ok": False, "error": "Не удалось отправить письмо (проверь настройки Email в дашборде)."}
+            return {
+                "ok": False,
+                "error": "Не удалось отправить письмо (проверь настройки Email в дашборде).",
+            }
         return {"ok": True, "message": "Письмо отправлено."}

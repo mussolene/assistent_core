@@ -31,7 +31,9 @@ async def test_index_repo_no_qdrant_configured(skill, tmp_path):
 @pytest.mark.asyncio
 async def test_index_repo_success(skill, tmp_path):
     (tmp_path / "a.py").write_text("x = 1")
-    with patch("assistant.skills.index_repo_skill.get_qdrant_url", return_value="http://qdrant:6333"):
+    with patch(
+        "assistant.skills.index_repo_skill.get_qdrant_url", return_value="http://qdrant:6333"
+    ):
         with patch(
             "assistant.skills.index_repo_skill.index_repo_to_qdrant",
             return_value=(5, 1, ""),
@@ -51,11 +53,13 @@ async def test_index_repo_custom_collection(skill, tmp_path):
             "assistant.skills.index_repo_skill.index_repo_to_qdrant",
             return_value=(1, 1, ""),
         ) as mock_index:
-            out = await skill.run({
-                "repo_dir": str(tmp_path),
-                "user_id": "u1",
-                "collection": "my_repos",
-            })
+            out = await skill.run(
+                {
+                    "repo_dir": str(tmp_path),
+                    "user_id": "u1",
+                    "collection": "my_repos",
+                }
+            )
     assert out.get("ok") is True
     assert out.get("collection") == "my_repos"
     mock_index.assert_called_once()

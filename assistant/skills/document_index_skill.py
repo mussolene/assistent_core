@@ -34,11 +34,16 @@ class DocumentIndexSkill(BaseSkill):
             return {"ok": False, "error": "Укажи path (путь к файлу)."}
         qdrant_url = get_qdrant_url(self._redis_url)
         if not qdrant_url:
-            return {"ok": False, "error": "Qdrant не настроен. Задай QDRANT_URL в env или дашборде."}
+            return {
+                "ok": False,
+                "error": "Qdrant не настроен. Задай QDRANT_URL в env или дашборде.",
+            }
         # path может быть абсолютным или относительным к workspace
         p = Path(path)
         if not p.is_absolute():
-            workspace = os.getenv("WORKSPACE_DIR", "").strip() or os.getenv("SANDBOX_WORKSPACE_DIR", "/workspace")
+            workspace = os.getenv("WORKSPACE_DIR", "").strip() or os.getenv(
+                "SANDBOX_WORKSPACE_DIR", "/workspace"
+            )
             p = Path(workspace) / path
         mime_type = (params.get("mime_type") or "").strip()
         filename = params.get("filename") or p.name

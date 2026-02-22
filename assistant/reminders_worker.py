@@ -4,6 +4,7 @@
 Запуск: reminders-worker (из pyproject) или python -m assistant.reminders_worker.
 Переменные: REDIS_URL (обязательно).
 """
+
 from __future__ import annotations
 
 import logging

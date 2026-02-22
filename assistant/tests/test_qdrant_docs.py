@@ -184,7 +184,10 @@ def test_get_repo_rev_returns_short_sha(tmp_path):
 def test_get_qdrant_collection_default(monkeypatch):
     monkeypatch.delenv("QDRANT_REPOS_COLLECTION", raising=False)
     with patch("assistant.dashboard.config_store.get_config_from_redis_sync", return_value={}):
-        assert qdrant_docs.get_qdrant_collection("redis://x", "QDRANT_REPOS_COLLECTION", "repos") == "repos"
+        assert (
+            qdrant_docs.get_qdrant_collection("redis://x", "QDRANT_REPOS_COLLECTION", "repos")
+            == "repos"
+        )
 
 
 def test_get_qdrant_collection_from_env(monkeypatch):
@@ -202,15 +205,25 @@ def test_search_qdrant_success():
         status_code=200,
         json=lambda: {
             "result": [
-                {"id": "1", "score": 0.9, "payload": {"text": "chunk one", "repo": "r1", "path": "a.py"}},
-                {"id": "2", "score": 0.8, "payload": {"text": "chunk two", "repo": "r1", "path": "b.py"}},
+                {
+                    "id": "1",
+                    "score": 0.9,
+                    "payload": {"text": "chunk one", "repo": "r1", "path": "a.py"},
+                },
+                {
+                    "id": "2",
+                    "score": 0.8,
+                    "payload": {"text": "chunk two", "repo": "r1", "path": "b.py"},
+                },
             ]
         },
     )
     with patch("assistant.core.qdrant_docs._embed_texts", return_value=[[0.1] * 384]):
         with patch.object(httpx.Client, "post", return_value=resp):
             with patch.object(httpx.Client, "close"):
-                out = qdrant_docs.search_qdrant("http://qdrant:6333", "repos", "test query", top_k=5)
+                out = qdrant_docs.search_qdrant(
+                    "http://qdrant:6333", "repos", "test query", top_k=5
+                )
     assert len(out) == 2
     assert out[0]["text"] == "chunk one"
     assert out[0]["payload"]["repo"] == "r1"
@@ -221,9 +234,7 @@ def test_search_qdrant_success():
 
 
 def test_index_conversation_to_qdrant_empty_messages():
-    cnt, err = qdrant_docs.index_conversation_to_qdrant(
-        [], "u1", "c1", "http://qdrant:6333"
-    )
+    cnt, err = qdrant_docs.index_conversation_to_qdrant([], "u1", "c1", "http://qdrant:6333")
     assert cnt == 0
     assert err == ""
 
@@ -291,7 +302,11 @@ def test_search_conversation_memory_success():
         status_code=200,
         json=lambda: {
             "result": [
-                {"id": "1", "score": 0.85, "payload": {"text": "user: hello", "user_id": "u1", "chat_id": "c1"}},
+                {
+                    "id": "1",
+                    "score": 0.85,
+                    "payload": {"text": "user: hello", "user_id": "u1", "chat_id": "c1"},
+                },
             ]
         },
     )

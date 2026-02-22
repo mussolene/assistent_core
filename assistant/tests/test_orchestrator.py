@@ -384,7 +384,12 @@ async def test_orchestrator_attachments_with_path_index_to_qdrant():
         orch._agents = MagicMock()
         payload = _make_incoming_payload(
             attachments=[
-                {"file_id": "f1", "filename": "a.txt", "source": "telegram", "path": "/tmp/up/user1/1_0_a.txt"},
+                {
+                    "file_id": "f1",
+                    "filename": "a.txt",
+                    "source": "telegram",
+                    "path": "/tmp/up/user1/1_0_a.txt",
+                },
             ]
         )
         payload.text = ""

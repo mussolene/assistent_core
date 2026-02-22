@@ -664,7 +664,9 @@ class TaskSkill(BaseSkill):
 
     async def _list_subtasks(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         """Список подзадач по parent_id (итерация 10.8)."""
-        parent_id = (params.get("parent_id") or params.get("task_id") or params.get("id") or "").strip()
+        parent_id = (
+            params.get("parent_id") or params.get("task_id") or params.get("id") or ""
+        ).strip()
         if not parent_id:
             return {"ok": False, "error": "parent_id обязателен"}
         parent = await _load_task(client, parent_id)
@@ -793,7 +795,9 @@ class TaskSkill(BaseSkill):
                 tasks.append(t)
         return {"ok": True, "tasks": tasks, "total": len(tasks)}
 
-    async def _archive_completed(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    async def _archive_completed(
+        self, client, user_id: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
         """Перенос всех выполненных (status=done) задач в архив: убираем из основного списка, добавляем в архив (итерация 10.6)."""
         raw = await client.get(_user_list_key(user_id))
         ids = list(json.loads(raw) if raw else [])
@@ -813,13 +817,17 @@ class TaskSkill(BaseSkill):
                     archived_count += 1
             else:
                 new_user_ids.append(tid)
-        await client.set(_user_list_key(user_id), json.dumps(new_user_ids), ex=TASK_TTL_DAYS * 86400)
+        await client.set(
+            _user_list_key(user_id), json.dumps(new_user_ids), ex=TASK_TTL_DAYS * 86400
+        )
         await client.set(archive_key, json.dumps(archive_ids), ex=TASK_TTL_DAYS * 86400)
-        return {"ok": True, "archived_count": archived_count, "user_reply": f"Заархивировано задач: {archived_count}."}
+        return {
+            "ok": True,
+            "archived_count": archived_count,
+            "user_reply": f"Заархивировано задач: {archived_count}.",
+        }
 
-    async def _list_archive(
-        self, client, user_id: str, params: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _list_archive(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         """Список заархивированных задач с опциональным фильтром по периоду (from_date, to_date по updated_at) (итерация 10.6)."""
         archive_key = _archive_list_key(user_id)
         raw = await client.get(archive_key)
@@ -851,9 +859,7 @@ class TaskSkill(BaseSkill):
         formatted = format_tasks_list_readable(tasks)
         return {"ok": True, "tasks": tasks, "total": len(tasks), "formatted": formatted}
 
-    async def _search_archive(
-        self, client, user_id: str, params: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def _search_archive(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         """Поиск по архиву по смыслу (title/description) с фильтром по датам (итерация 10.7)."""
         archive_key = _archive_list_key(user_id)
         raw = await client.get(archive_key)

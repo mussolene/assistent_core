@@ -172,6 +172,7 @@ async def test_memory_manager_get_context_includes_conversation_memory():
     with patch("assistant.core.qdrant_docs.get_qdrant_url", return_value="http://qdrant:6333"):
         with patch("assistant.core.qdrant_docs.search_conversation_memory", return_value=conv_hits):
             import asyncio
+
             loop = asyncio.get_event_loop()
 
             async def run_in_executor(executor, fn, *args):
@@ -181,9 +182,9 @@ async def test_memory_manager_get_context_includes_conversation_memory():
                 ctx = await mgr.get_context_for_user(
                     "u1", "task1", include_vector=True, chat_id="c1"
                 )
-    assert any(
-        "Relevant conversation memory" in str(m.get("content", "")) for m in ctx
-    ), "expected a system message with conversation memory"
+    assert any("Relevant conversation memory" in str(m.get("content", "")) for m in ctx), (
+        "expected a system message with conversation memory"
+    )
     assert any("past question" in str(m.get("content", "")) for m in ctx)
 
 

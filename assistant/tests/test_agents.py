@@ -233,6 +233,7 @@ async def test_assistant_agent_handle_model_error_with_stream_cb():
 @pytest.mark.filterwarnings("ignore:coroutine .* was never awaited:RuntimeWarning")
 async def test_assistant_agent_handle_model_error_connection():
     """When model.generate raises connection error, returns user-friendly message."""
+
     async def _raise_connection_error(*args: object, **kwargs: object) -> str:
         raise ConnectionError("Connection refused")
 

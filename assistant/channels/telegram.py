@@ -86,7 +86,7 @@ async def _download_telegram_attachment(
             logger.warning("telegram file too large, skip save: %s bytes", len(content))
             return None
         os.makedirs(dest_dir, exist_ok=True)
-        safe_name = re.sub(r'[^\w\-\.]', '_', filename)[:200] or "file"
+        safe_name = re.sub(r"[^\w\-\.]", "_", filename)[:200] or "file"
         full_path = os.path.join(dest_dir, safe_name)
         with open(full_path, "wb") as f:
             f.write(content)
@@ -235,14 +235,21 @@ async def _handle_task_done_callback(
             async with httpx.AsyncClient() as client:
                 await client.post(
                     f"{base_url}/answerCallbackQuery",
-                    json={"callback_query_id": callback_query_id, "text": result.get("error", "Ошибка")[:200]},
+                    json={
+                        "callback_query_id": callback_query_id,
+                        "text": result.get("error", "Ошибка")[:200],
+                    },
                     timeout=5.0,
                 )
         except Exception:
             pass
         return
     list_result = await skill.run({"action": "list_tasks", "user_id": user_id, "only_actual": True})
-    if list_result.get("ok") and "text_telegram" in list_result and "inline_keyboard" in list_result:
+    if (
+        list_result.get("ok")
+        and "text_telegram" in list_result
+        and "inline_keyboard" in list_result
+    ):
         text = _markdown_to_telegram_html(list_result["text_telegram"])
         try:
             async with httpx.AsyncClient() as client:
@@ -310,7 +317,9 @@ async def _get_repos_list_github(redis_url: str, page: int = 1) -> dict:
 
         cfg = await get_config_from_redis(redis_url)
         token = (cfg.get("GITHUB_TOKEN") or "").strip()
-        return await list_github_user_repos(token=token or None, per_page=REPOS_PAGE_SIZE, page=page)
+        return await list_github_user_repos(
+            token=token or None, per_page=REPOS_PAGE_SIZE, page=page
+        )
     except Exception as e:
         logger.debug("get_repos_list_github: %s", e)
         return {"ok": False, "error": str(e), "items": []}
@@ -324,7 +333,9 @@ async def _get_repos_list_gitlab(redis_url: str, page: int = 1) -> dict:
 
         cfg = await get_config_from_redis(redis_url)
         token = (cfg.get("GITLAB_TOKEN") or "").strip()
-        return await list_gitlab_user_repos(token=token or None, per_page=REPOS_PAGE_SIZE, page=page)
+        return await list_gitlab_user_repos(
+            token=token or None, per_page=REPOS_PAGE_SIZE, page=page
+        )
     except Exception as e:
         logger.debug("get_repos_list_gitlab: %s", e)
         return {"ok": False, "error": str(e), "items": []}
@@ -342,7 +353,14 @@ def _build_repos_inline_keyboard(
     for it in items:
         if kind == "cloned":
             path = it.get("path") or it.get("remote_url") or "—"
-            rows.append([{"text": (path[:40] + "…" if len(path) > 40 else path), "url": f"{dashboard_url.rstrip('/')}/repos"}])
+            rows.append(
+                [
+                    {
+                        "text": (path[:40] + "…" if len(path) > 40 else path),
+                        "url": f"{dashboard_url.rstrip('/')}/repos",
+                    }
+                ]
+            )
         else:
             name = (it.get("full_name") or "")[:35]
             url = it.get("html_url") or it.get("web_url") or ""
@@ -350,9 +368,13 @@ def _build_repos_inline_keyboard(
                 rows.append([{"text": name or "—", "url": url}])
     nav = []
     if page > 0:
-        nav.append({"text": "◀ Назад", "callback_data": f"{REPOS_CALLBACK_PREFIX}{kind}:{page - 1}"})
+        nav.append(
+            {"text": "◀ Назад", "callback_data": f"{REPOS_CALLBACK_PREFIX}{kind}:{page - 1}"}
+        )
     if has_next_page:
-        nav.append({"text": "Вперёд ▶", "callback_data": f"{REPOS_CALLBACK_PREFIX}{kind}:{page + 1}"})
+        nav.append(
+            {"text": "Вперёд ▶", "callback_data": f"{REPOS_CALLBACK_PREFIX}{kind}:{page + 1}"}
+        )
     if nav:
         rows.append(nav)
     rows.append([{"text": "Открыть дашборд", "url": f"{dashboard_url.rstrip('/')}/repos"}])
@@ -903,8 +925,14 @@ async def run_telegram_adapter() -> None:
                             else:
                                 kind = "cloned"
                                 page = 0
-                            dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:8080").rstrip("/")
-                            label = "Склонированные" if kind == "cloned" else ("GitHub" if kind == "github" else "GitLab")
+                            dashboard_url = os.getenv(
+                                "DASHBOARD_URL", "http://localhost:8080"
+                            ).rstrip("/")
+                            label = (
+                                "Склонированные"
+                                if kind == "cloned"
+                                else ("GitHub" if kind == "github" else "GitLab")
+                            )
                             try:
                                 if kind == "cloned":
                                     items_all = await _get_repos_list_cloned(redis_url)
@@ -914,11 +942,17 @@ async def run_telegram_adapter() -> None:
                                     has_next = start + len(items) < total
                                 else:
                                     api_page = page + 1
-                                    out = await _get_repos_list_github(redis_url, page=api_page) if kind == "github" else await _get_repos_list_gitlab(redis_url, page=api_page)
+                                    out = (
+                                        await _get_repos_list_github(redis_url, page=api_page)
+                                        if kind == "github"
+                                        else await _get_repos_list_gitlab(redis_url, page=api_page)
+                                    )
                                     items = out.get("items") or []
                                     has_next = len(items) >= REPOS_PAGE_SIZE
                                 reply = _escape_html(f"Репозитории ({label}): страница {page + 1}.")
-                                keyboard = _build_repos_inline_keyboard(kind, items, page, has_next, dashboard_url)
+                                keyboard = _build_repos_inline_keyboard(
+                                    kind, items, page, has_next, dashboard_url
+                                )
                                 async with httpx.AsyncClient() as client:
                                     await client.post(
                                         f"{base_url}/editMessageText",
@@ -1034,9 +1068,14 @@ async def run_telegram_adapter() -> None:
                                 )
                                 if path:
                                     att["path"] = path
-                                    if (fname.endswith(".txt") or att.get("mime_type", "").startswith("text/")) and os.path.isfile(path):
+                                    if (
+                                        fname.endswith(".txt")
+                                        or att.get("mime_type", "").startswith("text/")
+                                    ) and os.path.isfile(path):
                                         try:
-                                            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                                            with open(
+                                                path, "r", encoding="utf-8", errors="replace"
+                                            ) as f:
                                                 att["extracted_text"] = f.read(100_000)
                                         except Exception:
                                             pass
@@ -1137,8 +1176,16 @@ async def run_telegram_adapter() -> None:
                         dashboard_url = (
                             os.getenv("DASHBOARD_URL", "http://localhost:8080")
                         ).rstrip("/")
-                        kind = "cloned" if text == "/repos" else ("github" if text == "/github" else "gitlab")
-                        label = "Склонированные" if kind == "cloned" else ("GitHub" if kind == "github" else "GitLab")
+                        kind = (
+                            "cloned"
+                            if text == "/repos"
+                            else ("github" if text == "/github" else "gitlab")
+                        )
+                        label = (
+                            "Склонированные"
+                            if kind == "cloned"
+                            else ("GitHub" if kind == "github" else "GitLab")
+                        )
                         try:
                             if kind == "cloned":
                                 items_all = await _get_repos_list_cloned(redis_url)
@@ -1146,14 +1193,19 @@ async def run_telegram_adapter() -> None:
                                 items = items_all[:REPOS_PAGE_SIZE]
                                 page = 0
                                 has_next = total > REPOS_PAGE_SIZE
-                                reply = _escape_html(f"Репозитории ({label}): {total} шт. Страница 1.")
+                                reply = _escape_html(
+                                    f"Репозитории ({label}): {total} шт. Страница 1."
+                                )
                             else:
                                 if kind == "github":
                                     out = await _get_repos_list_github(redis_url, page=1)
                                 else:
                                     out = await _get_repos_list_gitlab(redis_url, page=1)
                                 if not out.get("ok"):
-                                    reply = _escape_html(out.get("error") or "Не удалось загрузить список. Настройте токен в дашборде.")
+                                    reply = _escape_html(
+                                        out.get("error")
+                                        or "Не удалось загрузить список. Настройте токен в дашборде."
+                                    )
                                     items = []
                                     page = 0
                                     has_next = False
@@ -1162,7 +1214,9 @@ async def run_telegram_adapter() -> None:
                                     page = 0
                                     has_next = len(items) >= REPOS_PAGE_SIZE
                                     reply = _escape_html(f"Репозитории ({label}): страница 1.")
-                            keyboard = _build_repos_inline_keyboard(kind, items, page, has_next, dashboard_url)
+                            keyboard = _build_repos_inline_keyboard(
+                                kind, items, page, has_next, dashboard_url
+                            )
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
@@ -1176,12 +1230,18 @@ async def run_telegram_adapter() -> None:
                                 )
                         except Exception as e:
                             logger.debug("sendMessage repos list: %s", e)
-                            reply = _escape_html("Не удалось загрузить список. Проверьте настройки в дашборде.")
+                            reply = _escape_html(
+                                "Не удалось загрузить список. Проверьте настройки в дашборде."
+                            )
                             try:
                                 async with httpx.AsyncClient() as client:
                                     await client.post(
                                         f"{base_url}/sendMessage",
-                                        json={"chat_id": chat_id, "text": reply, "parse_mode": PARSE_MODE},
+                                        json={
+                                            "chat_id": chat_id,
+                                            "text": reply,
+                                            "parse_mode": PARSE_MODE,
+                                        },
                                         timeout=5.0,
                                     )
                             except Exception as e2:

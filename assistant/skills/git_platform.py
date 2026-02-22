@@ -322,7 +322,11 @@ async def list_gitlab_user_repos(
             )
         if r.status_code != 200:
             try:
-                err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+                err = (
+                    r.json()
+                    if r.headers.get("content-type", "").startswith("application/json")
+                    else {}
+                )
             except Exception:
                 err = {}
             err = err if isinstance(err, dict) else {}

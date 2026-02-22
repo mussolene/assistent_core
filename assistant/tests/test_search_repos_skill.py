@@ -29,7 +29,9 @@ async def test_search_repos_no_qdrant(skill):
 
 @pytest.mark.asyncio
 async def test_search_repos_success(skill):
-    with patch("assistant.skills.search_repos_skill.get_qdrant_url", return_value="http://qdrant:6333"):
+    with patch(
+        "assistant.skills.search_repos_skill.get_qdrant_url", return_value="http://qdrant:6333"
+    ):
         with patch(
             "assistant.skills.search_repos_skill.search_qdrant",
             return_value=[
@@ -46,7 +48,9 @@ async def test_search_repos_success(skill):
 @pytest.mark.asyncio
 async def test_search_repos_custom_collection(skill):
     with patch("assistant.skills.search_repos_skill.get_qdrant_url", return_value="http://q:6333"):
-        with patch("assistant.skills.search_repos_skill.search_qdrant", return_value=[]) as mock_search:
+        with patch(
+            "assistant.skills.search_repos_skill.search_qdrant", return_value=[]
+        ) as mock_search:
             out = await skill.run({"query": "x", "collection": "documents"})
     assert out.get("ok") is True
     assert out.get("collection") == "documents"

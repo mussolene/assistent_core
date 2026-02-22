@@ -175,7 +175,9 @@ class Orchestrator:
                                     logger.debug("Qdrant index %s: %s", path, err)
                 except Exception as e:
                     logger.debug("Qdrant indexing for attachments: %s", e)
-                paths_note = _format_attachment_paths_for_context(payload.attachments, payload.user_id)
+                paths_note = _format_attachment_paths_for_context(
+                    payload.attachments, payload.user_id
+                )
                 if ref_ids:
                     if not original_text:
                         payload.text = "[Индексированы файлы в память. Можешь спросить по содержимому или попросить «отправь файл …».]"
@@ -204,7 +206,9 @@ class Orchestrator:
                         return
                 elif paths_note:
                     # Вложения с path без индексации в локальную память — передаём пути ассистенту для index_document
-                    payload.text = (payload.text or original_text or "[Вложение.]").strip() + " " + paths_note
+                    payload.text = (
+                        (payload.text or original_text or "[Вложение.]").strip() + " " + paths_note
+                    )
                     await self._tasks.update(task_id, text=payload.text)
             except Exception as e:
                 logger.exception("File indexing: %s", e)

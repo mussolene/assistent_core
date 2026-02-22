@@ -408,7 +408,12 @@ async def test_list_github_user_repos_success():
             return_value=MagicMock(
                 status_code=200,
                 json=lambda: [
-                    {"full_name": "u/r1", "html_url": "https://github.com/u/r1", "clone_url": "https://github.com/u/r1.git", "description": "d1"},
+                    {
+                        "full_name": "u/r1",
+                        "html_url": "https://github.com/u/r1",
+                        "clone_url": "https://github.com/u/r1.git",
+                        "description": "d1",
+                    },
                 ],
                 headers={"content-type": "application/json"},
             )
@@ -459,7 +464,12 @@ async def test_list_gitlab_user_repos_success():
             return_value=MagicMock(
                 status_code=200,
                 json=lambda: [
-                    {"path_with_namespace": "g/r1", "web_url": "https://gitlab.com/g/r1", "http_url_to_repo": "https://gitlab.com/g/r1.git", "description": ""},
+                    {
+                        "path_with_namespace": "g/r1",
+                        "web_url": "https://gitlab.com/g/r1",
+                        "http_url_to_repo": "https://gitlab.com/g/r1.git",
+                        "description": "",
+                    },
                 ],
                 headers={"content-type": "application/json"},
             )

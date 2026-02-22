@@ -37,14 +37,14 @@ async def run_core(config: Config) -> None:
     from assistant.skills.checklist import ChecklistSkill
     from assistant.skills.document_index_skill import DocumentIndexSkill
     from assistant.skills.file_ref import FileRefSkill
-    from assistant.skills.index_repo_skill import IndexRepoSkill
-    from assistant.skills.search_repos_skill import SearchReposSkill
     from assistant.skills.filesystem import FilesystemSkill
     from assistant.skills.git import GitSkill
+    from assistant.skills.index_repo_skill import IndexRepoSkill
     from assistant.skills.mcp_adapter import McpAdapterSkill
     from assistant.skills.memory_control import MemoryControlSkill
     from assistant.skills.registry import SkillRegistry
     from assistant.skills.runner import SandboxRunner
+    from assistant.skills.search_repos_skill import SearchReposSkill
     from assistant.skills.send_email_skill import SendEmailSkill
     from assistant.skills.shell import ShellSkill
     from assistant.skills.tasks import TaskSkill

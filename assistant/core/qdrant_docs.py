@@ -122,8 +122,7 @@ def upsert_points(
     if not base_url or not ids or len(ids) != len(vectors) or len(ids) != len(payloads):
         return False
     points = [
-        {"id": id_, "vector": vec, "payload": pl}
-        for id_, vec, pl in zip(ids, vectors, payloads)
+        {"id": id_, "vector": vec, "payload": pl} for id_, vec, pl in zip(ids, vectors, payloads)
     ]
     url = f"{base_url}/collections/{collection}/points"
     own = client is None
@@ -255,9 +254,28 @@ REPO_COLLECTION = "repos"
 REPO_MAX_FILES = 500
 REPO_MAX_FILE_BYTES = 500_000
 REPO_TEXT_SUFFIXES = (
-    ".py", ".md", ".txt", ".rst", ".yaml", ".yml", ".json", ".html", ".htm",
-    ".css", ".js", ".ts", ".sh", ".bat", ".csv", ".xml", ".toml", ".ini", ".cfg",
-    ".sql", ".graphql", ".proto",
+    ".py",
+    ".md",
+    ".txt",
+    ".rst",
+    ".yaml",
+    ".yml",
+    ".json",
+    ".html",
+    ".htm",
+    ".css",
+    ".js",
+    ".ts",
+    ".sh",
+    ".bat",
+    ".csv",
+    ".xml",
+    ".toml",
+    ".ini",
+    ".cfg",
+    ".sql",
+    ".graphql",
+    ".proto",
 )
 REPO_SKIP_DIRS = (".git", "__pycache__", "node_modules", ".venv", "venv", "dist", "build", ".tox")
 
@@ -268,6 +286,7 @@ def _get_repo_rev(repo_dir: Path) -> str:
         return ""
     try:
         import subprocess
+
         r = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             cwd=repo_dir,
@@ -326,15 +345,17 @@ def index_repo_to_qdrant(
         chunks = _chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP)
         for i, c in enumerate(chunks):
             all_chunks.append(c)
-            all_payloads.append({
-                "text": c,
-                "repo": repo_label,
-                "path": rel_str,
-                "rev": rev,
-                "user_id": user_id,
-                "chunk_index": i,
-                "source": "repo",
-            })
+            all_payloads.append(
+                {
+                    "text": c,
+                    "repo": repo_label,
+                    "path": rel_str,
+                    "rev": rev,
+                    "user_id": user_id,
+                    "chunk_index": i,
+                    "source": "repo",
+                }
+            )
         files_done += 1
     if not all_chunks:
         return 0, 0, "Нет текстовых файлов или не удалось извлечь текст"
@@ -346,7 +367,9 @@ def index_repo_to_qdrant(
         return 0, 0, "Ошибка эмбеддинга"
     vector_size = len(vectors[0]) if vectors else DEFAULT_VECTOR_SIZE
     ids = [
-        hashlib.sha256(f"repo:{repo_label}:{p.get('path','')}:{i}:{c[:50]}".encode()).hexdigest()[:24]
+        hashlib.sha256(f"repo:{repo_label}:{p.get('path', '')}:{i}:{c[:50]}".encode()).hexdigest()[
+            :24
+        ]
         for i, (c, p) in enumerate(zip(all_chunks, all_payloads))
     ]
     with httpx.Client(timeout=60.0) as client:
@@ -379,9 +402,7 @@ def index_conversation_to_qdrant(
     """
     if not qdrant_url or not messages:
         return 0, ""
-    collection_name = get_qdrant_collection(
-        redis_url, "CONVERSATION_MEMORY_COLLECTION", collection
-    )
+    collection_name = get_qdrant_collection(redis_url, "CONVERSATION_MEMORY_COLLECTION", collection)
     texts: list[str] = []
     payloads: list[dict[str, Any]] = []
     for i, msg in enumerate(messages):
@@ -391,14 +412,16 @@ def index_conversation_to_qdrant(
             continue
         text = f"{role}: {content[:4000]}"
         texts.append(text)
-        payloads.append({
-            "text": text,
-            "user_id": user_id,
-            "chat_id": chat_id,
-            "role": role,
-            "source": "conversation_memory",
-            "index": i,
-        })
+        payloads.append(
+            {
+                "text": text,
+                "user_id": user_id,
+                "chat_id": chat_id,
+                "role": role,
+                "source": "conversation_memory",
+                "index": i,
+            }
+        )
     if not texts:
         return 0, ""
     if embed_fn is None:
@@ -436,9 +459,7 @@ def search_conversation_memory(
     """
     if not base_url or not user_id:
         return []
-    collection_name = get_qdrant_collection(
-        redis_url, "CONVERSATION_MEMORY_COLLECTION", collection
-    )
+    collection_name = get_qdrant_collection(redis_url, "CONVERSATION_MEMORY_COLLECTION", collection)
     must = [{"key": "user_id", "match": {"value": user_id}}]
     if chat_id:
         must.append({"key": "chat_id", "match": {"value": chat_id}})
@@ -493,9 +514,7 @@ def clear_conversation_memory(
     """
     if not base_url or not user_id:
         return False, "Qdrant не настроен или не указан user_id"
-    collection_name = get_qdrant_collection(
-        redis_url, "CONVERSATION_MEMORY_COLLECTION", collection
-    )
+    collection_name = get_qdrant_collection(redis_url, "CONVERSATION_MEMORY_COLLECTION", collection)
     must = [{"key": "user_id", "match": {"value": user_id}}]
     if chat_id:
         must.append({"key": "chat_id", "match": {"value": chat_id}})

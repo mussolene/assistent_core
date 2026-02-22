@@ -159,8 +159,9 @@ class MemoryManager:
                     messages.append({"role": "system", "content": ref})
             # Итерация 8.2: выборка из Qdrant conversation_memory по user_id/chat_id
             try:
-                from assistant.core.qdrant_docs import get_qdrant_url, search_conversation_memory
                 import asyncio
+
+                from assistant.core.qdrant_docs import get_qdrant_url, search_conversation_memory
 
                 qdrant_url = get_qdrant_url(self._redis_url)
                 if qdrant_url:

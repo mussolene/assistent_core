@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from assistant.skills.send_email_skill import RATE_MAX_PER_WINDOW, SendEmailSkill
+
 
 def __redis_mock(incr_value=1):
     r = MagicMock()
@@ -11,8 +13,6 @@ def __redis_mock(incr_value=1):
     r.expire.return_value = True
     r.close.return_value = None
     return r
-
-from assistant.skills.send_email_skill import RATE_MAX_PER_WINDOW, SendEmailSkill
 
 
 @pytest.fixture
@@ -40,12 +40,14 @@ async def test_send_email_allowlist_rejects_when_not_in_list(skill):
         return_value=["allowed@test.com"],
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=True):
-            out = await skill.run({
-                "to": "other@test.com",
-                "subject": "Hi",
-                "body": "Text",
-                "user_id": "u1",
-            })
+            out = await skill.run(
+                {
+                    "to": "other@test.com",
+                    "subject": "Hi",
+                    "body": "Text",
+                    "user_id": "u1",
+                }
+            )
     assert out.get("ok") is False
     assert "allowlist" in out.get("error", "").lower() or "разрешён" in out.get("error", "").lower()
 
@@ -59,12 +61,14 @@ async def test_send_email_allowlist_allows_when_in_list(skill):
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=True):
             with patch("redis.from_url", return_value=redis_mock):
-                out = await skill.run({
-                    "to": "allowed@test.com",
-                    "subject": "Hi",
-                    "body": "Text",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "to": "allowed@test.com",
+                        "subject": "Hi",
+                        "body": "Text",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is True
 
 
@@ -76,12 +80,14 @@ async def test_send_email_rate_limit_exceeded_returns_error(skill):
         return_value=[],
     ):
         with patch("redis.from_url", return_value=redis_mock):
-            out = await skill.run({
-                "to": "user@test.com",
-                "subject": "Hi",
-                "body": "Text",
-                "user_id": "u1",
-            })
+            out = await skill.run(
+                {
+                    "to": "user@test.com",
+                    "subject": "Hi",
+                    "body": "Text",
+                    "user_id": "u1",
+                }
+            )
     assert out.get("ok") is False
     assert "лимит" in out.get("error", "").lower() or "limit" in out.get("error", "").lower()
 
@@ -95,14 +101,18 @@ async def test_send_email_success(skill):
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=True):
             with patch("redis.from_url", return_value=redis_mock):
-                out = await skill.run({
-                    "to": "user@test.com",
-                    "subject": "Test",
-                    "body": "Body",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "to": "user@test.com",
+                        "subject": "Test",
+                        "body": "Body",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is True
-    assert "отправлено" in out.get("message", "").lower() or "sent" in out.get("message", "").lower()
+    assert (
+        "отправлено" in out.get("message", "").lower() or "sent" in out.get("message", "").lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -114,14 +124,18 @@ async def test_send_email_adapter_failure_returns_error(skill):
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=False):
             with patch("redis.from_url", return_value=redis_mock):
-                out = await skill.run({
-                    "to": "user@test.com",
-                    "subject": "Test",
-                    "body": "Body",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "to": "user@test.com",
+                        "subject": "Test",
+                        "body": "Body",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is False
-    assert "не удалось" in out.get("error", "").lower() or "отправить" in out.get("error", "").lower()
+    assert (
+        "не удалось" in out.get("error", "").lower() or "отправить" in out.get("error", "").lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -133,12 +147,14 @@ async def test_send_email_accepts_recipient_and_text_aliases(skill):
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=True):
             with patch("redis.from_url", return_value=redis_mock):
-                out = await skill.run({
-                    "recipient": "user@test.com",
-                    "subject": "Subj",
-                    "text": "Content",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "recipient": "user@test.com",
+                        "subject": "Subj",
+                        "text": "Content",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is True
 
 
@@ -158,12 +174,14 @@ async def test_send_email_allowed_recipients_from_config_json(skill):
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=True):
             with patch("redis.from_url", return_value=redis_mock):
-                out = await skill.run({
-                    "to": "allowed@test.com",
-                    "subject": "Hi",
-                    "body": "Text",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "to": "allowed@test.com",
+                        "subject": "Hi",
+                        "body": "Text",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is True
 
 
@@ -176,12 +194,14 @@ async def test_send_email_allowed_recipients_comma_separated(skill):
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=True):
             with patch("redis.from_url", return_value=__redis_mock(incr_value=1)):
-                out = await skill.run({
-                    "to": "two@test.com",
-                    "subject": "Hi",
-                    "body": "Text",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "to": "two@test.com",
+                        "subject": "Hi",
+                        "body": "Text",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is True
 
 
@@ -194,12 +214,14 @@ async def test_send_email_rate_limit_redis_exception_continues(skill):
     ):
         with patch("redis.from_url", side_effect=RuntimeError("redis down")):
             with patch("assistant.channels.email_adapter.send_email", return_value=True):
-                out = await skill.run({
-                    "to": "user@test.com",
-                    "subject": "Hi",
-                    "body": "Text",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "to": "user@test.com",
+                        "subject": "Hi",
+                        "body": "Text",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is True
 
 
@@ -213,12 +235,14 @@ async def test_send_email_allowed_recipients_from_config_list(skill):
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=True):
             with patch("redis.from_url", return_value=redis_mock):
-                out = await skill.run({
-                    "to": "list@test.com",
-                    "subject": "Hi",
-                    "body": "Text",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "to": "list@test.com",
+                        "subject": "Hi",
+                        "body": "Text",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is True
 
 
@@ -232,12 +256,14 @@ async def test_send_email_allowed_recipients_comma_string_from_config(skill):
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=True):
             with patch("redis.from_url", return_value=redis_mock):
-                out = await skill.run({
-                    "to": "b@c.com",
-                    "subject": "Hi",
-                    "body": "Text",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "to": "b@c.com",
+                        "subject": "Hi",
+                        "body": "Text",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is True
 
 
@@ -251,12 +277,14 @@ async def test_send_email_allowed_recipients_empty_config_any_recipient_allowed(
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=True):
             with patch("redis.from_url", return_value=redis_mock):
-                out = await skill.run({
-                    "to": "anyone@test.com",
-                    "subject": "Hi",
-                    "body": "Text",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "to": "anyone@test.com",
+                        "subject": "Hi",
+                        "body": "Text",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is True
 
 
@@ -270,10 +298,12 @@ async def test_send_email_allowed_recipients_config_exception_returns_empty(skil
     ):
         with patch("assistant.channels.email_adapter.send_email", return_value=True):
             with patch("redis.from_url", return_value=redis_mock):
-                out = await skill.run({
-                    "to": "any@test.com",
-                    "subject": "Hi",
-                    "body": "Text",
-                    "user_id": "u1",
-                })
+                out = await skill.run(
+                    {
+                        "to": "any@test.com",
+                        "subject": "Hi",
+                        "body": "Text",
+                        "user_id": "u1",
+                    }
+                )
     assert out.get("ok") is True

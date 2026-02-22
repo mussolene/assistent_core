@@ -317,7 +317,9 @@ async def test_handle_task_done_callback_updates_and_edits_message():
                 "task-id-1",
                 "user_1",
             )
-            edit_calls = [c for c in mock_post.call_args_list if "editMessageText" in (c[0][0] or "")]
+            edit_calls = [
+                c for c in mock_post.call_args_list if "editMessageText" in (c[0][0] or "")
+            ]
             assert len(edit_calls) >= 1
             body = edit_calls[0][1]["json"]
             assert body["chat_id"] == "chat_1"
@@ -396,9 +398,7 @@ async def test_download_telegram_attachment_getfile_fail():
 
     async with httpx.AsyncClient() as client:
         with patch.object(client, "get", new_callable=AsyncMock, return_value=get_file_resp):
-            path = await _download_telegram_attachment(
-                "token", "fid", "/tmp", "x", client
-            )
+            path = await _download_telegram_attachment("token", "fid", "/tmp", "x", client)
     assert path is None
 
 
@@ -420,9 +420,7 @@ async def test_download_telegram_attachment_too_large(tmp_path):
     async with httpx.AsyncClient() as client:
         with patch.object(client, "get", new_callable=AsyncMock) as mock_get:
             mock_get.side_effect = [get_file_resp, file_resp]
-            path = await _download_telegram_attachment(
-                "token", "fid", str(tmp_path), "big", client
-            )
+            path = await _download_telegram_attachment("token", "fid", str(tmp_path), "big", client)
     assert path is None
 
 

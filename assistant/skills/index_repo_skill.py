@@ -28,17 +28,24 @@ class IndexRepoSkill(BaseSkill):
         return "index_repo"
 
     async def run(self, params: dict[str, Any]) -> dict[str, Any]:
-        repo_dir = (params.get("repo_dir") or params.get("path") or params.get("repo") or "").strip()
+        repo_dir = (
+            params.get("repo_dir") or params.get("path") or params.get("repo") or ""
+        ).strip()
         user_id = (params.get("user_id") or params.get("user") or "default").strip()
         collection = (params.get("collection") or REPO_COLLECTION).strip() or REPO_COLLECTION
         if not repo_dir:
             return {"ok": False, "error": "Укажи repo_dir (путь к каталогу репозитория)."}
         qdrant_url = get_qdrant_url(self._redis_url)
         if not qdrant_url:
-            return {"ok": False, "error": "Qdrant не настроен. Задай QDRANT_URL в env или дашборде."}
+            return {
+                "ok": False,
+                "error": "Qdrant не настроен. Задай QDRANT_URL в env или дашборде.",
+            }
         p = Path(repo_dir)
         if not p.is_absolute():
-            workspace = os.getenv("WORKSPACE_DIR", "").strip() or os.getenv("SANDBOX_WORKSPACE_DIR", "/workspace")
+            workspace = os.getenv("WORKSPACE_DIR", "").strip() or os.getenv(
+                "SANDBOX_WORKSPACE_DIR", "/workspace"
+            )
             p = Path(workspace) / repo_dir
         chunks, files_count, err = index_repo_to_qdrant(
             p,

@@ -31,7 +31,9 @@ async def test_index_document_no_qdrant_configured(skill, tmp_path):
 @pytest.mark.asyncio
 async def test_index_document_success(skill, tmp_path):
     (tmp_path / "doc.txt").write_text("Content for indexing.")
-    with patch("assistant.skills.document_index_skill.get_qdrant_url", return_value="http://qdrant:6333"):
+    with patch(
+        "assistant.skills.document_index_skill.get_qdrant_url", return_value="http://qdrant:6333"
+    ):
         with patch(
             "assistant.skills.document_index_skill.index_document_to_qdrant",
             return_value=(2, ""),
@@ -45,16 +47,20 @@ async def test_index_document_success(skill, tmp_path):
 @pytest.mark.asyncio
 async def test_index_document_custom_collection(skill, tmp_path):
     (tmp_path / "x.txt").write_text("Text")
-    with patch("assistant.skills.document_index_skill.get_qdrant_url", return_value="http://q:6333"):
+    with patch(
+        "assistant.skills.document_index_skill.get_qdrant_url", return_value="http://q:6333"
+    ):
         with patch(
             "assistant.skills.document_index_skill.index_document_to_qdrant",
             return_value=(1, ""),
         ) as mock_index:
-            out = await skill.run({
-                "path": str(tmp_path / "x.txt"),
-                "user_id": "u1",
-                "collection": "my_docs",
-            })
+            out = await skill.run(
+                {
+                    "path": str(tmp_path / "x.txt"),
+                    "user_id": "u1",
+                    "collection": "my_docs",
+                }
+            )
     assert out.get("ok") is True
     assert out.get("collection") == "my_docs"
     mock_index.assert_called_once()
