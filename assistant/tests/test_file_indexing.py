@@ -319,6 +319,15 @@ def test_get_file_ref_found():
         assert out == {"file_id": "f1", "filename": "doc.pdf"}
 
 
+def test_get_file_ref_sync_invalid_json_returns_none():
+    """_get_file_ref_sync returns None when stored value is not valid JSON."""
+    mock_client = MagicMock()
+    mock_client.get = MagicMock(return_value="{invalid json")
+    with patch("redis.from_url", return_value=mock_client):
+        out = fi._get_file_ref_sync("redis://localhost/0", "ref1")
+    assert out is None
+
+
 def test_list_file_refs_empty():
     with patch("assistant.core.file_indexing._list_file_refs_sync", return_value=[]):
         assert fi.list_file_refs("redis://localhost/0", "u1") == []
@@ -336,3 +345,60 @@ def test_list_file_refs_with_refs():
         assert len(out) == 2
         assert out[0]["file_ref_id"] == "r1" and out[0]["filename"] == "f_r1.txt"
         assert out[1]["file_ref_id"] == "r2" and out[1]["filename"] == "f_r2.txt"
+
+
+def test_list_file_refs_skips_ref_when_get_returns_none():
+    """list_file_refs skips refs for which _get_file_ref_sync returns None."""
+    with patch(
+        "assistant.core.file_indexing._list_file_refs_sync",
+        return_value=["r1", "r2"],
+    ), patch(
+        "assistant.core.file_indexing._get_file_ref_sync",
+        side_effect=lambda _u, rid: {"filename": "a.txt"} if rid == "r1" else None,
+    ):
+        out = fi.list_file_refs("redis://localhost/0", "u1")
+        assert len(out) == 1
+        assert out[0]["file_ref_id"] == "r1" and out[0]["filename"] == "a.txt"
+
+
+def test_extract_content_from_file_respects_file_count_limit(tmp_path):
+    """When file_count['n'] already >= MAX_ARCHIVE_FILES, returns '' without reading."""
+    f = tmp_path / "t.txt"
+    f.write_text("hello", encoding="utf-8")
+    file_count = {"n": fi.MAX_ARCHIVE_FILES}
+    out = fi._extract_content_from_file(f, "text/plain", "t.txt", 0, file_count)
+    assert out == ""
+
+
+def test_extract_content_from_file_at_max_depth_treats_archive_as_file(tmp_path):
+    """When depth >= MAX_ARCHIVE_DEPTH, archive is not unpacked, _extract_text is used (zip -> '')."""
+    zip_path = tmp_path / "a.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("inner.txt", "content")
+    file_count = {"n": 0}
+    out = fi._extract_content_from_file(
+        zip_path, "application/zip", "a.zip", depth=fi.MAX_ARCHIVE_DEPTH, file_count=file_count
+    )
+    assert out == ""  # .zip with unknown content type in _extract_text returns ""
+
+
+def test_strip_html_fallback_on_parser_error():
+    """_strip_html falls back to regex when parser.feed raises."""
+    with patch("html.parser.HTMLParser.feed", side_effect=ValueError("bad")):
+        out = fi._strip_html("<p>Hi</p>")
+    assert "Hi" in out
+    assert "<" not in out or "p" not in out
+
+
+def test_extract_from_archive_7z_import_error(tmp_path):
+    """When py7zr is not installed, 7z extraction is skipped (ImportError)."""
+    try:
+        import py7zr  # noqa: F401
+        pytest.skip("py7zr installed, cannot test ImportError path")
+    except ImportError:
+        pass
+    seven_z = tmp_path / "x.7z"
+    seven_z.write_bytes(b"dummy")
+    file_count = {"n": 0}
+    out = fi._extract_from_archive(seven_z, "x.7z", 0, file_count)
+    assert out == ""
