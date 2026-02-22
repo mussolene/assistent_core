@@ -32,6 +32,41 @@ async def test_registry_get_unknown():
 
 
 @pytest.mark.asyncio
+async def test_registry_list_skills():
+    reg = SkillRegistry()
+    reg.register(ChecklistSkill())
+    reg.register(McpAdapterSkill())
+    assert set(reg.list_skills()) == {"checklist", "mcp_adapter"}
+    assert reg.get("checklist") is not None
+    assert reg.get("mcp_adapter") is not None
+
+
+@pytest.mark.asyncio
+async def test_registry_run_skill_raises():
+    failing = MagicMock()
+    failing.name = "failing"
+    failing.run = AsyncMock(side_effect=RuntimeError("skill failed"))
+    reg = SkillRegistry()
+    reg.register(failing)
+    result = await reg.run("failing", {}, SandboxRunner())
+    assert result.get("ok") is False
+    assert "skill failed" in result.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_runner_audit_called():
+    skill = MagicMock()
+    skill.name = "test_skill"
+    skill.run = AsyncMock(return_value={"ok": True})
+    with patch("assistant.skills.runner.audit") as audit_mock:
+        result = await SandboxRunner().run_skill(skill, {"a": 1})
+    assert result == {"ok": True}
+    assert audit_mock.call_count >= 2
+    assert any("skill_run" in str(c) for c in audit_mock.call_args_list)
+    assert any("skill_result" in str(c) for c in audit_mock.call_args_list)
+
+
+@pytest.mark.asyncio
 async def test_filesystem_read(workspace):
     skill = FilesystemSkill(workspace_dir=workspace)
     out = await skill.run({"action": "read", "path": "foo.txt"})
