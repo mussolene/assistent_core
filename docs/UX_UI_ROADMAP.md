@@ -11,6 +11,7 @@
 - **Фаза 3:** Навбар из 5 пунктов: Каналы (Telegram + Email на одной странице), Модель, Интеграции (MCP скиллы + MCP агент), Данные (Qdrant URL + ссылки на Репо и Память), Система (мониторинг). Qdrant URL только в разделе Данные; на странице Репо — подсказка «настраивается в Данные». Подсказка в MCP (агент) про общий Chat ID из Каналы → Telegram. Маршруты: /data, /save-data, /integrations, /system; /monitor → редирект на /system. Тесты: test_dashboard.py (index channels, data_page, save_data, integrations_page, system_page, monitor redirect).
 - **Фаза 4:** CSS вынесен в `static/css/layout.css`, подключение через `<link>` в layout; добавлены стили `.btn:disabled`. Индикатор загрузки при «Проверить бота» и «Проверить подключение»: кнопки с id `btn-test-bot` и `btn-test-model`, отключение на время fetch и включение в `finally`. Тесты: test_layout_includes_stylesheet, test_test_bot_button_has_id_for_loading.
 - **Фаза 5:** Регрессия: pytest assistant/tests, покрытие ≥90%, ruff без замечаний. Приёмочный чек-лист — docs/ACCEPTANCE.md.
+- **П.5 улучшение списков:** Репо: подпись «Страница N из K» при известном total (склонированные). Функция `format_repos_reply_text(label, page, total)`; тесты в test_channels.py.
 
 ---
 

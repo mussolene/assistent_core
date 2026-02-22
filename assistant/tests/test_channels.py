@@ -14,6 +14,7 @@ from assistant.channels.telegram import (
     _strip_think_blocks,
     _to_telegram_html,
     chunk_text_for_telegram,
+    format_repos_reply_text,
     get_help_message_text,
     get_settings_message_text,
     get_welcome_message_text,
@@ -134,6 +135,39 @@ def test_rate_limit_message_mentions_retry():
     """Сообщение при rate limit указывает, когда повторить (UX_UI_ROADMAP)."""
     assert "1 мин" in RATE_LIMIT_MESSAGE or "мин" in RATE_LIMIT_MESSAGE
     assert "Повторите" in RATE_LIMIT_MESSAGE or "повторить" in RATE_LIMIT_MESSAGE.lower()
+
+
+def test_format_repos_reply_text_with_total():
+    """Репо: подпись «Страница N из K» когда известен total (UX_UI п.5)."""
+    text = format_repos_reply_text("Склонированные", page=0, total=10)
+    assert "Страница 1" in text
+    assert "из" in text
+    assert "10 шт" in text
+    # 10 items, page size 6 -> 2 pages
+    assert "из 2" in text or "2." in text
+
+
+def test_format_repos_reply_text_single_page():
+    """Одна страница: «Страница 1 из 1»."""
+    text = format_repos_reply_text("Склонированные", page=0, total=3)
+    assert "Страница 1 из 1" in text
+    assert "3 шт" in text
+
+
+def test_format_repos_reply_text_without_total():
+    """Без total (GitHub/GitLab): только «страница N»."""
+    text = format_repos_reply_text("GitHub", page=0, total=None)
+    assert "страница 1" in text
+    assert "из" not in text or "Репозитории" in text
+    text2 = format_repos_reply_text("GitLab", page=2, total=None)
+    assert "страница 3" in text2
+
+
+def test_format_repos_reply_text_total_zero():
+    """total=0: без total выводится только «страница 1» (total не > 0)."""
+    text = format_repos_reply_text("Склонированные", page=0, total=0)
+    assert "страница 1" in text
+    assert "Склонированные" in text
 
 
 def test_bot_commands_include_repos_github_gitlab():

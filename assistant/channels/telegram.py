@@ -321,6 +321,14 @@ REPOS_PAGE_SIZE = 6
 REPOS_CALLBACK_PREFIX = "repos:"
 
 
+def format_repos_reply_text(label: str, page: int, total: Optional[int] = None) -> str:
+    """Текст сообщения для списка репо: «Страница N из K» если известен total (UX_UI п.5)."""
+    if total is not None and total > 0:
+        total_pages = max(1, (total + REPOS_PAGE_SIZE - 1) // REPOS_PAGE_SIZE)
+        return f"Репозитории ({label}): {total} шт. Страница {page + 1} из {total_pages}."
+    return f"Репозитории ({label}): страница {page + 1}."
+
+
 async def _get_repos_list_cloned(redis_url: str) -> list[dict]:
     """Список склонированных репо (workspace из Redis)."""
     try:
@@ -997,6 +1005,7 @@ async def run_telegram_adapter() -> None:
                                     start = page * REPOS_PAGE_SIZE
                                     items = items_all[start : start + REPOS_PAGE_SIZE]
                                     has_next = start + len(items) < total
+                                    reply = _escape_html(format_repos_reply_text(label, page, total))
                                 else:
                                     api_page = page + 1
                                     out = (
@@ -1006,7 +1015,7 @@ async def run_telegram_adapter() -> None:
                                     )
                                     items = out.get("items") or []
                                     has_next = len(items) >= REPOS_PAGE_SIZE
-                                reply = _escape_html(f"Репозитории ({label}): страница {page + 1}.")
+                                    reply = _escape_html(format_repos_reply_text(label, page, None))
                                 keyboard = _build_repos_inline_keyboard(
                                     kind, items, page, has_next, dashboard_url
                                 )
@@ -1305,7 +1314,7 @@ async def run_telegram_adapter() -> None:
                                 page = 0
                                 has_next = total > REPOS_PAGE_SIZE
                                 reply = _escape_html(
-                                    f"Репозитории ({label}): {total} шт. Страница 1."
+                                    format_repos_reply_text(label, 0, total)
                                 )
                             else:
                                 if kind == "github":
@@ -1324,7 +1333,9 @@ async def run_telegram_adapter() -> None:
                                     items = out.get("items") or []
                                     page = 0
                                     has_next = len(items) >= REPOS_PAGE_SIZE
-                                    reply = _escape_html(f"Репозитории ({label}): страница 1.")
+                                    reply = _escape_html(
+                                        format_repos_reply_text(label, 0, None)
+                                    )
                             keyboard = _build_repos_inline_keyboard(
                                 kind, items, page, has_next, dashboard_url
                             )
