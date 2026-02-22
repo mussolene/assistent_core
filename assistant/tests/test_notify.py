@@ -27,6 +27,14 @@ def test_get_dev_chat_id_fallback_to_allowed():
         assert notify.get_dev_chat_id() == "123"
 
 
+def test_get_dev_chat_id_fallback_allowed_as_str():
+    with patch(
+        "assistant.dashboard.config_store.get_config_from_redis_sync",
+        return_value={"TELEGRAM_ALLOWED_USER_IDS": "111, 222"},
+    ):
+        assert notify.get_dev_chat_id() == "111"
+
+
 def test_notify_to_chat_no_chat_id():
     assert notify.notify_to_chat("", "hi") is False
     assert notify.notify_to_chat(None, "hi") is False
