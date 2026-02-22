@@ -127,6 +127,73 @@ async def test_memory_manager_get_context_with_vector_and_tool_results():
 
 
 @pytest.mark.asyncio
+async def test_memory_manager_get_context_with_user_data():
+    """get_context_for_user includes user_data when present."""
+    mgr = MemoryManager("redis://localhost:6379/0")
+    mgr._short = MagicMock()
+    mgr._short.get_messages = AsyncMock(return_value=[])
+    mgr._summary = MagicMock()
+    mgr._summary.get_summary = AsyncMock(return_value=None)
+    mgr._get_vector_memory = MagicMock(
+        return_value=MagicMock(_get_model=MagicMock(return_value=None))
+    )
+    mgr._user_data = MagicMock()
+    mgr._user_data.get = AsyncMock(return_value={"name": "Alice", "timezone": "UTC"})
+    mgr._task = MagicMock()
+    mgr._task.get_tool_results = AsyncMock(return_value=[])
+    ctx = await mgr.get_context_for_user("u1", "task1", include_vector=False)
+    assert any("User data:" in str(m.get("content", "")) and "Alice" in str(m.get("content", "")) for m in ctx)
+
+
+def test_memory_manager_clear_vector_user_id_level(tmp_path):
+    """clear_vector(user_id, level) clears cache or removes file."""
+    mgr = MemoryManager("redis://localhost:6379/0", vector_persist_dir=tmp_path)
+    mock_vec = MagicMock()
+    mock_vec.clear = MagicMock()
+    mgr._vector_cache[("u1", "short")] = mock_vec
+    mgr.clear_vector(user_id="u1", level="short")
+    mock_vec.clear.assert_called_once()
+
+
+def test_memory_manager_clear_vector_user_id_file_removed(tmp_path):
+    """clear_vector(user_id) when not in cache removes level file if exists."""
+    (tmp_path / "u1").mkdir(parents=True)
+    level_file = tmp_path / "u1" / "short.json"
+    level_file.write_text("[]")
+    mgr = MemoryManager("redis://localhost:6379/0", vector_persist_dir=tmp_path)
+    mgr.clear_vector(user_id="u1", level="short")
+    assert not level_file.exists()
+
+
+def test_memory_manager_clear_vector_all_users(tmp_path):
+    """clear_vector(user_id=None) clears all cached and removes level files."""
+    (tmp_path / "u1").mkdir(parents=True)
+    (tmp_path / "u1" / "short.json").write_text("[]")
+    mgr = MemoryManager("redis://localhost:6379/0", vector_persist_dir=tmp_path)
+    mgr._vector_cache[("u1", "short")] = MagicMock()
+    mgr.clear_vector(user_id=None, level="short")
+    assert not (tmp_path / "u1" / "short.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_memory_manager_reset_memory():
+    """reset_memory(scope) calls clear_vector/short/summary/user_data as needed."""
+    mgr = MemoryManager("redis://localhost:6379/0")
+    mgr.clear_vector = MagicMock()
+    mgr._short = MagicMock()
+    mgr._short.clear = AsyncMock()
+    mgr._summary = MagicMock()
+    mgr._summary.clear = AsyncMock()
+    mgr._user_data = MagicMock()
+    mgr._user_data.clear = AsyncMock()
+    await mgr.reset_memory("u1", scope="all")
+    mgr.clear_vector.assert_called_once_with(user_id="u1", level=None)
+    mgr._short.clear.assert_called_once()
+    mgr._summary.clear.assert_called_once()
+    mgr._user_data.clear.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_memory_manager_append_store_append_tool_add_vector():
     """append_message, store_task_fact, append_tool_result, add_to_vector (per user_id)."""
     mgr = MemoryManager("redis://localhost:6379/0")
