@@ -110,3 +110,57 @@ async def test_gateway_cloud_fallback_on_local_failure():
             )
             out = await gw.generate("Hi", stream=False)
             assert out == "Cloud reply"
+
+
+@pytest.mark.asyncio
+async def test_gateway_lm_studio_native_stream():
+    with patch(
+        "assistant.models.gateway.lm_studio.stream_lm_studio"
+    ) as mock_stream:
+        async def gen():
+            yield "A"
+            yield "B"
+        mock_stream.return_value = gen()
+        gw = ModelGateway(use_lm_studio_native=True, openai_base_url="http://x/v1")
+        result = await gw.generate("Hi", stream=True)
+        out = ""
+        async for t in result:
+            out += t
+        assert out == "AB"
+        mock_stream.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_gateway_lm_studio_native_raises_no_cloud():
+    with patch(
+        "assistant.models.gateway.lm_studio.generate_lm_studio",
+        new_callable=AsyncMock,
+        side_effect=ConnectionError("LM Studio down"),
+    ):
+        gw = ModelGateway(use_lm_studio_native=True, openai_base_url="http://x/v1")
+        with pytest.raises(ConnectionError, match="LM Studio down"):
+            await gw.generate("Hi", stream=False)
+
+
+@pytest.mark.asyncio
+async def test_gateway_cloud_fallback_stream():
+    with patch("assistant.models.gateway.LocalModelGateway") as mock_local_cls:
+        mock_local = MagicMock()
+        mock_local.generate_stream = MagicMock(side_effect=RuntimeError("local down"))
+        mock_local_cls.return_value = mock_local
+        with patch("assistant.models.gateway.CloudModelGateway") as mock_cloud_cls:
+            mock_cloud = MagicMock()
+            async def stream():
+                yield "C"
+                yield "loud"
+            mock_cloud.generate_stream = MagicMock(return_value=stream())
+            mock_cloud_cls.return_value = mock_cloud
+            gw = ModelGateway(
+                cloud_fallback_enabled=True,
+                openai_api_key="sk-fake",
+            )
+            result = await gw.generate("Hi", stream=True)
+            out = ""
+            async for t in result:
+                out += t
+            assert out == "Cloud"
