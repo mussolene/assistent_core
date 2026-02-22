@@ -7,10 +7,19 @@ import json
 import logging
 import os
 import re
+import sys
 
 import httpx
 
 logger = logging.getLogger(__name__)
+# Под gunicorn у root logger может не быть handler — логи приложения не выводятся.
+# Явно пишем в stderr, чтобы --capture-output показывал в т.ч. [MCP].
+if not logger.handlers:
+    _stderr = logging.StreamHandler(sys.stderr)
+    _stderr.setFormatter(logging.Formatter("%(levelname)s [%(name)s] %(message)s"))
+    logger.addHandler(_stderr)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
 from flask import (
     Flask,
     Response,
