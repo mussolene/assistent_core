@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from assistant.memory.manager import VECTOR_LEVEL_SHORT
+from assistant.memory.manager import (
+    VECTOR_LEVEL_LONG,
+    VECTOR_LEVEL_MEDIUM,
+    VECTOR_LEVEL_SHORT,
+)
 from assistant.skills.checklist import ChecklistSkill
 from assistant.skills.file_ref import FileRefSkill
 from assistant.skills.filesystem import FilesystemSkill
@@ -224,3 +228,32 @@ async def test_memory_control_clear_vector_and_reset_memory():
     out = await skill.run({"action": "reset_memory"})
     assert out["ok"] is False
     assert "user_id" in out.get("error", "")
+
+    out = await skill.run({"action": "clear_vector", "level": "invalid", "user_id": "u1"})
+    assert out["ok"] is False
+    assert "level" in out.get("error", "").lower()
+
+    out = await skill.run({"action": "clear_vector", "level": "medium", "user_id": "u1"})
+    assert out["ok"] is True
+    memory.clear_vector.assert_called_with(user_id="u1", level=VECTOR_LEVEL_MEDIUM)
+
+    out = await skill.run({"action": "clear_vector", "level": "long", "user_id": "u1"})
+    assert out["ok"] is True
+    memory.clear_vector.assert_called_with(user_id="u1", level=VECTOR_LEVEL_LONG)
+
+    out = await skill.run({"action": "reset_memory", "user_id": "u1", "scope": "bad_scope"})
+    assert out["ok"] is False
+    assert "scope" in out.get("error", "").lower()
+
+    out = await skill.run({
+        "action": "reset_memory",
+        "user_id": "u1",
+        "scope": "short_term",
+        "session_id": "sess1",
+    })
+    assert out["ok"] is True
+    memory.reset_memory.assert_called_with("u1", scope="short_term", session_id="sess1")
+
+    out = await skill.run({"action": "unknown_action", "user_id": "u1"})
+    assert out["ok"] is False
+    assert "Неизвестное" in out.get("error", "") or "clear_vector" in out.get("error", "")
