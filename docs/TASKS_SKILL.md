@@ -106,13 +106,13 @@
 
 ---
 
-## Планируемые расширения (дорожная карта)
+## Реализованные расширения (10.5–10.8)
 
-- **Список в Telegram (10.5 — сделано):** только актуальные задачи (open, end_date ≥ сегодня); кнопка «✓ Выполнена» (callback `task:done:{id}`); при нажатии — статус задачи обновляется и сообщение со списком редактируется (актуальный список без выполненной задачи).
-- **Компактный список** неактуальных; **архивация (10.6):** archive_completed, list_archive; **поиск по архиву (10.7 — сделано):** search_archive(query, from_date, to_date).
-- **Подзадачи (10.8 — сделано):** поле `parent_id` в задаче; create_task(parent_id=…); list_subtasks(parent_id); get_task возвращает subtasks и добавляет блок «Подзадачи» в formatted_details.
+- **Список в Telegram (10.5):** только актуальные задачи (open, end_date ≥ сегодня); кнопка «✓ Выполнена» (callback `task:done:{id}`); при нажатии — статус задачи обновляется и сообщение со списком редактируется.
+- **Компактный список** неактуальных; **архивация (10.6):** archive_completed, list_archive; **поиск по архиву (10.7):** search_archive(query, from_date, to_date).
+- **Подзадачи (10.8):** поле `parent_id` в задаче; create_task(parent_id=…); list_subtasks(parent_id); get_task возвращает subtasks и блок «Подзадачи» в formatted_details.
 
-См. **docs/TASKS_REQUIREMENTS.md** и блок 10.5–10.8 в **docs/ITERATIONS_ROADMAP.md**.
+См. **docs/TASKS_REQUIREMENTS.md** и блок 10 в **docs/ITERATIONS_ROADMAP.md**.
 
 ---
 

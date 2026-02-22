@@ -55,6 +55,6 @@
 | # | Задача | Статус |
 |---|--------|--------|
 | 1 | Предупреждение при SECRET_KEY по умолчанию | ✅ |
-| 2 | README: SECRET_KEY и HTTPS для продакшена | Выполняю |
+| 2 | README: SECRET_KEY и HTTPS для продакшена | ✅ |
 | 3 | secure=True для cookie при HTTPS/FLASK_ENV=production | ✅ |
 | 4 | Аудит: login_ok, logout, setup_completed | ✅ |

@@ -130,6 +130,10 @@ pytest assistant/tests -v --cov=assistant --cov-report=html --cov-fail-under=90
 - **План развития (многопользовательский режим, спаривание Telegram, Dashboard, роли):** [docs/ROADMAP.md](docs/ROADMAP.md)
 - **Повторный аудит (безопасность, юзабилити, риски после этапов A–C):** [docs/AUDIT_V2.md](docs/AUDIT_V2.md)
 
+### Документация
+
+Полный индекс — [docs/README.md](docs/README.md). Отдельные темы: [RAG и Qdrant](docs/RAG_QDRANT.md), [каналы и фронтенд](docs/CHANNELS_AND_FRONTEND.md), [авторизация дашборда](docs/DASHBOARD_AUTH.md), [канал Telegram](docs/TELEGRAM_CHANNEL.md), [выбор стека фронта/бэкенда](docs/FRONTEND_STACK.md) / [BACKEND_STACK](docs/BACKEND_STACK.md).
+
 ## Лицензия
 
 Проект распространяется под лицензией [MIT](LICENSE).

@@ -87,7 +87,7 @@
 
 ### Вариант B: Отдельное SPA-приложение
 
-- **Стек:** см. детальное сравнение и рекомендации в [docs/FRONTEND_STACK.md](FRONTEND_STACK.md) (Vue + Vuetify vs React + MUI vs Svelte, Material Design, маловесность, риски).
+- **Стек:** см. детальное сравнение и рекомендации в [FRONTEND_STACK.md](FRONTEND_STACK.md) (Vue + Vuetify vs React + MUI vs Svelte, Material Design, маловесность, риски).
 - **Пример:** Vue 3 или React + Vite, Material-библиотека (Vuetify/MUI), TypeScript по желанию.
 - **Бэкенд:** текущий Flask дашборд остаётся API (REST + опционально WebSocket для чата и стриминга).
 - **Чат в браузере:** страница чата шлёт POST с текстом, получает ответ стримом (SSE/WebSocket) и публикует в Event Bus как канал WEB.
