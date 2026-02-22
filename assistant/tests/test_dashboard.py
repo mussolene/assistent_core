@@ -122,11 +122,17 @@ def test_api_test_bot_mock(monkeypatch, client, auth_mock):
 
 
 def test_api_monitor(client, auth_mock):
-    """Dashboard API monitor returns dict (may be empty if no Redis)."""
+    """Dashboard API monitor returns redis, services, tasks, keys_by_prefix."""
     r = client.get("/api/monitor")
     assert r.status_code == 200
     j = r.get_json()
     assert isinstance(j, dict)
+    assert "redis" in j
+    assert "services" in j
+    assert "tasks" in j
+    assert "keys_by_prefix" in j
+    assert isinstance(j["keys_by_prefix"], dict)
+    assert j["services"].get("dashboard") == "ok"
 
 
 def test_api_cloned_repos_returns_ok(client, auth_mock, monkeypatch):

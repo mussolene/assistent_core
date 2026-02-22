@@ -1188,13 +1188,43 @@ def mcp_api_events(endpoint_id):
 # ----- Monitor -----
 _MONITOR_BODY = """
 <h1>Мониторинг</h1>
-<p class="sub">Ресурсы Redis (память и подключения).</p>
+<p class="sub">Ресурсы Redis, ключи по типам, статус сервисов. <span id="monitor-updated" class="hint">Обновлено только что.</span></p>
 <div class="monitor-grid">
-  <div class="monitor-card"><div class="val" id="mem">{{ info.get('used_memory_human', '—') }}</div><div class="label">Память Redis</div></div>
-  <div class="monitor-card"><div class="val" id="clients">{{ info.get('connected_clients', '—') }}</div><div class="label">Подключения</div></div>
-  <div class="monitor-card"><div class="val" id="keys">{{ info.get('keys', '—') }}</div><div class="label">Ключей (assistant:*)</div></div>
+  <div class="monitor-card"><div class="val" id="mem">{{ monitor.redis.get('used_memory_human', '—') }}</div><div class="label">Память Redis</div></div>
+  <div class="monitor-card"><div class="val" id="clients">{{ monitor.redis.get('connected_clients', '—') }}</div><div class="label">Подключения</div></div>
+  <div class="monitor-card"><div class="val" id="blocked">{{ monitor.redis.get('blocked_clients', '—') }}</div><div class="label">Заблокировано</div></div>
+  <div class="monitor-card"><div class="val" id="tasks-total">{{ monitor.tasks.get('total', '—') }}</div><div class="label">Задач (оркестратор)</div></div>
+  <div class="monitor-card"><div class="val" id="svc-model">{{ monitor.services.get('model', '—') }}</div><div class="label">Модель</div></div>
 </div>
-<p class="hint" style="margin-top:1rem">Обновление при загрузке страницы. Перезагрузите для актуальных данных.</p>
+<table class="monitor-table" style="margin-top:1rem; width:100%%; max-width:400px; border-collapse:collapse;">
+  <thead><tr style="text-align:left; border-bottom:1px solid var(--border);"><th style="padding:0.5rem;">Тип ключей</th><th style="padding:0.5rem;">Кол-во</th></tr></thead>
+  <tbody id="keys-by-prefix">
+  {% for label, count in monitor.keys_by_prefix.items() %}
+  <tr style="border-bottom:1px solid var(--border);"><td style="padding:0.5rem;">{{ label }}</td><td style="padding:0.5rem;" data-label="{{ label }}">{{ count }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<script>
+(function(){
+  var INTERVAL_MS = 10000;
+  var updatedEl = document.getElementById('monitor-updated');
+  function updateDOM(data){
+    if (!data) return;
+    if (data.redis) {
+      document.getElementById('mem').textContent = data.redis.used_memory_human || '—';
+      document.getElementById('clients').textContent = data.redis.connected_clients ?? '—';
+      document.getElementById('blocked').textContent = data.redis.blocked_clients ?? '—';
+    }
+    if (data.tasks && data.tasks.total !== undefined) document.getElementById('tasks-total').textContent = data.tasks.total;
+    if (data.services && data.services.model !== undefined) document.getElementById('svc-model').textContent = data.services.model;
+    if (data.keys_by_prefix) for (var label in data.keys_by_prefix) { var cell = document.querySelector('[data-label="'+label+'"]'); if (cell) cell.textContent = data.keys_by_prefix[label]; }
+  }
+  function refresh(){
+    fetch('/api/monitor').then(function(r){ return r.json(); }).then(function(data){ updateDOM(data); if(updatedEl) updatedEl.textContent = 'Обновлено только что. Следующее через 10 сек.'; }).catch(function(){ if(updatedEl) updatedEl.textContent = 'Ошибка обновления.'; });
+  }
+  setInterval(refresh, INTERVAL_MS);
+})();
+</script>
 """
 
 
@@ -1312,30 +1342,103 @@ def repos_page():
 @app.route("/monitor")
 def monitor():
     config = load_config()
-    info = _redis_info()
+    monitor = _monitor_data()
     return render_template_string(
         INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
             "{% block content %}{% endblock %}", _MONITOR_BODY
         ),
         config=config,
         section="monitor",
-        info=info,
+        monitor=monitor,
     )
 
 
+# Префиксы Redis для мониторинга (ключи по типам)
+_MONITOR_KEY_PREFIXES = [
+    ("assistant:task:", "Задачи (оркестратор)"),
+    ("assistant:config:", "Конфиг"),
+    ("assistant:session:", "Сессии"),
+    ("assistant:user:", "Пользователи"),
+    ("assistant:pairing:", "Коды привязки"),
+    ("assistant:tasks:", "Задачи (skills)"),
+    ("assistant:summary:", "Память (summary)"),
+    ("assistant:short:", "Память (short)"),
+    ("assistant:file_ref:", "Ссылки на файлы"),
+]
+
+
+def _monitor_services(redis_url: str) -> dict:
+    """Проверка доступности сервисов (модель — по конфигу из Redis)."""
+    out = {"dashboard": "ok"}
+    try:
+        cfg = get_config_from_redis_sync(redis_url)
+        base_url = (cfg.get("OPENAI_BASE_URL") or "").strip().rstrip("/") or "http://localhost:11434"
+        if not base_url.endswith("/v1"):
+            base_url = base_url + "/v1"
+        use_lm = (cfg.get("LM_STUDIO_NATIVE") or "").lower() in ("true", "1", "yes")
+        if use_lm:
+            base_url = (cfg.get("OPENAI_BASE_URL") or "").strip().rstrip("/") or "http://localhost:1234"
+        r = httpx.get(base_url, timeout=2.0)
+        out["model"] = "ok" if r.status_code < 500 else "error"
+    except Exception:
+        out["model"] = "error"
+    return out
+
+
 def _redis_info() -> dict:
+    """Базовая структура для обратной совместимости (memory, clients, keys)."""
     try:
         import redis
 
         client = redis.from_url(get_redis_url(), decode_responses=True)
         raw = client.info("memory")
         raw["connected_clients"] = client.info("clients").get("connected_clients", 0)
+        raw["blocked_clients"] = client.info("clients").get("blocked_clients", 0)
         keys = len(client.keys(REDIS_PREFIX + "*"))
         raw["keys"] = keys
         client.close()
         return raw
     except Exception:
         return {}
+
+
+def _monitor_data() -> dict:
+    """Расширенные данные для /api/monitor: redis (в т.ч. по префиксам), services, tasks."""
+    redis_url = get_redis_url()
+    result = {"redis": {}, "services": {}, "tasks": {}, "keys_by_prefix": {}}
+    try:
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        mem = client.info("memory")
+        cli = client.info("clients")
+        result["redis"] = {
+            "used_memory_human": mem.get("used_memory_human", "—"),
+            "used_memory_peak_human": mem.get("used_memory_peak_human") or "—",
+            "mem_fragmentation_ratio": mem.get("mem_fragmentation_ratio"),
+            "connected_clients": cli.get("connected_clients", 0),
+            "blocked_clients": cli.get("blocked_clients", 0),
+        }
+        for prefix, label in _MONITOR_KEY_PREFIXES:
+            try:
+                n = len(client.keys(prefix + "*"))
+                result["keys_by_prefix"][label] = n
+            except Exception:
+                result["keys_by_prefix"][label] = "—"
+        # Задачи оркестратора (активные)
+        try:
+            task_keys = client.keys("assistant:task:*")
+            result["tasks"]["total"] = len(task_keys)
+        except Exception:
+            result["tasks"]["total"] = 0
+        client.close()
+    except Exception:
+        result["redis"] = {"error": "no connection"}
+    try:
+        result["services"] = _monitor_services(redis_url)
+    except Exception:
+        result["services"] = {"dashboard": "ok", "model": "error"}
+    return result
 
 
 # ----- API -----
@@ -1467,7 +1570,7 @@ def api_cloned_repos():
 
 @app.route("/api/monitor")
 def api_monitor():
-    return jsonify(_redis_info())
+    return jsonify(_monitor_data())
 
 
 def main():
