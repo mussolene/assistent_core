@@ -247,3 +247,103 @@ async def search_gitlab_repos(
     except Exception as e:
         logger.exception("GitLab search repos failed: %s", e)
         return {"ok": False, "error": str(e)}
+
+
+async def list_github_user_repos(
+    *,
+    token: str | None = None,
+    per_page: int = 30,
+    page: int = 1,
+) -> dict[str, Any]:
+    """List GitHub repos for the authenticated user. GET /user/repos. For /github command (9.2)."""
+    token = (token or "").strip()
+    if not token:
+        return {"ok": False, "error": "GITHUB_TOKEN is required"}
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://api.github.com/user/repos",
+                params={"per_page": min(per_page, 100), "page": max(1, page), "sort": "updated"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "X-GitHub-Api-Version": "2022-11-28",
+                },
+                timeout=15.0,
+            )
+        if r.status_code != 200:
+            err = (
+                r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            )
+            return {
+                "ok": False,
+                "error": err.get("message", r.text) or f"HTTP {r.status_code}",
+            }
+        data = r.json()
+        if not isinstance(data, list):
+            data = []
+        items = [
+            {
+                "full_name": it.get("full_name", ""),
+                "html_url": it.get("html_url", ""),
+                "description": it.get("description") or "",
+                "clone_url": it.get("clone_url", ""),
+            }
+            for it in data
+        ]
+        return {"ok": True, "items": items, "total_count": len(items)}
+    except Exception as e:
+        logger.exception("GitHub list user repos failed: %s", e)
+        return {"ok": False, "error": str(e)}
+
+
+async def list_gitlab_user_repos(
+    *,
+    token: str | None = None,
+    per_page: int = 30,
+    page: int = 1,
+) -> dict[str, Any]:
+    """List GitLab projects for the authenticated user. GET /projects (membership). For /gitlab command (9.2)."""
+    token = (token or "").strip()
+    if not token:
+        return {"ok": False, "error": "GITLAB_TOKEN is required"}
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get(
+                "https://gitlab.com/api/v4/projects",
+                params={
+                    "membership": "true",
+                    "per_page": min(per_page, 100),
+                    "page": max(1, page),
+                    "order_by": "updated_at",
+                },
+                headers={"PRIVATE-TOKEN": token},
+                timeout=15.0,
+            )
+        if r.status_code != 200:
+            try:
+                err = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+            except Exception:
+                err = {}
+            err = err if isinstance(err, dict) else {}
+            return {
+                "ok": False,
+                "error": err.get("message", err.get("error", r.text)) or f"HTTP {r.status_code}",
+            }
+        data = r.json()
+        if not isinstance(data, list):
+            data = []
+        items = [
+            {
+                "full_name": it.get("path_with_namespace", ""),
+                "html_url": it.get("web_url", ""),
+                "web_url": it.get("web_url", ""),
+                "description": it.get("description") or "",
+                "clone_url": it.get("http_url_to_repo", "") or it.get("ssh_url_to_repo", ""),
+            }
+            for it in data
+        ]
+        return {"ok": True, "items": items, "total_count": len(items)}
+    except Exception as e:
+        logger.exception("GitLab list user repos failed: %s", e)
+        return {"ok": False, "error": str(e)}

@@ -383,3 +383,89 @@ async def test_create_merge_request_no_tokens():
     )
     assert out["ok"] is False
     assert "GITHUB_TOKEN" in out.get("error", "")
+
+
+# --- Iteration 9.2: list user repos (GitHub/GitLab) ---
+
+
+@pytest.mark.asyncio
+async def test_list_github_user_repos_missing_token():
+    from assistant.skills.git_platform import list_github_user_repos
+
+    out = await list_github_user_repos(token=None)
+    assert out["ok"] is False
+    assert "GITHUB_TOKEN" in out.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_list_github_user_repos_success():
+    from assistant.skills.git_platform import list_github_user_repos
+
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
+        mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+        mock_client.return_value.get = AsyncMock(
+            return_value=MagicMock(
+                status_code=200,
+                json=lambda: [
+                    {"full_name": "u/r1", "html_url": "https://github.com/u/r1", "clone_url": "https://github.com/u/r1.git", "description": "d1"},
+                ],
+                headers={"content-type": "application/json"},
+            )
+        )
+        out = await list_github_user_repos(token="gh_token", per_page=6, page=1)
+    assert out["ok"] is True
+    assert len(out.get("items", [])) == 1
+    assert out["items"][0]["full_name"] == "u/r1"
+    assert out["items"][0]["html_url"] == "https://github.com/u/r1"
+
+
+@pytest.mark.asyncio
+async def test_list_gitlab_user_repos_missing_token():
+    from assistant.skills.git_platform import list_gitlab_user_repos
+
+    out = await list_gitlab_user_repos(token=None)
+    assert out["ok"] is False
+    assert "GITLAB" in out.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_list_github_user_repos_non_200_returns_error():
+    from assistant.skills.git_platform import list_github_user_repos
+
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
+        mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+        mock_client.return_value.get = AsyncMock(
+            return_value=MagicMock(
+                status_code=401,
+                json=lambda: {"message": "Bad credentials"},
+                headers={"content-type": "application/json"},
+            )
+        )
+        out = await list_github_user_repos(token="bad", per_page=6, page=1)
+    assert out["ok"] is False
+    assert "401" in out.get("error", "") or "credentials" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_list_gitlab_user_repos_success():
+    from assistant.skills.git_platform import list_gitlab_user_repos
+
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_client.return_value.__aenter__ = AsyncMock(return_value=mock_client.return_value)
+        mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+        mock_client.return_value.get = AsyncMock(
+            return_value=MagicMock(
+                status_code=200,
+                json=lambda: [
+                    {"path_with_namespace": "g/r1", "web_url": "https://gitlab.com/g/r1", "http_url_to_repo": "https://gitlab.com/g/r1.git", "description": ""},
+                ],
+                headers={"content-type": "application/json"},
+            )
+        )
+        out = await list_gitlab_user_repos(token="gl_token", per_page=6, page=1)
+    assert out["ok"] is True
+    assert len(out.get("items", [])) == 1
+    assert out["items"][0]["full_name"] == "g/r1"
+    assert out["items"][0]["html_url"] == "https://gitlab.com/g/r1"

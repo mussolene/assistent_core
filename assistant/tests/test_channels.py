@@ -85,6 +85,43 @@ def test_bot_commands_include_repos_github_gitlab():
     assert "gitlab" in commands
 
 
+def test_build_repos_inline_keyboard_cloned_with_pagination():
+    """Итерация 9.2: клавиатура для склонированных репо с кнопками Назад/Вперёд."""
+    from assistant.channels.telegram import (
+        REPOS_CALLBACK_PREFIX,
+        _build_repos_inline_keyboard,
+    )
+
+    items = [{"path": "repo1", "remote_url": "https://github.com/u/r1"}]
+    keyboard = _build_repos_inline_keyboard(
+        "cloned", items, page=0, has_next_page=True, dashboard_url="http://d"
+    )
+    assert len(keyboard) >= 2
+    row0 = keyboard[0]
+    assert len(row0) == 1
+    assert row0[0].get("url") == "http://d/repos"
+    nav = keyboard[1]
+    assert any(b.get("callback_data") == f"{REPOS_CALLBACK_PREFIX}cloned:1" for b in nav)
+    assert any(b.get("text") == "Вперёд ▶" for b in nav)
+    last = keyboard[-1]
+    assert any(b.get("text") == "Открыть дашборд" for b in last)
+
+
+def test_build_repos_inline_keyboard_github_with_urls():
+    """Клавиатура для GitHub: кнопки с url репо."""
+    from assistant.channels.telegram import _build_repos_inline_keyboard
+
+    items = [
+        {"full_name": "user/repo1", "html_url": "https://github.com/user/repo1"},
+    ]
+    keyboard = _build_repos_inline_keyboard(
+        "github", items, page=0, has_next_page=False, dashboard_url="http://d"
+    )
+    assert len(keyboard) >= 1
+    assert keyboard[0][0]["url"] == "https://github.com/user/repo1"
+    assert keyboard[0][0]["text"] == "user/repo1"
+
+
 def test_to_telegram_html_uses_html():
     assert PARSE_MODE == "HTML"
 

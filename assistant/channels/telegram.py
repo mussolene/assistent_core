@@ -277,6 +277,88 @@ async def _handle_task_done_callback(
             logger.warning("editMessageText task done fallback: %s", e)
 
 
+# ----- Итерация 9.2: команды /repos, /github, /gitlab — список с inline-кнопками и пагинация -----
+REPOS_PAGE_SIZE = 6
+REPOS_CALLBACK_PREFIX = "repos:"
+
+
+async def _get_repos_list_cloned(redis_url: str) -> list[dict]:
+    """Список склонированных репо (workspace из Redis)."""
+    try:
+        from assistant.dashboard.config_store import get_config_from_redis
+        from assistant.skills.git import list_cloned_repos_sync
+
+        cfg = await get_config_from_redis(redis_url)
+        workspace = (
+            (cfg.get("GIT_WORKSPACE_DIR") or "").strip()
+            or (cfg.get("WORKSPACE_DIR") or "").strip()
+            or os.getenv("GIT_WORKSPACE_DIR", "").strip()
+            or os.getenv("WORKSPACE_DIR", "/workspace").strip()
+        )
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, list_cloned_repos_sync, workspace)
+    except Exception as e:
+        logger.debug("get_repos_list_cloned: %s", e)
+        return []
+
+
+async def _get_repos_list_github(redis_url: str, page: int = 1) -> dict:
+    """Список репо пользователя на GitHub (токен из Redis)."""
+    try:
+        from assistant.dashboard.config_store import get_config_from_redis
+        from assistant.skills.git_platform import list_github_user_repos
+
+        cfg = await get_config_from_redis(redis_url)
+        token = (cfg.get("GITHUB_TOKEN") or "").strip()
+        return await list_github_user_repos(token=token or None, per_page=REPOS_PAGE_SIZE, page=page)
+    except Exception as e:
+        logger.debug("get_repos_list_github: %s", e)
+        return {"ok": False, "error": str(e), "items": []}
+
+
+async def _get_repos_list_gitlab(redis_url: str, page: int = 1) -> dict:
+    """Список проектов пользователя на GitLab (токен из Redis)."""
+    try:
+        from assistant.dashboard.config_store import get_config_from_redis
+        from assistant.skills.git_platform import list_gitlab_user_repos
+
+        cfg = await get_config_from_redis(redis_url)
+        token = (cfg.get("GITLAB_TOKEN") or "").strip()
+        return await list_gitlab_user_repos(token=token or None, per_page=REPOS_PAGE_SIZE, page=page)
+    except Exception as e:
+        logger.debug("get_repos_list_gitlab: %s", e)
+        return {"ok": False, "error": str(e), "items": []}
+
+
+def _build_repos_inline_keyboard(
+    kind: str,
+    items: list,
+    page: int,
+    has_next_page: bool,
+    dashboard_url: str,
+) -> list[list[dict]]:
+    """Собрать inline_keyboard: кнопки репо (url или callback) + Назад/Вперёд."""
+    rows: list[list[dict]] = []
+    for it in items:
+        if kind == "cloned":
+            path = it.get("path") or it.get("remote_url") or "—"
+            rows.append([{"text": (path[:40] + "…" if len(path) > 40 else path), "url": f"{dashboard_url.rstrip('/')}/repos"}])
+        else:
+            name = (it.get("full_name") or "")[:35]
+            url = it.get("html_url") or it.get("web_url") or ""
+            if url:
+                rows.append([{"text": name or "—", "url": url}])
+    nav = []
+    if page > 0:
+        nav.append({"text": "◀ Назад", "callback_data": f"{REPOS_CALLBACK_PREFIX}{kind}:{page - 1}"})
+    if has_next_page:
+        nav.append({"text": "Вперёд ▶", "callback_data": f"{REPOS_CALLBACK_PREFIX}{kind}:{page + 1}"})
+    if nav:
+        rows.append(nav)
+    rows.append([{"text": "Открыть дашборд", "url": f"{dashboard_url.rstrip('/')}/repos"}])
+    return rows
+
+
 # Telegram принимает HTML — корректное отображение без «сырых» знаков разметки
 PARSE_MODE = "HTML"
 
@@ -808,6 +890,51 @@ async def run_telegram_adapter() -> None:
                                 )
                             else:
                                 await _answer_callback(base_url, cq["id"], "Нет активного запроса.")
+                        elif callback_data.startswith(REPOS_CALLBACK_PREFIX):
+                            # repos:kind:page (page 0-based). Итерация 9.2
+                            parts = callback_data.split(":", 2)
+                            if len(parts) >= 3:
+                                try:
+                                    kind = parts[1]
+                                    page = int(parts[2])
+                                except ValueError:
+                                    kind = "cloned"
+                                    page = 0
+                            else:
+                                kind = "cloned"
+                                page = 0
+                            dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:8080").rstrip("/")
+                            label = "Склонированные" if kind == "cloned" else ("GitHub" if kind == "github" else "GitLab")
+                            try:
+                                if kind == "cloned":
+                                    items_all = await _get_repos_list_cloned(redis_url)
+                                    total = len(items_all)
+                                    start = page * REPOS_PAGE_SIZE
+                                    items = items_all[start : start + REPOS_PAGE_SIZE]
+                                    has_next = start + len(items) < total
+                                else:
+                                    api_page = page + 1
+                                    out = await _get_repos_list_github(redis_url, page=api_page) if kind == "github" else await _get_repos_list_gitlab(redis_url, page=api_page)
+                                    items = out.get("items") or []
+                                    has_next = len(items) >= REPOS_PAGE_SIZE
+                                reply = _escape_html(f"Репозитории ({label}): страница {page + 1}.")
+                                keyboard = _build_repos_inline_keyboard(kind, items, page, has_next, dashboard_url)
+                                async with httpx.AsyncClient() as client:
+                                    await client.post(
+                                        f"{base_url}/editMessageText",
+                                        json={
+                                            "chat_id": chat_id,
+                                            "message_id": cq["message"]["message_id"],
+                                            "text": reply,
+                                            "parse_mode": PARSE_MODE,
+                                            "reply_markup": {"inline_keyboard": keyboard},
+                                        },
+                                        timeout=10.0,
+                                    )
+                                await _answer_callback(base_url, cq["id"])
+                            except Exception as e:
+                                logger.debug("repos callback: %s", e)
+                                await _answer_callback(base_url, cq["id"], "Ошибка")
                         elif callback_data.startswith("task:"):
                             # task:view:id — детали в адаптере; task:done:id — отметить выполненной и обновить список (10.5); остальные — в шину
                             parts = callback_data.split(":", 2)
@@ -1005,29 +1132,37 @@ async def run_telegram_adapter() -> None:
                         except Exception as e:
                             logger.debug("sendMessage settings/channels: %s", e)
                         continue
-                    # /repos, /github, /gitlab — репозитории: настройки в дашборде, поиск/клонирование через ассистента
+                    # /repos, /github, /gitlab — список репо с inline-кнопками и пагинацией (9.2)
                     if text in ("/repos", "/github", "/gitlab"):
                         dashboard_url = (
                             os.getenv("DASHBOARD_URL", "http://localhost:8080")
                         ).rstrip("/")
-                        repos_url = f"{dashboard_url}/repos"
-                        label = (
-                            "Репо"
-                            if text == "/repos"
-                            else ("GitHub" if text == "/github" else "GitLab")
-                        )
-                        reply = (
-                            f"Репозитории ({label}).\n\n"
-                            "В дашборде (кнопка ниже) задаются токены GitHub/GitLab и путь для клонирования. "
-                            "Список склонированных репо — там же.\n\n"
-                            "Можно написать ассистенту: «найди репо на гитхабе …», «мои репо», «клонируй <url>» — поиск и клонирование идут через него."
-                        )
-                        reply_markup = {
-                            "inline_keyboard": [
-                                [{"text": f"Открыть дашборд ({label})", "url": repos_url}]
-                            ],
-                        }
+                        kind = "cloned" if text == "/repos" else ("github" if text == "/github" else "gitlab")
+                        label = "Склонированные" if kind == "cloned" else ("GitHub" if kind == "github" else "GitLab")
                         try:
+                            if kind == "cloned":
+                                items_all = await _get_repos_list_cloned(redis_url)
+                                total = len(items_all)
+                                items = items_all[:REPOS_PAGE_SIZE]
+                                page = 0
+                                has_next = total > REPOS_PAGE_SIZE
+                                reply = _escape_html(f"Репозитории ({label}): {total} шт. Страница 1.")
+                            else:
+                                if kind == "github":
+                                    out = await _get_repos_list_github(redis_url, page=1)
+                                else:
+                                    out = await _get_repos_list_gitlab(redis_url, page=1)
+                                if not out.get("ok"):
+                                    reply = _escape_html(out.get("error") or "Не удалось загрузить список. Настройте токен в дашборде.")
+                                    items = []
+                                    page = 0
+                                    has_next = False
+                                else:
+                                    items = out.get("items") or []
+                                    page = 0
+                                    has_next = len(items) >= REPOS_PAGE_SIZE
+                                    reply = _escape_html(f"Репозитории ({label}): страница 1.")
+                            keyboard = _build_repos_inline_keyboard(kind, items, page, has_next, dashboard_url)
                             async with httpx.AsyncClient() as client:
                                 await client.post(
                                     f"{base_url}/sendMessage",
@@ -1035,12 +1170,22 @@ async def run_telegram_adapter() -> None:
                                         "chat_id": chat_id,
                                         "text": reply,
                                         "parse_mode": PARSE_MODE,
-                                        "reply_markup": reply_markup,
+                                        "reply_markup": {"inline_keyboard": keyboard},
                                     },
-                                    timeout=5.0,
+                                    timeout=10.0,
                                 )
                         except Exception as e:
-                            logger.debug("sendMessage repos: %s", e)
+                            logger.debug("sendMessage repos list: %s", e)
+                            reply = _escape_html("Не удалось загрузить список. Проверьте настройки в дашборде.")
+                            try:
+                                async with httpx.AsyncClient() as client:
+                                    await client.post(
+                                        f"{base_url}/sendMessage",
+                                        json={"chat_id": chat_id, "text": reply, "parse_mode": PARSE_MODE},
+                                        timeout=5.0,
+                                    )
+                            except Exception as e2:
+                                logger.debug("sendMessage repos fallback: %s", e2)
                         continue
                     # Ответ на запрос подтверждения от MCP/агента
                     try:
