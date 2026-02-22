@@ -18,9 +18,9 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r /app/requirements.txt
 
-# 2) Tesseract OCR и unrar для извлечения текста из изображений и RAR-архивов
+# 2) Tesseract OCR и unrar-free для извлечения текста из изображений и RAR-архивов (unrar в Debian non-free недоступен по умолчанию)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    tesseract-ocr tesseract-ocr-rus unrar \
+    tesseract-ocr tesseract-ocr-rus unrar-free \
     && rm -rf /var/lib/apt/lists/*
 
 # 3) Пакет приложения
