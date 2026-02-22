@@ -260,3 +260,124 @@ async def test_orchestrator_start_stop():
         assert orch._running is False
         bus.stop.assert_called_once()
         bus.disconnect.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_process_task_agent_success_publishes_outgoing():
+    """_process_task: no attachments, agent returns text -> publish_outgoing and break."""
+    config = MagicMock()
+    config.orchestrator.max_iterations = 5
+    config.orchestrator.autonomous_mode = False
+    config.redis.url = "redis://localhost:6379/0"
+    bus = MagicMock()
+    bus.publish_outgoing = AsyncMock()
+    bus.publish_stream_token = AsyncMock()
+    tasks = MagicMock()
+    tasks.get = AsyncMock(
+        side_effect=[
+            {"state": "assistant", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": []},
+            None,
+        ]
+    )
+    tasks.update = AsyncMock()
+    mock_registry = AgentRegistry()
+    mock_agent = MagicMock()
+    mock_agent.handle = AsyncMock(
+        return_value=AgentResult(success=True, output_text="Answer", next_agent=None, tool_calls=None)
+    )
+    mock_registry.register("assistant", mock_agent)
+    orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=None)
+    orch._tasks = tasks
+    orch._agents = mock_registry
+    payload = _make_incoming_payload(chat_id="c1", message_id="m1")
+    await orch._process_task("task_1", payload)
+    bus.publish_outgoing.assert_called_once()
+    call_arg = bus.publish_outgoing.call_args[0][0]
+    assert call_arg.text == "Answer"
+    assert call_arg.done is True
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_process_task_agent_error_publishes_error():
+    """_process_task: agent returns success=False -> publish_outgoing with error and break."""
+    config = MagicMock()
+    config.orchestrator.max_iterations = 5
+    config.orchestrator.autonomous_mode = False
+    config.redis.url = "redis://localhost:6379/0"
+    bus = MagicMock()
+    bus.publish_outgoing = AsyncMock()
+    tasks = MagicMock()
+    tasks.get = AsyncMock(
+        return_value={"state": "assistant", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": []}
+    )
+    mock_registry = AgentRegistry()
+    mock_agent = MagicMock()
+    mock_agent.handle = AsyncMock(
+        return_value=AgentResult(success=False, error="Model unavailable")
+    )
+    mock_registry.register("assistant", mock_agent)
+    orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=None)
+    orch._tasks = tasks
+    orch._agents = mock_registry
+    payload = _make_incoming_payload()
+    await orch._process_task("task_1", payload)
+    bus.publish_outgoing.assert_called_once()
+    assert bus.publish_outgoing.call_args[0][0].text == "Model unavailable"
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_process_task_no_task_data_breaks():
+    """_process_task: tasks.get returns None -> loop breaks without publishing."""
+    config = MagicMock()
+    config.orchestrator.max_iterations = 5
+    config.orchestrator.autonomous_mode = False
+    config.redis.url = "redis://localhost:6379/0"
+    bus = MagicMock()
+    bus.publish_outgoing = AsyncMock()
+    tasks = MagicMock()
+    tasks.get = AsyncMock(return_value=None)
+    mock_registry = AgentRegistry()
+    mock_agent = MagicMock()
+    mock_agent.handle = AsyncMock(
+        return_value=AgentResult(success=True, output_text="x", next_agent=None, tool_calls=None)
+    )
+    mock_registry.register("assistant", mock_agent)
+    orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=None)
+    orch._tasks = tasks
+    orch._agents = mock_registry
+    payload = _make_incoming_payload()
+    await orch._process_task("task_1", payload)
+    bus.publish_outgoing.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_file_summary_no_readable_uses_placeholder_prompt():
+    """_file_summary_for_user: only image placeholder -> short placeholder prompt to gateway."""
+    config = MagicMock()
+    bus = MagicMock()
+    gateway = MagicMock()
+    gateway.generate = AsyncMock(return_value="Файл сохранён. По изображениям описать не могу.")
+    async def get_gw():
+        return gateway
+    orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=get_gw)
+    out = await orch._file_summary_for_user(" [изображение] ", ["ref1"])
+    assert "изображение" in gateway.generate.call_args[0][0].lower() or "файл" in gateway.generate.call_args[0][0].lower()
+    assert "Файл сохранён" in out or "проиндексирован" in out
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_task_to_context_no_tool_results_no_stream_callback():
+    """_task_to_context: state assistant but no tool_results -> stream_callback is None."""
+    orch, _ = _make_orchestrator_with_mock_bus()
+    payload = _make_incoming_payload()
+    task_data = {
+        "state": "assistant",
+        "stream": True,
+        "chat_id": "c1",
+        "task_id": "tid_1",
+        "user_id": "u1",
+        "message_id": "m1",
+        "tool_results": [],
+    }
+    ctx = orch._task_to_context("tid_1", task_data, payload)
+    assert ctx.metadata.get("stream_callback") is None
