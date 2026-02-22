@@ -125,8 +125,8 @@ class Orchestrator:
                             channel=payload.channel,
                         )
                     )
-                    # Если пользователь не задал отдельный вопрос — на этом завершаем
-                    if not original_text:
+                    # Вопрос только про содержимое файла уже закрыт summary — не вызывать агента
+                    if not original_text or self._is_only_file_content_question(original_text):
                         return
             except Exception as e:
                 logger.exception("File indexing: %s", e)
@@ -264,6 +264,34 @@ class Orchestrator:
                         send_checklist=send_checklist,
                     )
                 )
+
+    @staticmethod
+    def _is_only_file_content_question(text: str) -> bool:
+        """Вопрос только про содержимое файла/документа — ответ уже дали в summary, агента не вызываем."""
+        t = (text or "").strip().lower()
+        if len(t) > 120:
+            return False
+        file_phrases = (
+            "что написано",
+            "что тут написано",
+            "что здесь написано",
+            "что в файле",
+            "что в документе",
+            "о чём файл",
+            "о чём документ",
+            "опиши файл",
+            "опиши документ",
+            "что там написано",
+            "что в этом файле",
+            "что в этом документе",
+            "что написано здесь",
+            "что написано тут",
+            "содержимое файла",
+            "содержимое документа",
+            "что на картинке",
+            "что на изображении",
+        )
+        return any(p in t for p in file_phrases)
 
     async def _file_summary_for_user(self, extracted_text: str, ref_ids: list[str]) -> str:
         """Сгенерировать краткий ответ пользователю о содержании файла (модель или fallback)."""
