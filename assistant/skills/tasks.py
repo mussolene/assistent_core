@@ -100,6 +100,7 @@ ACTION_ALIASES = {
     "formatfortelegram": "format_for_telegram",
     "archivecompleted": "archive_completed",
     "listarchive": "list_archive",
+    "searcharchive": "search_archive",
 }
 
 
@@ -436,6 +437,8 @@ class TaskSkill(BaseSkill):
                 return await self._archive_completed(client, user_id, params)
             if action == "list_archive":
                 return await self._list_archive(client, user_id, params)
+            if action == "search_archive":
+                return await self._search_archive(client, user_id, params)
             return {"ok": False, "error": f"Неизвестное действие: {action}"}
         finally:
             await client.aclose()
@@ -796,6 +799,42 @@ class TaskSkill(BaseSkill):
             filtered = []
             for t in tasks:
                 # Фильтр по updated_at (дата обновления задачи)
+                upd = (t.get("updated_at") or "")[:10]
+                upd_ord = _date_to_ordinal(upd) if upd else None
+                if upd_ord is None:
+                    filtered.append(t)
+                    continue
+                if from_ord is not None and upd_ord < from_ord:
+                    continue
+                if to_ord is not None and upd_ord > to_ord:
+                    continue
+                filtered.append(t)
+            tasks = filtered
+        formatted = format_tasks_list_readable(tasks)
+        return {"ok": True, "tasks": tasks, "total": len(tasks), "formatted": formatted}
+
+    async def _search_archive(
+        self, client, user_id: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Поиск по архиву по смыслу (title/description) с фильтром по датам (итерация 10.7)."""
+        archive_key = _archive_list_key(user_id)
+        raw = await client.get(archive_key)
+        ids = json.loads(raw) if raw else []
+        tasks = []
+        for tid in ids:
+            t = await _load_task(client, tid)
+            if t and _check_owner(t, user_id):
+                tasks.append(t)
+        query = (params.get("query") or params.get("q") or "").strip()
+        if query:
+            tasks = [t for t in tasks if _task_matches_query(t, query)]
+        from_date = (params.get("from_date") or "").strip() or None
+        to_date = (params.get("to_date") or "").strip() or None
+        if from_date or to_date:
+            from_ord = _date_to_ordinal(from_date) if from_date else None
+            to_ord = _date_to_ordinal(to_date) if to_date else None
+            filtered = []
+            for t in tasks:
                 upd = (t.get("updated_at") or "")[:10]
                 upd_ord = _date_to_ordinal(upd) if upd else None
                 if upd_ord is None:

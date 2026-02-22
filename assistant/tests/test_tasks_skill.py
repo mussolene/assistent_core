@@ -596,6 +596,49 @@ async def test_tasks_list_archive_with_date_filter(skill, redis_mock):
     assert "formatted" in out
 
 
+@pytest.mark.asyncio
+async def test_tasks_search_archive(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr1 = await skill.run({"action": "create_task", "user_id": "u1", "title": "Report Q1"})
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "Meeting notes"})
+        await skill.run(
+            {"action": "update_task", "user_id": "u1", "task_id": cr1["task_id"], "status": "done"}
+        )
+        await skill.run({"action": "archive_completed", "user_id": "u1"})
+        out = await skill.run(
+            {"action": "search_archive", "user_id": "u1", "query": "Report"}
+        )
+    assert out.get("ok") is True
+    assert out.get("total") == 1
+    assert out["tasks"][0]["title"] == "Report Q1"
+    assert "formatted" in out
+
+
+@pytest.mark.asyncio
+async def test_tasks_search_archive_with_date_filter(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr1 = await skill.run({"action": "create_task", "user_id": "u1", "title": "Done task"})
+        await skill.run(
+            {"action": "update_task", "user_id": "u1", "task_id": cr1["task_id"], "status": "done"}
+        )
+        await skill.run({"action": "archive_completed", "user_id": "u1"})
+        out = await skill.run(
+            {
+                "action": "search_archive",
+                "user_id": "u1",
+                "from_date": "2020-01-01",
+                "to_date": "2030-12-31",
+            }
+        )
+    assert out.get("ok") is True
+    assert out.get("total") >= 1
+    assert "formatted" in out
+
+
 def test_format_tasks_for_telegram_empty():
     text, kb = format_tasks_for_telegram([])
     assert text == "Нет задач."

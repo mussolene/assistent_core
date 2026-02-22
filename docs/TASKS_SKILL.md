@@ -28,6 +28,7 @@
 | `format_for_telegram` | max_items?, task_ids?, button_action? | Текст и inline_keyboard. button_action: view \| delete \| update \| add_document \| add_link; task_ids — только эти задачи для кнопок выбора. |
 | `archive_completed` | — | Перенести все задачи со статусом done в архив (исключить из основного списка). Возвращает archived_count и user_reply. |
 | `list_archive` | from_date?, to_date? | Список заархивированных задач. Фильтр по периоду — по дате updated_at (YYYY-MM-DD). |
+| `search_archive` | query? (или q), from_date?, to_date? | Поиск по архиву: подстрока в title/description и опционально фильтр по датам (updated_at). |
 
 **user_id** подставляется автоматически из контекста (ToolAgent передаёт `context.user_id` для скилла `tasks`).
 
@@ -93,6 +94,7 @@
 - **Хранение:** список id заархивированных задач в `assistant:tasks:archive:user:{user_id}`. Тела задач остаются в `assistant:task:{id}`.
 - **archive_completed:** все задачи пользователя со статусом `done` удаляются из основного списка (`assistant:tasks:user:{user_id}`) и добавляются в архив. В основном списке остаются только открытые и не заархивированные.
 - **list_archive:** возвращает задачи из архива с опциональным фильтром `from_date`, `to_date` (по полю updated_at задачи).
+- **search_archive (10.7):** поиск по архиву — параметры `query` (или `q`), `from_date`, `to_date`. Фильтрация по подстроке в title/description и по периоду updated_at. Возвращает tasks и formatted с датами.
 
 ---
 
@@ -106,7 +108,7 @@
 ## Планируемые расширения (дорожная карта)
 
 - **Список в Telegram (10.5 — сделано):** только актуальные задачи (open, end_date ≥ сегодня); кнопка «✓ Выполнена» (callback `task:done:{id}`); при нажатии — статус задачи обновляется и сообщение со списком редактируется (актуальный список без выполненной задачи).
-- **Компактный список** неактуальных; **архивация (10.6 — сделано):** archive_completed, list_archive с фильтром from_date/to_date; **поиск по смыслу** по архиву (10.7).
+- **Компактный список** неактуальных; **архивация (10.6):** archive_completed, list_archive; **поиск по архиву (10.7 — сделано):** search_archive(query, from_date, to_date).
 - **Подзадачи**: поле `parent_id`, создание подзадачи, список подзадач.
 
 См. **docs/TASKS_REQUIREMENTS.md** и блок 10.5–10.8 в **docs/ITERATIONS_ROADMAP.md**.
