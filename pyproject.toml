@@ -29,6 +29,10 @@ dev = [
 dashboard = [
     "flask>=3.0.0",
 ]
+files = [
+    "pypdf>=4.0.0",
+    "python-docx>=1.0.0",
+]
 
 [project.scripts]
 assistant-core = "assistant.main:main"

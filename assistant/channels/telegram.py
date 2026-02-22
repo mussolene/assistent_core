@@ -521,6 +521,23 @@ async def run_telegram_adapter() -> None:
                         break
         except Exception as e:
             logger.exception("sendMessage failed: %s", e)
+        # Отправить файл по ссылке (file_id из индексированных вложений)
+        send_doc = getattr(payload, "send_document", None)
+        if send_doc and isinstance(send_doc, dict) and send_doc.get("file_id"):
+            try:
+                async with httpx.AsyncClient() as client:
+                    r = await client.post(
+                        f"{base_url}/sendDocument",
+                        json={
+                            "chat_id": payload.chat_id,
+                            "document": send_doc["file_id"],
+                        },
+                        timeout=15.0,
+                    )
+                if r.status_code != 200:
+                    logger.warning("sendDocument %s: %s", r.status_code, r.text)
+            except Exception as e:
+                logger.exception("sendDocument failed: %s", e)
 
     bus.subscribe_outgoing(on_outgoing)
     bus.subscribe_stream(on_stream)
@@ -627,7 +644,27 @@ async def run_telegram_adapter() -> None:
                     uid_int = int(msg["from"]["id"])
                     chat_id = str(msg["chat"]["id"])
                     message_id = str(msg.get("message_id", ""))
-                    text = (msg.get("text") or "").strip()
+                    text = (msg.get("text") or msg.get("caption") or "").strip()
+                    # Вложения: документ или фото — передаём в core для индексации в вектор и хранения ссылки
+                    attachments: list[dict] = []
+                    if msg.get("document"):
+                        doc = msg["document"]
+                        attachments.append({
+                            "file_id": doc["file_id"],
+                            "filename": doc.get("file_name") or "document",
+                            "mime_type": doc.get("mime_type") or "application/octet-stream",
+                            "source": "telegram",
+                        })
+                    if msg.get("photo"):
+                        largest = msg["photo"][-1]
+                        attachments.append({
+                            "file_id": largest["file_id"],
+                            "filename": "photo.jpg",
+                            "mime_type": "image/jpeg",
+                            "source": "telegram",
+                        })
+                    if attachments and not text:
+                        text = "[Файл: " + ", ".join(a.get("filename") or "файл" for a in attachments) + "]"
                     # Pairing: /start CODE or /pair CODE (one-time code from dashboard)
                     if text.startswith("/start ") or text.startswith("/pair "):
                         code = (
@@ -818,6 +855,7 @@ async def run_telegram_adapter() -> None:
                             chat_id=chat_id,
                             text=text,
                             reasoning_requested=reasoning,
+                            attachments=attachments,
                         )
                     )
             except asyncio.CancelledError:

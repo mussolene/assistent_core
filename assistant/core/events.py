@@ -28,6 +28,8 @@ class IncomingMessage(BaseModel):
     text: str = Field(default="", description="Message text")
     reasoning_requested: bool = Field(default=False)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # Вложения: список { "file_id", "filename", "mime_type", "source": "telegram" } — контент не храним, индексируем в вектор и храним ссылку
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class TaskCreated(BaseModel):
@@ -69,6 +71,8 @@ class OutgoingReply(BaseModel):
     reply_markup: Optional[dict] = Field(
         default=None, description="Telegram reply_markup, e.g. inline_keyboard for buttons"
     )
+    # Отправить файл в чат (Telegram): { "file_id": "..." } — адаптер вызовет sendDocument
+    send_document: Optional[dict[str, Any]] = Field(default=None)
 
 
 class StreamToken(BaseModel):

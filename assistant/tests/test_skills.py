@@ -1,11 +1,12 @@
 """Tests for skills: registry, filesystem, shell whitelist, mcp stub, memory_control."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from assistant.memory.manager import VECTOR_LEVEL_SHORT
 from assistant.skills.filesystem import FilesystemSkill
+from assistant.skills.file_ref import FileRefSkill
 from assistant.skills.mcp_adapter import McpAdapterSkill
 from assistant.skills.memory_control import MemoryControlSkill
 from assistant.skills.registry import SkillRegistry
@@ -51,6 +52,23 @@ async def test_filesystem_list(workspace):
     out = await skill.run({"action": "list", "path": "."})
     assert out["ok"] is True
     assert "foo.txt" in out["entries"] or "sub" in out["entries"]
+
+
+@pytest.mark.asyncio
+async def test_file_ref_list_empty():
+    with patch("assistant.skills.file_ref.list_file_refs", return_value=[]):
+        skill = FileRefSkill("redis://localhost:6379/99")
+        out = await skill.run({"user_id": "u1", "action": "list"})
+    assert out.get("ok") is True
+    assert out.get("files") == []
+
+
+@pytest.mark.asyncio
+async def test_file_ref_send_without_ref_id():
+    skill = FileRefSkill("redis://localhost:6379/99")
+    out = await skill.run({"user_id": "u1", "action": "send"})
+    assert out.get("ok") is False
+    assert "file_ref_id" in out.get("error", "").lower() or "ref_id" in out.get("error", "").lower()
 
 
 @pytest.mark.asyncio

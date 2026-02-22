@@ -43,6 +43,7 @@ async def run_core(config: Config) -> None:
     from assistant.skills.shell import ShellSkill
     from assistant.skills.tasks import TaskSkill
     from assistant.skills.vector_rag import VectorRagSkill
+    from assistant.skills.file_ref import FileRefSkill
 
     bus = EventBus(config.redis.url)
     memory = MemoryManager(
@@ -138,6 +139,7 @@ async def run_core(config: Config) -> None:
         )
     )
     skills.register(VectorRagSkill(memory))
+    skills.register(FileRefSkill(config.redis.url))
     skills.register(MemoryControlSkill(memory))
     skills.register(TaskSkill())
     skills.register(McpAdapterSkill())
@@ -145,7 +147,7 @@ async def run_core(config: Config) -> None:
     agent_registry = AgentRegistry()
     agent_registry.register("assistant", AssistantAgent(gateway_factory=get_gateway, memory=memory))
     agent_registry.register("tool", ToolAgent(skills, runner, memory))
-    orchestrator = Orchestrator(config=config, bus=bus)
+    orchestrator = Orchestrator(config=config, bus=bus, memory=memory)
     orchestrator.set_agent_registry(agent_registry)
     await orchestrator.start()
     try:

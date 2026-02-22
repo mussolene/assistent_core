@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from assistant.agents.base import TaskContext
 from assistant.core.agent_registry import AgentRegistry
@@ -21,9 +21,15 @@ logger = logging.getLogger(__name__)
 class Orchestrator:
     """State-driven orchestrator. No LLM in lifecycle decisions."""
 
-    def __init__(self, config: "Config", bus: EventBus) -> None:
+    def __init__(
+        self,
+        config: "Config",
+        bus: EventBus,
+        memory: Any = None,
+    ) -> None:
         self._config = config
         self._bus = bus
+        self._memory = memory
         self._tasks = TaskManager(config.redis.url)
         self._agents = AgentRegistry()
         self._running = False
@@ -57,6 +63,32 @@ class Orchestrator:
         asyncio.create_task(self._process_task(task_id, payload))
 
     async def _process_task(self, task_id: str, payload: IncomingMessage) -> None:
+        # Вложения: извлечь текст, положить в вектор, сохранить ссылки в Redis (файлы не храним)
+        if payload.attachments and self._memory:
+            try:
+                from assistant.dashboard.config_store import get_config_from_redis_sync
+                from assistant.core.file_indexing import index_telegram_attachments
+
+                redis_cfg = get_config_from_redis_sync(self._config.redis.url)
+                bot_token = (redis_cfg.get("TELEGRAM_BOT_TOKEN") or "").strip()
+                if bot_token:
+                    ref_ids = await index_telegram_attachments(
+                        self._config.redis.url,
+                        self._memory,
+                        payload.user_id,
+                        payload.chat_id,
+                        payload.attachments,
+                        bot_token,
+                    )
+                    if ref_ids:
+                        if not payload.text.strip():
+                            payload.text = (
+                                "[Индексированы файлы в память. Можешь спросить по содержимому или попросить «отправь файл …».]"
+                            )
+                        await self._tasks.update(task_id, text=payload.text)
+            except Exception as e:
+                logger.exception("File indexing: %s", e)
+
         max_iterations = self._config.orchestrator.max_iterations
         autonomous = self._config.orchestrator.autonomous_mode
         if not autonomous:
@@ -138,6 +170,8 @@ class Orchestrator:
                     )
                     continue
             else:
+                task_data = await self._tasks.get(task_id)
+                send_doc = self._get_send_document_from_tool_results(task_data)
                 await self._bus.publish_outgoing(
                     OutgoingReply(
                         task_id=task_id,
@@ -146,6 +180,7 @@ class Orchestrator:
                         text=last_output,
                         done=True,
                         channel=payload.channel,
+                        send_document=send_doc,
                     )
                 )
                 break
@@ -154,6 +189,8 @@ class Orchestrator:
                 "Превышено число шагов. Ответьте коротко или упростите запрос (например: «напомни про задачу X через 5 минут»)."
             )
             if text_to_send:
+                task_data = await self._tasks.get(task_id)
+                send_doc = self._get_send_document_from_tool_results(task_data)
                 await self._bus.publish_outgoing(
                     OutgoingReply(
                         task_id=task_id,
@@ -162,6 +199,7 @@ class Orchestrator:
                         text=text_to_send,
                         done=True,
                         channel=payload.channel,
+                        send_document=send_doc,
                     )
                 )
 
@@ -204,6 +242,16 @@ class Orchestrator:
             tool_results=task_data.get("tool_results", []),
             metadata=metadata,
         )
+
+    @staticmethod
+    def _get_send_document_from_tool_results(task_data: dict | None) -> dict | None:
+        """Взять send_document из последнего tool_result (для отправки файла в чат)."""
+        if not task_data:
+            return None
+        for tr in reversed(task_data.get("tool_results") or []):
+            if isinstance(tr, dict) and tr.get("send_document"):
+                return tr["send_document"]
+        return None
 
     def set_agent_registry(self, registry: AgentRegistry) -> None:
         self._agents = registry
