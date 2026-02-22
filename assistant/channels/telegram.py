@@ -126,9 +126,7 @@ async def _handle_task_view_callback(
 
     await _answer_callback(base_url, callback_query_id, "Ок")
     skill = TaskSkill()
-    result = await skill.run(
-        {"action": "get_task", "task_id": task_id, "user_id": user_id}
-    )
+    result = await skill.run({"action": "get_task", "task_id": task_id, "user_id": user_id})
     if result.get("ok") and result.get("formatted_details"):
         body = result["formatted_details"]
         dashboard_url = os.getenv("DASHBOARD_URL", "").strip()
