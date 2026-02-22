@@ -238,7 +238,7 @@ def pop_dev_feedback(chat_id: str) -> list[str]:
         if items:
             r.delete(key)
         r.close()
-        return [x for x in items] if items else []
+        return list(items) if items else []
     except Exception as e:
         logger.exception("pop_dev_feedback: %s", e)
         return []

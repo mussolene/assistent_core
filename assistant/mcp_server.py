@@ -150,8 +150,8 @@ def run_stdio() -> None:
         req_id = req.get("id")
         params = req.get("params") or {}
 
-        def reply(result=None, error=None):
-            out = {"jsonrpc": "2.0", "id": req_id}
+        def reply(result=None, error=None, *, _id=req_id):
+            out = {"jsonrpc": "2.0", "id": _id}
             if error is not None:
                 out["error"] = error
             else:
