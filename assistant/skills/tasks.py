@@ -657,7 +657,12 @@ class TaskSkill(BaseSkill):
         if not task_id or not reminder_at:
             return {"ok": False, "error": "task_id и reminder_at (ISO datetime) обязательны"}
         try:
-            ts = datetime.fromisoformat(reminder_at.replace("Z", "+00:00")).timestamp()
+            reminder_at_norm = reminder_at.strip().replace("Z", "+00:00")
+            dt = datetime.fromisoformat(reminder_at_norm)
+            # Без суффикса таймзоны считаем UTC (как created_at и сравнения в get_due_reminders)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            ts = dt.timestamp()
         except ValueError:
             return {
                 "ok": False,
@@ -666,11 +671,11 @@ class TaskSkill(BaseSkill):
         task = await _load_task(client, task_id)
         if not task or not _check_owner(task, user_id):
             return {"ok": False, "error": "Задача не найдена или доступ запрещён"}
-        task["reminder_at"] = reminder_at
+        task["reminder_at"] = dt.isoformat()
         task["updated_at"] = _now_iso()
         await _save_task(client, task)
         await client.zadd(REDIS_REMINDERS_KEY, {task_id: ts})
-        return {"ok": True, "task": task, "reminder_at": reminder_at}
+        return {"ok": True, "task": task, "reminder_at": task["reminder_at"]}
 
     async def _get_due_reminders(self, client, params: dict[str, Any]) -> dict[str, Any]:
         now = datetime.now(timezone.utc).timestamp()

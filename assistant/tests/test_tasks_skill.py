@@ -1,5 +1,6 @@
 """Tests for tasks skill: CRUD, isolation by user_id, reminders, format_for_telegram."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -474,3 +475,32 @@ def test_get_due_reminders_sync_empty():
         from_url.return_value = client
         out = get_due_reminders_sync("redis://localhost/0")
     assert out == []
+
+
+@pytest.mark.asyncio
+async def test_tasks_set_reminder_naive_datetime_treated_as_utc(skill, redis_mock):
+    """reminder_at без таймзоны (2025-12-31T15:00:00) сохраняется как UTC (+00:00)."""
+    from assistant.skills.tasks import REDIS_TASK_PREFIX
+
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr = await skill.run(
+            {"action": "create_task", "title": "Напомнить", "user_id": "u1"}
+        )
+        assert cr["ok"] is True
+        task_id = cr["task_id"]
+        out = await skill.run(
+            {
+                "action": "set_reminder",
+                "task_id": task_id,
+                "user_id": "u1",
+                "reminder_at": "2025-12-31T15:00:00",
+            }
+        )
+        assert out["ok"] is True
+        assert "reminder_at" in out
+        assert "+00:00" in out["reminder_at"] or out["reminder_at"].endswith("Z")
+        raw = await redis_mock.get(f"{REDIS_TASK_PREFIX}{task_id}")
+        task = json.loads(raw)
+        assert "+00:00" in task["reminder_at"] or task["reminder_at"].endswith("Z")

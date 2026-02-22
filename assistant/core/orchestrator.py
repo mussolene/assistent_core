@@ -149,17 +149,21 @@ class Orchestrator:
                     )
                 )
                 break
-        if iteration >= max_iterations and last_output:
-            await self._bus.publish_outgoing(
-                OutgoingReply(
-                    task_id=task_id,
-                    chat_id=payload.chat_id,
-                    message_id=payload.message_id,
-                    text=last_output,
-                    done=True,
-                    channel=payload.channel,
-                )
+        if iteration >= max_iterations:
+            text_to_send = last_output.strip() if last_output else (
+                "Превышено число шагов. Ответьте коротко или упростите запрос (например: «напомни про задачу X через 5 минут»)."
             )
+            if text_to_send:
+                await self._bus.publish_outgoing(
+                    OutgoingReply(
+                        task_id=task_id,
+                        chat_id=payload.chat_id,
+                        message_id=payload.message_id,
+                        text=text_to_send,
+                        done=True,
+                        channel=payload.channel,
+                    )
+                )
 
     def _task_to_context(
         self,
