@@ -42,6 +42,7 @@ async def run_core(config: Config) -> None:
     from assistant.skills.memory_control import MemoryControlSkill
     from assistant.skills.registry import SkillRegistry
     from assistant.skills.runner import SandboxRunner
+    from assistant.skills.send_email_skill import SendEmailSkill
     from assistant.skills.shell import ShellSkill
     from assistant.skills.tasks import TaskSkill
     from assistant.skills.vector_rag import VectorRagSkill
@@ -144,6 +145,7 @@ async def run_core(config: Config) -> None:
     skills.register(MemoryControlSkill(memory))
     skills.register(ChecklistSkill())
     skills.register(TaskSkill())
+    skills.register(SendEmailSkill(redis_url=config.redis.url))
     skills.register(McpAdapterSkill())
     runner = SandboxRunner()
     agent_registry = AgentRegistry()
