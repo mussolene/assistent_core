@@ -351,3 +351,66 @@ def index_repo_to_qdrant(
         if not upsert_points(qdrant_url, collection, ids, vectors, all_payloads, client):
             return 0, 0, "Ошибка записи в Qdrant"
     return len(all_chunks), files_done, ""
+
+
+# --- Итерация 8.1: память разговоров в Qdrant ---
+
+CONVERSATION_MEMORY_COLLECTION = "conversation_memory"
+
+
+def index_conversation_to_qdrant(
+    messages: list[dict[str, Any]],
+    user_id: str,
+    chat_id: str,
+    qdrant_url: str,
+    collection: str = CONVERSATION_MEMORY_COLLECTION,
+    redis_url: str | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
+) -> tuple[int, str]:
+    """
+    Индексация последних сообщений разговора в Qdrant (коллекция «conversation memory»).
+    messages: [{"role": "user"|"assistant", "content": "..."}].
+    Один вектор на сообщение; text = "role: content"; payload: user_id, chat_id, role, text.
+    Возвращает (число точек, ошибка или "").
+    """
+    if not qdrant_url or not messages:
+        return 0, ""
+    collection_name = get_qdrant_collection(
+        redis_url, "CONVERSATION_MEMORY_COLLECTION", collection
+    )
+    texts: list[str] = []
+    payloads: list[dict[str, Any]] = []
+    for i, msg in enumerate(messages):
+        role = (msg.get("role") or "user").strip() or "user"
+        content = (msg.get("content") or "").strip()
+        if not content:
+            continue
+        text = f"{role}: {content[:4000]}"
+        texts.append(text)
+        payloads.append({
+            "text": text,
+            "user_id": user_id,
+            "chat_id": chat_id,
+            "role": role,
+            "source": "conversation_memory",
+            "index": i,
+        })
+    if not texts:
+        return 0, ""
+    if embed_fn is None:
+        vectors = _embed_texts(texts)
+    else:
+        vectors = embed_fn(texts)
+    if len(vectors) != len(texts):
+        return 0, "Ошибка эмбеддинга"
+    vector_size = len(vectors[0]) if vectors else DEFAULT_VECTOR_SIZE
+    ids = [
+        hashlib.sha256(f"conv:{user_id}:{chat_id}:{i}:{t[:50]}".encode()).hexdigest()[:24]
+        for i, t in enumerate(texts)
+    ]
+    with httpx.Client(timeout=30.0) as client:
+        if not ensure_collection(qdrant_url, collection_name, vector_size, client):
+            return 0, "Не удалось создать коллекцию Qdrant"
+        if not upsert_points(qdrant_url, collection_name, ids, vectors, payloads, client):
+            return 0, "Ошибка записи в Qdrant"
+    return len(texts), ""

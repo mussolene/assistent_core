@@ -215,3 +215,59 @@ def test_search_qdrant_success():
     assert out[0]["text"] == "chunk one"
     assert out[0]["payload"]["repo"] == "r1"
     assert out[0]["score"] == 0.9
+
+
+# --- Iteration 8.1: conversation memory ---
+
+
+def test_index_conversation_to_qdrant_empty_messages():
+    cnt, err = qdrant_docs.index_conversation_to_qdrant(
+        [], "u1", "c1", "http://qdrant:6333"
+    )
+    assert cnt == 0
+    assert err == ""
+
+
+def test_index_conversation_to_qdrant_no_qdrant_url():
+    cnt, err = qdrant_docs.index_conversation_to_qdrant(
+        [{"role": "user", "content": "hi"}], "u1", "c1", ""
+    )
+    assert cnt == 0
+    assert err == ""
+
+
+def test_index_conversation_to_qdrant_skips_empty_content():
+    with patch("assistant.core.qdrant_docs._embed_texts", return_value=[]):
+        cnt, err = qdrant_docs.index_conversation_to_qdrant(
+            [{"role": "user", "content": ""}, {"role": "assistant", "content": "  "}],
+            "u1",
+            "c1",
+            "http://qdrant:6333",
+        )
+    assert cnt == 0
+    assert err == ""
+
+
+def test_index_conversation_to_qdrant_success():
+    messages = [
+        {"role": "user", "content": "What is Python?"},
+        {"role": "assistant", "content": "A programming language."},
+    ]
+    with patch("assistant.core.qdrant_docs._embed_texts", return_value=[[0.1] * 384, [0.2] * 384]):
+        with patch.object(httpx.Client, "get", return_value=MagicMock(status_code=200)):
+            with patch.object(httpx.Client, "put") as mock_put:
+                mock_put.return_value = MagicMock(status_code=200)
+                with patch.object(httpx.Client, "close"):
+                    cnt, err = qdrant_docs.index_conversation_to_qdrant(
+                        messages, "u1", "chat1", "http://qdrant:6333"
+                    )
+    assert cnt == 2
+    assert err == ""
+    call_json = mock_put.call_args[1]["json"]
+    points = call_json["points"]
+    assert len(points) == 2
+    assert points[0]["payload"]["user_id"] == "u1"
+    assert points[0]["payload"]["chat_id"] == "chat1"
+    assert points[0]["payload"]["role"] == "user"
+    assert "user: What is Python?" in points[0]["payload"]["text"]
+    assert points[1]["payload"]["role"] == "assistant"

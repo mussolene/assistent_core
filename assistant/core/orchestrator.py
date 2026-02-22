@@ -61,6 +61,42 @@ class Orchestrator:
         """Run the event bus listener (blocks)."""
         await self._bus.run_listener()
 
+    def _schedule_conversation_index(self, user_id: str, chat_id: str) -> None:
+        """Итерация 8.1: фоново индексировать последние сообщения в Qdrant (conversation memory)."""
+        asyncio.create_task(self._index_conversation_memory_background(user_id, chat_id))
+
+    async def _index_conversation_memory_background(self, user_id: str, chat_id: str) -> None:
+        if not self._memory:
+            return
+        try:
+            short = self._memory.get_short_term()
+            messages = await short.get_messages(user_id, "default")
+            if not messages:
+                return
+            from assistant.core.qdrant_docs import (
+                get_qdrant_url,
+                index_conversation_to_qdrant,
+            )
+
+            qdrant_url = get_qdrant_url(self._config.redis.url)
+            if not qdrant_url:
+                return
+            loop = asyncio.get_event_loop()
+            cnt, err = await loop.run_in_executor(
+                None,
+                lambda: index_conversation_to_qdrant(
+                    messages,
+                    user_id,
+                    chat_id,
+                    qdrant_url,
+                    redis_url=self._config.redis.url,
+                ),
+            )
+            if err:
+                logger.debug("Conversation memory index: %s", err)
+        except Exception as e:
+            logger.debug("Conversation memory index background: %s", e)
+
     async def _on_incoming(self, payload: IncomingMessage) -> None:
         task_id = await self._tasks.create(
             user_id=payload.user_id,
@@ -105,6 +141,7 @@ class Orchestrator:
                             channel=payload.channel,
                         )
                     )
+                    self._schedule_conversation_index(payload.user_id, payload.chat_id)
                     return
                 ref_ids, extracted_text = await index_telegram_attachments(
                     self._config.redis.url,
@@ -163,6 +200,7 @@ class Orchestrator:
                     )
                     # Вопрос только про содержимое файла уже закрыт summary — не вызывать агента
                     if not original_text or self._is_only_file_content_question(original_text):
+                        self._schedule_conversation_index(payload.user_id, payload.chat_id)
                         return
                 elif paths_note:
                     # Вложения с path без индексации в локальную память — передаём пути ассистенту для index_document
@@ -180,6 +218,7 @@ class Orchestrator:
                         channel=payload.channel,
                     )
                 )
+                self._schedule_conversation_index(payload.user_id, payload.chat_id)
                 if not original_text:
                     return
 
@@ -241,6 +280,7 @@ class Orchestrator:
                                     channel=payload.channel,
                                 )
                             )
+                            self._schedule_conversation_index(payload.user_id, payload.chat_id)
                             return
                         if (
                             isinstance(tr, dict)
@@ -258,6 +298,7 @@ class Orchestrator:
                                     reply_markup={"inline_keyboard": tr["inline_keyboard"]},
                                 )
                             )
+                            self._schedule_conversation_index(payload.user_id, payload.chat_id)
                             return
                     await self._tasks.update(
                         task_id,
@@ -284,6 +325,7 @@ class Orchestrator:
                     )
                 )
                 break
+        self._schedule_conversation_index(payload.user_id, payload.chat_id)
         if iteration >= max_iterations:
             text_to_send = (
                 last_output.strip()

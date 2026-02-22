@@ -435,11 +435,13 @@ async def test_orchestrator_process_task_agent_success_publishes_outgoing():
     orch._tasks = tasks
     orch._agents = mock_registry
     payload = _make_incoming_payload(chat_id="c1", message_id="m1")
-    await orch._process_task("task_1", payload)
+    with patch.object(orch, "_schedule_conversation_index") as mock_schedule:
+        await orch._process_task("task_1", payload)
     bus.publish_outgoing.assert_called_once()
     call_arg = bus.publish_outgoing.call_args[0][0]
     assert call_arg.text == "Answer"
     assert call_arg.done is True
+    mock_schedule.assert_called_once_with("user_1", "c1")
 
 
 @pytest.mark.asyncio
