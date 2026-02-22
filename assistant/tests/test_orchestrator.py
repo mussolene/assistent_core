@@ -7,7 +7,7 @@ import pytest
 from assistant.agents.base import AgentResult, TaskContext
 from assistant.core.agent_registry import AgentRegistry
 from assistant.core.events import ChannelKind, IncomingMessage, StreamToken
-from assistant.core.orchestrator import Orchestrator
+from assistant.core.orchestrator import Orchestrator, _format_attachment_paths_for_context
 from assistant.core.task_manager import TaskManager
 
 
@@ -329,6 +329,72 @@ async def test_orchestrator_process_task_attachments_index_raises_publishes_erro
         await orch._process_task("task_1", payload)
     texts = [c[0][0].text for c in bus.publish_outgoing.call_args_list]
     assert any("Не удалось прочитать файл" in t for t in texts)
+
+
+def test_format_attachment_paths_for_context_empty():
+    assert _format_attachment_paths_for_context([], "u1") == ""
+    assert _format_attachment_paths_for_context([{"file_id": "f1"}], "u1") == ""
+
+
+def test_format_attachment_paths_for_context_with_paths():
+    out = _format_attachment_paths_for_context(
+        [
+            {"path": "/tmp/f1.pdf", "filename": "doc.pdf"},
+            {"path": "/tmp/f2.jpg", "filename": "photo.jpg"},
+        ],
+        "user_42",
+    )
+    assert "Вложения с путями" in out
+    assert "/tmp/f1.pdf" in out
+    assert "doc.pdf" in out
+    assert "user_42" in out
+    assert "index_document" in out
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_attachments_with_path_index_to_qdrant():
+    """Итерация 3.3: при вложениях с path и настроенном Qdrant вызывается index_document_to_qdrant."""
+    config = MagicMock()
+    config.orchestrator.max_iterations = 5
+    config.orchestrator.autonomous_mode = False
+    config.redis.url = "redis://localhost:6379/0"
+    bus = MagicMock()
+    bus.publish_outgoing = AsyncMock()
+    memory = MagicMock()
+    with (
+        patch(
+            "assistant.dashboard.config_store.get_config_from_redis_sync",
+            return_value={"TELEGRAM_BOT_TOKEN": "tok"},
+        ),
+        patch(
+            "assistant.core.file_indexing.index_telegram_attachments",
+            new_callable=AsyncMock,
+            return_value=(["ref1"], "extracted"),
+        ),
+        patch("assistant.core.qdrant_docs.get_qdrant_url", return_value="http://qdrant:6333"),
+        patch(
+            "assistant.core.qdrant_docs.index_document_to_qdrant",
+            return_value=(2, ""),
+        ) as mock_index,
+    ):
+        orch = Orchestrator(config=config, bus=bus, memory=memory, gateway_factory=None)
+        orch._tasks = MagicMock()
+        orch._tasks.update = AsyncMock()
+        orch._file_summary_for_user = AsyncMock(return_value="Краткое содержание.")
+        orch._agents = MagicMock()
+        payload = _make_incoming_payload(
+            attachments=[
+                {"file_id": "f1", "filename": "a.txt", "source": "telegram", "path": "/tmp/up/user1/1_0_a.txt"},
+            ]
+        )
+        payload.text = ""
+        await orch._process_task("task_1", payload)
+    mock_index.assert_called_once()
+    call_args, call_kw = mock_index.call_args
+    assert call_args[0] == "/tmp/up/user1/1_0_a.txt"
+    assert call_args[1] == payload.user_id
+    assert call_args[2] == "http://qdrant:6333"
+    assert call_kw["redis_url"] == config.redis.url
 
 
 @pytest.mark.asyncio

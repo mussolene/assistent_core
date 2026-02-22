@@ -18,6 +18,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _format_attachment_paths_for_context(attachments: list[dict], user_id: str) -> str:
+    """Формирует подсказку для ассистента: пути вложений для вызова index_document при необходимости."""
+    paths = [(a.get("path"), a.get("filename") or "файл") for a in attachments if a.get("path")]
+    if not paths:
+        return ""
+    parts = [f"{p} ({name})" for p, name in paths]
+    return f"Вложения с путями: {', '.join(parts)}. Для индексации в Qdrant: index_document(path=<путь>, user_id={user_id})."
+
+
 class Orchestrator:
     """State-driven orchestrator. No LLM in lifecycle decisions."""
 
@@ -105,11 +114,40 @@ class Orchestrator:
                     payload.attachments,
                     bot_token,
                 )
+                # Итерация 3.3: вложения с path — индексируем также в Qdrant (если настроен)
+                qdrant_indexed = 0
+                try:
+                    from assistant.core.qdrant_docs import get_qdrant_url, index_document_to_qdrant
+
+                    qdrant_url = get_qdrant_url(self._config.redis.url)
+                    if qdrant_url:
+                        for att in payload.attachments:
+                            path = att.get("path")
+                            if path and isinstance(path, str):
+                                cnt, err = index_document_to_qdrant(
+                                    path,
+                                    payload.user_id,
+                                    qdrant_url,
+                                    redis_url=self._config.redis.url,
+                                    mime_type=att.get("mime_type") or "",
+                                    filename=att.get("filename"),
+                                )
+                                if cnt > 0:
+                                    qdrant_indexed += cnt
+                                if err:
+                                    logger.debug("Qdrant index %s: %s", path, err)
+                except Exception as e:
+                    logger.debug("Qdrant indexing for attachments: %s", e)
+                paths_note = _format_attachment_paths_for_context(payload.attachments, payload.user_id)
                 if ref_ids:
                     if not original_text:
                         payload.text = "[Индексированы файлы в память. Можешь спросить по содержимому или попросить «отправь файл …».]"
                     else:
                         payload.text = original_text
+                    if qdrant_indexed > 0:
+                        payload.text += " [Документ также проиндексирован в Qdrant для поиска.]"
+                    if paths_note:
+                        payload.text += " " + paths_note
                     await self._tasks.update(task_id, text=payload.text)
                     # 2. Ответ о содержании: summary от модели или fallback
                     summary_text = await self._file_summary_for_user(extracted_text, ref_ids)
@@ -126,6 +164,10 @@ class Orchestrator:
                     # Вопрос только про содержимое файла уже закрыт summary — не вызывать агента
                     if not original_text or self._is_only_file_content_question(original_text):
                         return
+                elif paths_note:
+                    # Вложения с path без индексации в локальную память — передаём пути ассистенту для index_document
+                    payload.text = (payload.text or original_text or "[Вложение.]").strip() + " " + paths_note
+                    await self._tasks.update(task_id, text=payload.text)
             except Exception as e:
                 logger.exception("File indexing: %s", e)
                 await self._bus.publish_outgoing(
