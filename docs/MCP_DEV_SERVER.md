@@ -34,6 +34,27 @@
 
 Сервер периодически шлёт `: keepalive` для сохранения соединения.
 
+## Поток запроса подтверждения
+
+```mermaid
+sequenceDiagram
+    participant Client as MCP-клиент (Cursor)
+    participant API as Dashboard API
+    participant Bus as Event Bus / Redis
+    participant TG as Telegram-адаптер
+    participant User as Пользователь
+
+    Client->>API: POST /confirmation {"message": "Push в main?"}
+    API->>Bus: Публикация запроса
+    API->>TG: (через шину) Сообщение в чат + кнопки
+    TG->>User: Сообщение с кнопками Подтвердить / Отклонить
+    User->>TG: Нажатие кнопки
+    TG->>Bus: Результат (confirmed/rejected)
+    Bus->>API: Событие confirmation
+    API->>Client: SSE event: confirmation {confirmed, reply}
+    Note over Client,User: Либо клиент забирает результат через GET /replies
+```
+
 ## Поведение в Telegram
 
 - Ответ на запрос подтверждения (следующее сообщение после вопроса): `confirm`/`ok`/`yes`/`да` → подтверждение, `reject`/`no`/`cancel`/`нет`/`отмена` → отмена; иначе текст попадает в `reply`. Сообщение не уходит в диалог с ассистентом.

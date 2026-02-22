@@ -177,9 +177,9 @@
 | 3 | В TASKS_SKILL переименовать «Планируемые расширения» и привести статусы 10.5–10.8 | Средний |
 | 4 | В AUDIT_V2 задачу 2 отметить выполненной, проверить README на SECRET_KEY/HTTPS | Средний |
 | 5 | В CHANNELS_AND_FRONTEND унифицировать ссылки на FRONTEND_STACK (относительные из docs/) | Низкий |
-| 6 | Зафиксировать язык доки в AGENTS.md или здесь (RU основной; EN — CHANGELOG, Contributing) | Низкий |
-| 7 | Опционально: 1–2 Mermaid-диаграммы в MCP_DEV_SERVER и DASHBOARD_AUTH | Низкий |
-| 8 | В ACCEPTANCE добавить пункты про pairing по коду и /settings | Низкий |
+| 6 | Зафиксировать язык доки в AGENTS.md или здесь (RU основной; EN — CHANGELOG, Contributing) | ✅ Выполнено (AGENTS.md § Язык документации) |
+| 7 | Опционально: 1–2 Mermaid-диаграммы в MCP_DEV_SERVER и DASHBOARD_AUTH | ✅ Выполнено |
+| 8 | В ACCEPTANCE добавить пункты про pairing по коду и /settings | ✅ Выполнено |
 
 ---
 

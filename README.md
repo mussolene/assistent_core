@@ -1,9 +1,38 @@
 # Assistant Core
 
+<div align="center">
+
 [![CI](https://github.com/mussolene/assistent_core/actions/workflows/ci.yml/badge.svg)](https://github.com/mussolene/assistent_core/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen.svg)](https://github.com/mussolene/assistent_core/actions)
+[![Docker](https://img.shields.io/badge/docker-ready-2496ed?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Documentation](https://img.shields.io/badge/docs-index-8ca1af.svg)](docs/README.md)
 
-Модульный персональный AI-ассистент с поддержкой Telegram, плагируемых навыков (skills), локальных и облачных моделей. Готов к развёртыванию через Docker.
+[![Version](https://img.shields.io/badge/version-0.1.0-informational)](https://github.com/mussolene/assistent_core)
+[![Code size](https://img.shields.io/github/languages/code-size/mussolene/assistent_core)](https://github.com/mussolene/assistent_core)
+[![Last commit](https://img.shields.io/github/last-commit/mussolene/assistent_core)](https://github.com/mussolene/assistent_core/commits/main)
+
+</div>
+
+Модульный персональный **AI-ассистент** с поддержкой Telegram, плагируемых навыков (skills), локальных и облачных моделей. Готов к развёртыванию через Docker.
+
+---
+
+## Содержание
+
+- [Возможности](#возможности)
+- [В цифрах](#в-цифрах)
+- [Стек](#стек)
+- [Быстрый старт](#быстрый-старт)
+- [Архитектура](#архитектура)
+- [Структура репозитория](#структура-репозитория)
+- [Разработка и тесты](#разработка-и-тесты)
+- [Документация](#документация)
+- [Лицензия](#лицензия)
+
+---
 
 ## Возможности
 
@@ -15,6 +44,30 @@
 - **Безопасность** — контейнеры без root, лимиты ресурсов, whitelist команд, аудит, whitelist пользователей Telegram, rate limiting
 - **Web Dashboard** — настройка Telegram (токен, pairing), проверка подключения к модели, MCP-скиллы, мониторинг Redis
 - **MCP-сервер для агента** — проект можно подключить в Cursor как MCP: уведомления в Telegram, запрос confirm/reject, обратная связь через `/dev` ([docs/MCP_DEV_SERVER.md](docs/MCP_DEV_SERVER.md))
+
+## В цифрах
+
+| Показатель | Значение |
+|------------|----------|
+| **Skills** | 6+ (filesystem, shell, git, vector_rag, tasks, mcp) |
+| **Агенты** | 2 (Assistant, Tool) |
+| **Сервисы Docker** | 4 (redis, dashboard, assistant-core, telegram-adapter) |
+| **Покрытие тестами** | ≥90% |
+| **Документов в docs/** | 18+ |
+| **Python** | 3.11, 3.12 |
+
+## Стек
+
+| Компонент | Технология |
+|-----------|------------|
+| Язык | Python 3.11+ |
+| Очереди / состояние | Redis |
+| Канал | Telegram (long polling) |
+| Модели | Ollama / OpenAI-совместимый API |
+| Dashboard | Flask |
+| Оркестрация | asyncio, Event Bus (pub/sub) |
+| Линтер | Ruff |
+| Тесты | pytest, pytest-cov |
 
 ## Быстрый старт
 
@@ -147,4 +200,4 @@ pytest assistant/tests -v --cov=assistant --cov-report=html --cov-fail-under=90
 
 При добавлении кода убедитесь, что тесты проходят: `pytest assistant/tests -v`.
 
-**Если вы форкаете репозиторий:** замените `YOUR_USERNAME` в README (бейдж CI и ссылка для клонирования) на имя вашего GitHub-аккаунта или организации.
+**Если вы форкаете репозиторий:** замените `YOUR_USERNAME` в команде клонирования и в URL бейджей (сейчас `mussolene/assistent_core`) на свой GitHub-аккаунт или организацию.
