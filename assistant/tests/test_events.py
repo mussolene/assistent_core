@@ -44,3 +44,31 @@ def test_outgoing_reply_send_document():
     )
     assert payload.send_document is not None
     assert payload.send_document["file_id"] == "AgACAgIAAxkB"
+
+
+def test_incoming_message_checklist_fields():
+    payload = IncomingMessage(
+        message_id="1",
+        user_id="u1",
+        chat_id="c1",
+        text="",
+        checklist={"title": "Список", "tasks": [{"id": 1, "text": "Пункт"}]},
+        checklist_tasks_done={"marked_as_done_task_ids": [1, 2]},
+    )
+    assert payload.checklist is not None
+    assert payload.checklist["title"] == "Список"
+    assert payload.checklist_tasks_done["marked_as_done_task_ids"] == [1, 2]
+    assert payload.checklist_tasks_added is None
+
+
+def test_outgoing_reply_send_checklist():
+    payload = OutgoingReply(
+        task_id="t1",
+        chat_id="c1",
+        text="Чеклист ниже.",
+        done=True,
+        send_checklist={"title": "День", "tasks": [{"id": 1, "text": "Утро"}, {"id": 2, "text": "Обед"}]},
+    )
+    assert payload.send_checklist is not None
+    assert payload.send_checklist["title"] == "День"
+    assert len(payload.send_checklist["tasks"]) == 2

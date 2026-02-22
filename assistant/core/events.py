@@ -30,6 +30,10 @@ class IncomingMessage(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     # Вложения: список { "file_id", "filename", "mime_type", "source": "telegram" } — контент не храним, индексируем в вектор и храним ссылку
     attachments: list[dict[str, Any]] = Field(default_factory=list)
+    # Чеклисты Telegram: при приёме — сырые объекты из API (checklist, checklist_tasks_done, checklist_tasks_added)
+    checklist: Optional[dict[str, Any]] = Field(default=None)
+    checklist_tasks_done: Optional[dict[str, Any]] = Field(default=None)
+    checklist_tasks_added: Optional[dict[str, Any]] = Field(default=None)
 
 
 class TaskCreated(BaseModel):
@@ -73,6 +77,8 @@ class OutgoingReply(BaseModel):
     )
     # Отправить файл в чат (Telegram): { "file_id": "..." } — адаптер вызовет sendDocument
     send_document: Optional[dict[str, Any]] = Field(default=None)
+    # Чеклист (Telegram): InputChecklist-подобный объект { "title", "tasks": [{"id", "text"}, ...], "others_can_add_tasks", "others_can_mark_tasks_as_done" }; при отсутствии business_connection_id адаптер отправит текстовый список
+    send_checklist: Optional[dict[str, Any]] = Field(default=None)
 
 
 class StreamToken(BaseModel):

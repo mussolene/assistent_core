@@ -44,6 +44,7 @@ async def run_core(config: Config) -> None:
     from assistant.skills.tasks import TaskSkill
     from assistant.skills.vector_rag import VectorRagSkill
     from assistant.skills.file_ref import FileRefSkill
+    from assistant.skills.checklist import ChecklistSkill
 
     bus = EventBus(config.redis.url)
     memory = MemoryManager(
@@ -141,6 +142,7 @@ async def run_core(config: Config) -> None:
     skills.register(VectorRagSkill(memory))
     skills.register(FileRefSkill(config.redis.url))
     skills.register(MemoryControlSkill(memory))
+    skills.register(ChecklistSkill())
     skills.register(TaskSkill())
     skills.register(McpAdapterSkill())
     runner = SandboxRunner()

@@ -40,6 +40,7 @@ class TelegramSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="TELEGRAM_", extra="ignore")
     enabled: bool = True
     bot_token: str = Field(default="", alias="TELEGRAM_BOT_TOKEN")
+    business_connection_id: str = Field(default="", alias="TELEGRAM_BUSINESS_CONNECTION_ID")
     long_poll_timeout: int = 30
     rate_limit_per_user_per_minute: int = 10
     allowed_user_ids: list[int] = Field(default_factory=list)

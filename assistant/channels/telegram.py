@@ -56,6 +56,7 @@ def get_config() -> dict:
     c = get_config()
     return {
         "token": c.telegram.bot_token or os.getenv("TELEGRAM_BOT_TOKEN", ""),
+        "business_connection_id": (c.telegram.business_connection_id or os.getenv("TELEGRAM_BUSINESS_CONNECTION_ID", "")).strip(),
         "allowed_ids": set(c.telegram.allowed_user_ids or []),
         "rate_limit_per_minute": c.telegram.rate_limit_per_user_per_minute,
         "poll_timeout": c.telegram.long_poll_timeout,
@@ -228,6 +229,31 @@ def _to_telegram_html(text: str) -> str:
     return _markdown_to_telegram_html(text)
 
 
+def _serialize_telegram_object(obj: Optional[dict]) -> Optional[dict]:
+    """Для передачи в события: только dict, без кастомных типов."""
+    return obj if isinstance(obj, dict) else None
+
+
+def _format_checklist_update_for_agent(
+    checklist_tasks_done: Optional[dict], checklist_tasks_added: Optional[dict]
+) -> str:
+    """Краткий текст обновления чеклиста для контекста агента."""
+    parts: list[str] = []
+    if checklist_tasks_done:
+        done_ids = checklist_tasks_done.get("marked_as_done_task_ids") or []
+        not_done_ids = checklist_tasks_done.get("marked_as_not_done_task_ids") or []
+        if done_ids:
+            parts.append("Отмечены как выполненные: задачи " + ", ".join(str(i) for i in done_ids))
+        if not_done_ids:
+            parts.append("Снята отметка: задачи " + ", ".join(str(i) for i in not_done_ids))
+    if checklist_tasks_added:
+        tasks = checklist_tasks_added.get("tasks") or []
+        if tasks:
+            texts = [t.get("text", "?") for t in tasks if isinstance(t, dict)]
+            parts.append("Добавлены в чеклист: " + "; ".join(texts[:5]))
+    return " ".join(parts) if parts else "[Обновление чеклиста]"
+
+
 def chunk_text_for_telegram(text: str, limit: int = TEXT_CHUNK_LIMIT) -> list[str]:
     """
     Разбить длинный текст на чанки по limit символов (по границам строк где возможно).
@@ -313,6 +339,7 @@ async def run_telegram_adapter() -> None:
 
             redis_cfg = await get_config_from_redis(redis_url)
             cfg["token"] = redis_cfg.get("TELEGRAM_BOT_TOKEN") or ""
+            cfg["business_connection_id"] = (redis_cfg.get("TELEGRAM_BUSINESS_CONNECTION_ID") or "").strip()
             ids = redis_cfg.get("TELEGRAM_ALLOWED_USER_IDS")
             cfg["allowed_ids"] = (
                 set(ids)
@@ -330,6 +357,7 @@ async def run_telegram_adapter() -> None:
     allowed: Set[int] = set(cfg["allowed_ids"]) if cfg.get("allowed_ids") else set()
     rate_limit = cfg["rate_limit_per_minute"]
     poll_timeout = cfg["poll_timeout"]
+    business_connection_id: str = (cfg.get("business_connection_id") or "").strip()
     bus = EventBus(redis_url)
     await bus.connect()
     limiter = RateLimiter(max_per_minute=rate_limit)
@@ -538,6 +566,53 @@ async def run_telegram_adapter() -> None:
                     logger.warning("sendDocument %s: %s", r.status_code, r.text)
             except Exception as e:
                 logger.exception("sendDocument failed: %s", e)
+        # Чеклист: sendChecklist (только с business_connection_id) или текстовый список
+        send_checklist = getattr(payload, "send_checklist", None)
+        if send_checklist and isinstance(send_checklist, dict) and send_checklist.get("title"):
+            tasks = send_checklist.get("tasks") or []
+            if business_connection_id:
+                try:
+                    body = {
+                        "business_connection_id": business_connection_id,
+                        "chat_id": payload.chat_id,
+                        "checklist": {
+                            "title": send_checklist["title"][:255],
+                            "tasks": [{"id": t.get("id", i + 1), "text": (t.get("text") or "")[:100]} for i, t in enumerate(tasks[:30])],
+                        },
+                    }
+                    if "others_can_add_tasks" in send_checklist:
+                        body["checklist"]["others_can_add_tasks"] = bool(send_checklist["others_can_add_tasks"])
+                    if "others_can_mark_tasks_as_done" in send_checklist:
+                        body["checklist"]["others_can_mark_tasks_as_done"] = bool(send_checklist["others_can_mark_tasks_as_done"])
+                    async with httpx.AsyncClient() as client:
+                        r = await client.post(
+                            f"{base_url}/sendChecklist",
+                            json=body,
+                            timeout=15.0,
+                        )
+                    if r.status_code != 200:
+                        logger.warning("sendChecklist %s: %s", r.status_code, r.text)
+                except Exception as e:
+                    logger.exception("sendChecklist failed: %s", e)
+            else:
+                lines = ["☑️ " + (send_checklist.get("title") or "Чеклист") + ":"]
+                for t in tasks[:30]:
+                    text = (t.get("text") or "?").strip()
+                    lines.append("  ☐ " + text)
+                fallback_text = "\n".join(lines)
+                try:
+                    async with httpx.AsyncClient() as client:
+                        await client.post(
+                            f"{base_url}/sendMessage",
+                            json={
+                                "chat_id": payload.chat_id,
+                                "text": _to_telegram_html(fallback_text),
+                                "parse_mode": PARSE_MODE,
+                            },
+                            timeout=15.0,
+                        )
+                except Exception as e:
+                    logger.debug("sendMessage checklist fallback: %s", e)
 
     bus.subscribe_outgoing(on_outgoing)
     bus.subscribe_stream(on_stream)
@@ -844,6 +919,13 @@ async def run_telegram_adapter() -> None:
                     if reasoning:
                         text = text.replace("/reasoning", "").strip()
                     text = sanitize_text(text)
+                    # Чеклисты Telegram: передаём в core для агента (ответы на чеклист, отметки выполнено/добавлены)
+                    checklist = msg.get("checklist")
+                    checklist_tasks_done = msg.get("checklist_tasks_done")
+                    checklist_tasks_added = msg.get("checklist_tasks_added")
+                    if checklist_tasks_done or checklist_tasks_added:
+                        if not text:
+                            text = _format_checklist_update_for_agent(checklist_tasks_done, checklist_tasks_added)
                     async with pending_lock:
                         pending_chats.add(chat_id)
                         _ensure_pending_typing_loop()
@@ -856,6 +938,9 @@ async def run_telegram_adapter() -> None:
                             text=text,
                             reasoning_requested=reasoning,
                             attachments=attachments,
+                            checklist=_serialize_telegram_object(checklist),
+                            checklist_tasks_done=_serialize_telegram_object(checklist_tasks_done),
+                            checklist_tasks_added=_serialize_telegram_object(checklist_tasks_added),
                         )
                     )
             except asyncio.CancelledError:

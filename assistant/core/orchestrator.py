@@ -92,9 +92,10 @@ class Orchestrator:
         max_iterations = self._config.orchestrator.max_iterations
         autonomous = self._config.orchestrator.autonomous_mode
         if not autonomous:
-            max_iterations = max(2, min(max_iterations, 3))
+            # Больше шагов без автономного режима: считаем только переходы assistant→tool
+            max_iterations = max(4, min(max_iterations, 8))
         state = "assistant"
-        iteration = 0
+        iteration = 0  # увеличивается только при переходе assistant → tool
         last_output = ""
         while iteration < max_iterations:
             task_data = await self._tasks.get(task_id)
@@ -119,8 +120,11 @@ class Orchestrator:
             else:
                 last_output = result.output_text
             if result.next_agent:
-                state = result.next_agent
-                iteration += 1
+                next_state = result.next_agent
+                # Считаем только переход assistant → tool, чтобы не сжигать лимит на возврат из tool
+                if state == "assistant" and next_state == "tool":
+                    iteration += 1
+                state = next_state
                 if state == "tool" and result.tool_calls:
                     await self._tasks.update(
                         task_id,
@@ -129,7 +133,7 @@ class Orchestrator:
                         iteration=iteration,
                     )
                     continue
-                if state == "assistant":
+                if state == "assistant":  # tool → assistant: iteration не увеличиваем
                     tool_results = (result.metadata or {}).get("tool_results", [])
                     for tr in tool_results:
                         if isinstance(tr, dict) and tr.get("user_reply"):
@@ -172,6 +176,7 @@ class Orchestrator:
             else:
                 task_data = await self._tasks.get(task_id)
                 send_doc = self._get_send_document_from_tool_results(task_data)
+                send_checklist = self._get_send_checklist_from_tool_results(task_data)
                 await self._bus.publish_outgoing(
                     OutgoingReply(
                         task_id=task_id,
@@ -181,6 +186,7 @@ class Orchestrator:
                         done=True,
                         channel=payload.channel,
                         send_document=send_doc,
+                        send_checklist=send_checklist,
                     )
                 )
                 break
@@ -191,6 +197,7 @@ class Orchestrator:
             if text_to_send:
                 task_data = await self._tasks.get(task_id)
                 send_doc = self._get_send_document_from_tool_results(task_data)
+                send_checklist = self._get_send_checklist_from_tool_results(task_data)
                 await self._bus.publish_outgoing(
                     OutgoingReply(
                         task_id=task_id,
@@ -200,6 +207,7 @@ class Orchestrator:
                         done=True,
                         channel=payload.channel,
                         send_document=send_doc,
+                        send_checklist=send_checklist,
                     )
                 )
 
@@ -251,6 +259,16 @@ class Orchestrator:
         for tr in reversed(task_data.get("tool_results") or []):
             if isinstance(tr, dict) and tr.get("send_document"):
                 return tr["send_document"]
+        return None
+
+    @staticmethod
+    def _get_send_checklist_from_tool_results(task_data: dict | None) -> dict | None:
+        """Взять send_checklist из последнего tool_result (чеклист в чат)."""
+        if not task_data:
+            return None
+        for tr in reversed(task_data.get("tool_results") or []):
+            if isinstance(tr, dict) and tr.get("send_checklist"):
+                return tr["send_checklist"]
         return None
 
     def set_agent_registry(self, registry: AgentRegistry) -> None:

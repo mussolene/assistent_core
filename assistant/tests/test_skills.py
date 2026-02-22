@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from assistant.memory.manager import VECTOR_LEVEL_SHORT
+from assistant.skills.checklist import ChecklistSkill
 from assistant.skills.filesystem import FilesystemSkill
 from assistant.skills.file_ref import FileRefSkill
 from assistant.skills.mcp_adapter import McpAdapterSkill
@@ -69,6 +70,27 @@ async def test_file_ref_send_without_ref_id():
     out = await skill.run({"user_id": "u1", "action": "send"})
     assert out.get("ok") is False
     assert "file_ref_id" in out.get("error", "").lower() or "ref_id" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_checklist_create():
+    skill = ChecklistSkill()
+    out = await skill.run(
+        {"action": "create", "title": "День", "tasks": [{"text": "Утро"}, {"text": "Обед"}]}
+    )
+    assert out.get("ok") is True
+    assert out.get("send_checklist") is not None
+    assert out["send_checklist"]["title"] == "День"
+    assert len(out["send_checklist"]["tasks"]) == 2
+    assert out["send_checklist"]["tasks"][0]["text"] == "Утро"
+
+
+@pytest.mark.asyncio
+async def test_checklist_create_no_title():
+    skill = ChecklistSkill()
+    out = await skill.run({"action": "create", "tasks": [{"text": "X"}]})
+    assert out.get("ok") is False
+    assert "title" in out.get("error", "").lower()
 
 
 @pytest.mark.asyncio
