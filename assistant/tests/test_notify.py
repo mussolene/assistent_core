@@ -129,6 +129,11 @@ def test_set_pending_confirmation():
     r.setex.assert_called_once()
 
 
+def test_set_pending_confirmation_redis_raises():
+    with patch("redis.from_url", side_effect=ConnectionError("redis down")):
+        notify.set_pending_confirmation("456", "Confirm?")  # no raise, logs exception
+
+
 def test_get_and_clear_pending_result_no_key():
     r = MagicMock()
     r.get.return_value = None
@@ -148,6 +153,26 @@ def test_get_and_clear_pending_result_with_result():
         out = notify.get_and_clear_pending_result("123")
     assert out == {"confirmed": True}
     r.delete.assert_called_once()
+
+
+def test_get_and_clear_pending_result_redis_raises():
+    with patch("redis.from_url", side_effect=ConnectionError("redis down")):
+        assert notify.get_and_clear_pending_result("123") is None
+
+
+def test_consume_pending_confirmation_already_has_result():
+    import json
+
+    r = MagicMock()
+    r.get.return_value = json.dumps({"message": "?", "result": {"confirmed": True}})
+    r.close = MagicMock()
+    with patch("redis.from_url", return_value=r):
+        assert notify.consume_pending_confirmation("123", "confirm") is False
+
+
+def test_consume_pending_confirmation_redis_raises():
+    with patch("redis.from_url", side_effect=ConnectionError("redis down")):
+        assert notify.consume_pending_confirmation("123", "yes") is False
 
 
 def test_set_pending_confirmation_result_no_key():

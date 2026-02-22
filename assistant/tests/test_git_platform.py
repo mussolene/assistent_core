@@ -141,6 +141,38 @@ async def test_create_merge_request_invalid_url():
 
 
 @pytest.mark.asyncio
+async def test_create_merge_request_github_non_201_returns_error():
+    """GitHub API returns non-201 -> ok False with error message."""
+    client = _mock_httpx_client(400, {"message": "Validation Failed"})
+    with patch("assistant.skills.git_platform.httpx.AsyncClient", return_value=client):
+        out = await create_merge_request(
+            repo="https://github.com/o/r",
+            source_branch="f",
+            target_branch="main",
+            title="T",
+            github_token="gh",
+        )
+    assert out["ok"] is False
+    assert "Validation" in out.get("error", "") or "400" in out.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_create_merge_request_owner_repo_path_with_github_token():
+    """Repo as 'owner/repo' (no URL) with github_token uses GitHub API."""
+    client = _mock_httpx_client(201, {"html_url": "https://github.com/a/b/pull/1", "number": 1})
+    with patch("assistant.skills.git_platform.httpx.AsyncClient", return_value=client):
+        out = await create_merge_request(
+            repo="owner/repo",
+            source_branch="f",
+            target_branch="main",
+            title="T",
+            github_token="token",
+        )
+    assert out["ok"] is True
+    assert out.get("platform") == "github"
+
+
+@pytest.mark.asyncio
 async def test_create_merge_request_missing_params():
     """Missing source_branch/target_branch/title returns error."""
     out = await create_merge_request(
