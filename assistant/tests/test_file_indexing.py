@@ -87,6 +87,19 @@ def test_extract_content_from_file_zip_path_traversal_ignored(tmp_path):
     assert "skip" not in out
 
 
+def test_extract_content_from_file_zip_skips_macosx_and_dirs(tmp_path):
+    """Zip entries __MACOSX, .DS_Store and dirs (trailing /) are skipped."""
+    zip_path = tmp_path / "mac.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("__MACOSX/._file", "ignore")
+        zf.writestr("folder/.DS_Store", "ignore")
+        zf.writestr("dir/", "")
+        zf.writestr("ok.txt", "content")
+    out = fi._extract_content_from_file(zip_path, "application/zip", "mac.zip")
+    assert "content" in out
+    assert "ignore" not in out
+
+
 def test_extract_content_from_file_tar_with_txt(tmp_path):
     tar_path = tmp_path / "a.tar"
     with tarfile.open(tar_path, "w") as tf:
@@ -96,6 +109,17 @@ def test_extract_content_from_file_tar_with_txt(tmp_path):
     out = fi._extract_content_from_file(tar_path, "application/x-tar", "a.tar")
     assert "Content inside tar" in out
     assert "inner.txt" in out
+
+
+def test_extract_content_from_file_tar_gz_with_txt(tmp_path):
+    """Tar.gz is opened with tarfile and members extracted."""
+    tar_gz = tmp_path / "a.tar.gz"
+    inner = tmp_path / "inner.txt"
+    inner.write_text("Inside tgz", encoding="utf-8")
+    with tarfile.open(tar_gz, "w:gz") as tf:
+        tf.add(inner, arcname="inner.txt")
+    out = fi._extract_content_from_file(tar_gz, "application/gzip", "a.tar.gz")
+    assert "Inside tgz" in out
 
 
 def test_extract_content_from_file_single_gz(tmp_path):
@@ -448,6 +472,15 @@ def test_strip_html_fallback_on_parser_error():
         out = fi._strip_html("<p>Hi</p>")
     assert "Hi" in out
     assert "<" not in out or "p" not in out
+
+
+def test_extract_from_archive_outer_exception_returns_joined_parts(tmp_path):
+    """When archive extraction raises, _extract_from_archive returns joined parts (or empty)."""
+    bad_zip = tmp_path / "x.zip"
+    bad_zip.write_bytes(b"not a zip")
+    file_count = {"n": 0}
+    out = fi._extract_from_archive(bad_zip, "x.zip", 0, file_count)
+    assert out == ""
 
 
 def test_extract_from_archive_7z_import_error(tmp_path):

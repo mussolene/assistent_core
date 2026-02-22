@@ -6,7 +6,7 @@ import pytest
 
 from assistant.agents.base import AgentResult, TaskContext
 from assistant.core.agent_registry import AgentRegistry
-from assistant.core.events import IncomingMessage, StreamToken
+from assistant.core.events import ChannelKind, IncomingMessage, StreamToken
 from assistant.core.orchestrator import Orchestrator
 from assistant.core.task_manager import TaskManager
 
@@ -94,12 +94,18 @@ def _make_orchestrator_with_mock_bus():
     return orch, bus
 
 
-def _make_incoming_payload(chat_id: str = "chat_1", message_id: str = "msg_1"):
+def _make_incoming_payload(
+    chat_id: str = "chat_1",
+    message_id: str = "msg_1",
+    attachments: list | None = None,
+):
     return IncomingMessage(
         message_id=message_id,
         user_id="user_1",
         chat_id=chat_id,
         text="hello",
+        channel=ChannelKind.TELEGRAM,
+        attachments=attachments or [],
     )
 
 
@@ -260,6 +266,60 @@ async def test_orchestrator_start_stop():
         assert orch._running is False
         bus.stop.assert_called_once()
         bus.disconnect.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_process_task_attachments_no_bot_token_publishes_error():
+    """_process_task: with attachments and memory but no TELEGRAM_BOT_TOKEN -> publish 'бот не настроен' and return."""
+    config = MagicMock()
+    config.orchestrator.max_iterations = 5
+    config.orchestrator.autonomous_mode = False
+    config.redis.url = "redis://localhost:6379/0"
+    bus = MagicMock()
+    bus.publish_outgoing = AsyncMock()
+    memory = MagicMock()
+    with patch("assistant.dashboard.config_store.get_config_from_redis_sync", return_value={}):
+        orch = Orchestrator(config=config, bus=bus, memory=memory, gateway_factory=None)
+        orch._tasks = MagicMock()
+        orch._agents = MagicMock()
+        payload = _make_incoming_payload(
+            attachments=[{"file_id": "f1", "filename": "a.txt", "source": "telegram"}]
+        )
+        payload.text = ""
+        await orch._process_task("task_1", payload)
+    assert bus.publish_outgoing.call_count >= 2
+    texts = [c[0][0].text for c in bus.publish_outgoing.call_args_list]
+    assert "Пошёл читать файл" in texts[0]
+    assert "бот не настроен" in texts[1]
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_process_task_attachments_index_raises_publishes_error():
+    """_process_task: attachments, index_telegram_attachments raises -> publish error and return if no original_text."""
+    config = MagicMock()
+    config.orchestrator.max_iterations = 5
+    config.orchestrator.autonomous_mode = False
+    config.redis.url = "redis://localhost:6379/0"
+    bus = MagicMock()
+    bus.publish_outgoing = AsyncMock()
+    memory = MagicMock()
+    with patch(
+        "assistant.dashboard.config_store.get_config_from_redis_sync",
+        return_value={"TELEGRAM_BOT_TOKEN": "token"},
+    ), patch(
+        "assistant.core.file_indexing.index_telegram_attachments",
+        side_effect=RuntimeError("network error"),
+    ):
+        orch = Orchestrator(config=config, bus=bus, memory=memory, gateway_factory=None)
+        orch._tasks = MagicMock()
+        orch._agents = MagicMock()
+        payload = _make_incoming_payload(
+            attachments=[{"file_id": "f1", "filename": "a.txt", "source": "telegram"}]
+        )
+        payload.text = ""
+        await orch._process_task("task_1", payload)
+    texts = [c[0][0].text for c in bus.publish_outgoing.call_args_list]
+    assert any("Не удалось прочитать файл" in t for t in texts)
 
 
 @pytest.mark.asyncio

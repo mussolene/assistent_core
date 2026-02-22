@@ -8,11 +8,21 @@ import pytest
 
 from assistant.core.bus import (
     CH_INCOMING,
+    CH_AGENT_RESULT,
+    CH_OUTGOING,
+    CH_STREAM,
+    CH_TASK_CREATED,
     EventBus,
     _deserialize,
     _serialize,
 )
-from assistant.core.events import IncomingMessage, OutgoingReply, StreamToken
+from assistant.core.events import (
+    AgentResult,
+    IncomingMessage,
+    OutgoingReply,
+    StreamToken,
+    TaskCreated,
+)
 
 
 def test_serialize_deserialize_incoming():
@@ -71,13 +81,9 @@ async def test_bus_with_mock_redis():
         await bus.publish_incoming(
             IncomingMessage(message_id="m1", user_id="u1", chat_id="c1", text="hi")
         )
-        from assistant.core.events import TaskCreated
-
         await bus.publish_task_created(
             TaskCreated(task_id="t1", user_id="u1", chat_id="c1", message_id="m1")
         )
-        from assistant.core.events import AgentResult
-
         await bus.publish_agent_result(
             AgentResult(task_id="t1", agent_type="assistant", success=True, output_text="ok")
         )
@@ -153,6 +159,27 @@ async def test_bus_disconnect_closes_pubsub():
         mock_client.close.assert_called_once()
     assert bus._pubsub is None
     assert bus._client is None
+
+
+def test_bus_subscribe_all_channels_registers_handlers():
+    """subscribe_task_created, subscribe_agent_result, subscribe_outgoing, subscribe_stream register handlers."""
+    bus = EventBus("redis://fake:6379/0")
+    async def noop_task(_: TaskCreated) -> None:
+        pass
+    async def noop_agent(_: AgentResult) -> None:
+        pass
+    async def noop_outgoing(_: OutgoingReply) -> None:
+        pass
+    async def noop_stream(_: StreamToken) -> None:
+        pass
+    bus.subscribe_task_created(noop_task)
+    bus.subscribe_agent_result(noop_agent)
+    bus.subscribe_outgoing(noop_outgoing)
+    bus.subscribe_stream(noop_stream)
+    assert CH_TASK_CREATED in bus._handlers and len(bus._handlers[CH_TASK_CREATED]) == 1
+    assert CH_AGENT_RESULT in bus._handlers and len(bus._handlers[CH_AGENT_RESULT]) == 1
+    assert CH_OUTGOING in bus._handlers and len(bus._handlers[CH_OUTGOING]) == 1
+    assert CH_STREAM in bus._handlers and len(bus._handlers[CH_STREAM]) == 1
 
 
 @pytest.mark.asyncio
