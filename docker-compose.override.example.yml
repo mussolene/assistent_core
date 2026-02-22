@@ -1,0 +1,22 @@
+# Пример: обновление кода без пересборки (монтирование репо с хоста).
+# Использование:
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+#   docker compose up -d
+# Обновление: git pull && docker compose restart assistant-core telegram-adapter dashboard
+#
+# docker-compose.override.yml добавлен в .gitignore — не коммитить локальные переопределения.
+
+services:
+  assistant-core:
+    volumes:
+      - .:/app:ro
+      - workspace_sandbox:/workspace
+
+  telegram-adapter:
+    volumes:
+      - .:/app:ro
+
+  dashboard:
+    volumes:
+      - .:/app:ro
+      - workspace_sandbox:/workspace

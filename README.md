@@ -41,6 +41,8 @@ docker compose up --build
 
 **Кэш при пересборке:** при `DOCKER_BUILDKIT=1` образы кэшируют слой установки зависимостей (`docker/requirements.txt`). После изменения только кода пересборка почти не скачивает пакеты. Файл `.dockerignore` уменьшает контекст сборки (исключены venv, .git, тесты и т.д.).
 
+**Обновление кода без пересборки:** монтирование репо с хоста (volume) + `git pull` и перезапуск контейнеров; при необходимости — проверка каждые N минут через cron. Подробно: [docs/DOCKER_UPDATE_WITHOUT_REBUILD.md](docs/DOCKER_UPDATE_WITHOUT_REBUILD.md).
+
 Подробная настройка и запуск без Docker — в [assistant/README.md](assistant/README.md).
 
 ### Конфигурация (приоритет)
