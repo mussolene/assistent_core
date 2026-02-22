@@ -156,6 +156,36 @@ def test_extract_text_image_returns_placeholder():
     assert "изображение" in fi._extract_text(p, "image/jpeg", "x.jpg")
 
 
+def test_extract_text_pdf_with_pypdf(tmp_path):
+    pytest.importorskip("pypdf")
+    from pypdf import PdfWriter
+
+    pdf_path = tmp_path / "t.pdf"
+    w = PdfWriter()
+    w.add_blank_page(72, 72)
+    w.write(pdf_path)
+    out = fi._extract_text(pdf_path, "application/pdf", "t.pdf")
+    assert isinstance(out, str)
+
+
+def test_extract_text_docx_with_docx(tmp_path):
+    pytest.importorskip("docx")
+    from docx import Document
+
+    doc = Document()
+    doc.add_paragraph("Hello from docx")
+    doc_path = tmp_path / "t.docx"
+    doc.save(doc_path)
+    out = fi._extract_text(doc_path, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "t.docx")
+    assert "Hello" in out
+
+
+def test_extract_text_unknown_suffix_returns_empty(tmp_path):
+    (tmp_path / "x.xyz").write_text("data")
+    out = fi._extract_text(tmp_path / "x.xyz", "", "x.xyz")
+    assert out == ""
+
+
 @pytest.mark.asyncio
 async def test_index_telegram_attachments_empty():
     ref_ids, text = await fi.index_telegram_attachments(
