@@ -92,3 +92,16 @@ def test_setup_logging_level_warning():
     setup_logging(level="WARNING", use_json=False)
     root = logging.getLogger()
     assert root.level == logging.WARNING
+
+
+def test_setup_logging_adds_handler_when_none():
+    root = logging.getLogger()
+    original_handlers = root.handlers.copy()
+    root.handlers.clear()
+    try:
+        setup_logging(level="DEBUG", use_json=False)
+        assert len(root.handlers) >= 1
+        assert root.level == logging.DEBUG
+    finally:
+        root.handlers.clear()
+        root.handlers.extend(original_handlers)
