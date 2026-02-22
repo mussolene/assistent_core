@@ -187,6 +187,16 @@ async def test_memory_manager_get_context_includes_conversation_memory():
     assert any("past question" in str(m.get("content", "")) for m in ctx)
 
 
+def test_memory_manager_clear_conversation_memory():
+    """clear_conversation_memory delegates to qdrant_docs and returns (ok, err). Iteration 8.3."""
+    mgr = MemoryManager("redis://localhost:6379/0")
+    with patch("assistant.core.qdrant_docs.get_qdrant_url", return_value="http://qdrant:6333"):
+        with patch("assistant.core.qdrant_docs.clear_conversation_memory", return_value=(True, "")):
+            ok, err = mgr.clear_conversation_memory("u1", chat_id="c1")
+    assert ok is True
+    assert err == ""
+
+
 def test_memory_manager_get_vector_medium_long():
     """get_vector_medium and get_vector_long return vector memory for level."""
     mgr = MemoryManager("redis://localhost:6379/0")

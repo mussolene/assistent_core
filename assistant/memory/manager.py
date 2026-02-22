@@ -250,6 +250,23 @@ class MemoryManager:
         """Очистить кратковременную память (последние N сообщений) для пользователя/сессии."""
         await self._short.clear(user_id, session_id)
 
+    def clear_conversation_memory(
+        self, user_id: str, chat_id: str | None = None
+    ) -> tuple[bool, str]:
+        """
+        Очистить память разговоров в Qdrant для user_id (и опционально chat_id). Итерация 8.3.
+        Возвращает (успех, сообщение об ошибке или "").
+        """
+        try:
+            from assistant.core.qdrant_docs import clear_conversation_memory as qdrant_clear
+            from assistant.core.qdrant_docs import get_qdrant_url
+
+            qdrant_url = get_qdrant_url(self._redis_url)
+            return qdrant_clear(qdrant_url, user_id, chat_id=chat_id, redis_url=self._redis_url)
+        except Exception as e:
+            logger.debug("clear_conversation_memory: %s", e)
+            return False, str(e)
+
     async def reset_memory(
         self,
         user_id: str,

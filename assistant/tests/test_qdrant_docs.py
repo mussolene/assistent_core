@@ -327,3 +327,33 @@ def test_search_qdrant_with_filter():
     assert "filter" in call_json
     assert call_json["filter"]["must"][0]["key"] == "user_id"
     assert call_json["filter"]["must"][0]["match"]["value"] == "u1"
+
+
+# --- Iteration 8.3: clear conversation memory ---
+
+
+def test_delete_points_by_filter_success():
+    with patch.object(httpx.Client, "post") as mock_post:
+        mock_post.return_value = MagicMock(status_code=200)
+        with patch.object(httpx.Client, "close"):
+            ok = qdrant_docs.delete_points_by_filter(
+                "http://qdrant:6333",
+                "conversation_memory",
+                {"must": [{"key": "user_id", "match": {"value": "u1"}}]},
+            )
+    assert ok is True
+    call_json = mock_post.call_args[1]["json"]
+    assert call_json["filter"]["must"][0]["key"] == "user_id"
+
+
+def test_clear_conversation_memory_no_base_url():
+    ok, err = qdrant_docs.clear_conversation_memory("", "u1")
+    assert ok is False
+    assert "user_id" in err or "Qdrant" in err
+
+
+def test_clear_conversation_memory_success():
+    with patch("assistant.core.qdrant_docs.delete_points_by_filter", return_value=True):
+        ok, err = qdrant_docs.clear_conversation_memory("http://qdrant:6333", "u1", chat_id="c1")
+    assert ok is True
+    assert err == ""

@@ -67,7 +67,18 @@ class MemoryControlSkill(BaseSkill):
             await self._memory.reset_memory(user_id, scope=scope, session_id=session_id)
             return {"ok": True, "message": f"Память сброшена: scope={scope}"}
 
+        if action == "clear_conversation_memory":
+            chat_id = (params.get("chat_id") or params.get("chat") or "").strip() or None
+            ok, err = self._memory.clear_conversation_memory(user_id, chat_id=chat_id)
+            if not ok:
+                return {"ok": False, "error": err or "Не удалось очистить память разговоров"}
+            return {
+                "ok": True,
+                "message": "Память разговоров (Qdrant) очищена"
+                + (f" для chat_id={chat_id}" if chat_id else ""),
+            }
+
         return {
             "ok": False,
-            "error": f"Неизвестное действие: {action}. Используйте clear_vector или reset_memory.",
+            "error": f"Неизвестное действие: {action}. Используйте clear_vector, reset_memory или clear_conversation_memory.",
         }

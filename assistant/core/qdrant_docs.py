@@ -453,3 +453,53 @@ def search_conversation_memory(
         embed_fn=embed_fn,
         filter_conditions=filter_conditions,
     )
+
+
+def delete_points_by_filter(
+    base_url: str,
+    collection: str,
+    filter_conditions: dict[str, Any],
+    client: httpx.Client | None = None,
+) -> bool:
+    """Удалить точки в коллекции по фильтру. POST /collections/{name}/points/delete с filter."""
+    if not base_url or not collection or not filter_conditions:
+        return False
+    url = f"{base_url}/collections/{collection}/points/delete"
+    payload = {"filter": filter_conditions}
+    own = client is None
+    if own:
+        client = httpx.Client(timeout=15.0)
+    try:
+        r = client.post(url, json=payload)
+        return 200 <= r.status_code < 300
+    except Exception as e:
+        logger.debug("delete_points_by_filter: %s", e)
+        return False
+    finally:
+        if own and client:
+            client.close()
+
+
+def clear_conversation_memory(
+    base_url: str,
+    user_id: str,
+    chat_id: str | None = None,
+    collection: str = CONVERSATION_MEMORY_COLLECTION,
+    redis_url: str | None = None,
+) -> tuple[bool, str]:
+    """
+    Удалить из Qdrant все точки коллекции conversation_memory для user_id (и опционально chat_id).
+    Возвращает (успех, сообщение об ошибке или ""). Итерация 8.3.
+    """
+    if not base_url or not user_id:
+        return False, "Qdrant не настроен или не указан user_id"
+    collection_name = get_qdrant_collection(
+        redis_url, "CONVERSATION_MEMORY_COLLECTION", collection
+    )
+    must = [{"key": "user_id", "match": {"value": user_id}}]
+    if chat_id:
+        must.append({"key": "chat_id", "match": {"value": chat_id}})
+    ok = delete_points_by_filter(base_url, collection_name, {"must": must})
+    if not ok:
+        return False, "Не удалось удалить точки в Qdrant"
+    return True, ""

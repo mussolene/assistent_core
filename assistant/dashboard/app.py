@@ -116,6 +116,7 @@ INDEX_HTML = """
     <a href="{{ url_for('monitor') }}" class="{{ 'active' if section == 'monitor' else '' }}">Мониторинг</a>
     <a href="{{ url_for('repos_page') }}" class="{{ 'active' if section == 'repos' else '' }}">Репо</a>
     <a href="{{ url_for('email_settings') }}" class="{{ 'active' if section == 'email' else '' }}">Email</a>
+    <a href="{{ url_for('memory_page') }}" class="{{ 'active' if section == 'memory' else '' }}">Память</a>
     <a href="{{ url_for('mcp_agent') }}" class="{{ 'active' if section == 'mcp_agent' else '' }}">MCP (агент)</a>
     {% if current_user %}
     <span style="margin-left:auto;color:var(--muted);font-size:0.9rem">{{ current_user.display_name or current_user.login }} ({{ current_user.role }})</span>
@@ -672,6 +673,57 @@ def save_email():
     )
     flash("Настройки Email сохранены.", "success")
     return redirect(url_for("email_settings"))
+
+
+# ----- Память разговоров (итерация 8.3) -----
+_MEMORY_BODY = """
+<h1>Память разговоров</h1>
+<p class="sub">Очистка данных в Qdrant (коллекция conversation_memory) по user_id и опционально chat_id.</p>
+<form method="post" action="{{ url_for('clear_conversation_memory_post') }}">
+  <div class="card">
+    <label for="conv_user_id">User ID (Telegram)</label>
+    <input id="conv_user_id" name="user_id" type="text" required placeholder="123456789">
+    <p class="hint">Ваш Telegram User ID (для личного чата совпадает с Chat ID). Узнать: написать боту /start или посмотреть в настройках Telegram.</p>
+  </div>
+  <div class="card">
+    <label for="conv_chat_id">Chat ID (опционально)</label>
+    <input id="conv_chat_id" name="chat_id" type="text" placeholder="">
+    <p class="hint">Очистить только один чат. Пусто — очистить всю память разговоров этого пользователя.</p>
+  </div>
+  <button type="submit" class="btn">Очистить мою память разговоров</button>
+</form>
+"""
+
+
+@app.route("/memory")
+def memory_page():
+    config = load_config()
+    return render_template_string(
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
+            "{% block content %}{% endblock %}", _MEMORY_BODY
+        ),
+        config=config,
+        section="memory",
+    )
+
+
+@app.route("/clear-conversation-memory", methods=["POST"])
+def clear_conversation_memory_post():
+    from assistant.core.qdrant_docs import clear_conversation_memory, get_qdrant_url
+
+    redis_url = get_redis_url()
+    user_id = (request.form.get("user_id") or "").strip()
+    if not user_id:
+        flash("Укажите User ID (Telegram).", "error")
+        return redirect(url_for("memory_page"))
+    chat_id = (request.form.get("chat_id") or "").strip() or None
+    qdrant_url = get_qdrant_url(redis_url)
+    ok, err = clear_conversation_memory(qdrant_url, user_id, chat_id=chat_id, redis_url=redis_url)
+    if not ok:
+        flash(err or "Не удалось очистить память разговоров.", "error")
+    else:
+        flash("Память разговоров очищена.", "success")
+    return redirect(url_for("memory_page"))
 
 
 # ----- MCP -----

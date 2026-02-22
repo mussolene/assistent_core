@@ -314,3 +314,31 @@ async def test_memory_control_clear_vector_and_reset_memory():
     out = await skill.run({"action": "unknown_action", "user_id": "u1"})
     assert out["ok"] is False
     assert "Неизвестное" in out.get("error", "") or "clear_vector" in out.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_memory_control_clear_conversation_memory():
+    """memory_control skill: clear_conversation_memory (user_id, optional chat_id). Iteration 8.3."""
+    memory = MagicMock()
+    memory.clear_vector = MagicMock()
+    memory.reset_memory = AsyncMock()
+    memory.clear_conversation_memory = MagicMock(return_value=(True, ""))
+    skill = MemoryControlSkill(memory)
+    out = await skill.run({"action": "clear_conversation_memory", "user_id": "u1"})
+    assert out["ok"] is True
+    assert "очищена" in out.get("message", "")
+    memory.clear_conversation_memory.assert_called_once_with("u1", chat_id=None)
+
+    memory.clear_conversation_memory.return_value = (True, "")
+    out = await skill.run({"action": "clear_conversation_memory", "user_id": "u1", "chat_id": "c1"})
+    assert out["ok"] is True
+    memory.clear_conversation_memory.assert_called_with("u1", chat_id="c1")
+
+    memory.clear_conversation_memory.return_value = (False, "Не удалось удалить")
+    out = await skill.run({"action": "clear_conversation_memory", "user_id": "u1"})
+    assert out["ok"] is False
+    assert "Не удалось" in out.get("error", "")
+
+    out = await skill.run({"action": "clear_conversation_memory"})
+    assert out["ok"] is False
+    assert "user_id" in out.get("error", "")
