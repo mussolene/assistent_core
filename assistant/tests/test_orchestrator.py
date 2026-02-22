@@ -381,3 +381,110 @@ async def test_orchestrator_task_to_context_no_tool_results_no_stream_callback()
     }
     ctx = orch._task_to_context("tid_1", task_data, payload)
     assert ctx.metadata.get("stream_callback") is None
+
+
+def test_orchestrator_task_to_context_includes_pending_tool_calls():
+    """_task_to_context passes pending_tool_calls into context for tool agent."""
+    orch, _ = _make_orchestrator_with_mock_bus()
+    payload = _make_incoming_payload()
+    task_data = {
+        "state": "tool",
+        "stream": True,
+        "chat_id": "c1",
+        "task_id": "tid_1",
+        "user_id": "u1",
+        "message_id": "m1",
+        "tool_results": [],
+        "pending_tool_calls": [{"name": "run_skill", "args": {"skill": "filesystem"}}],
+    }
+    ctx = orch._task_to_context("tid_1", task_data, payload)
+    assert ctx.metadata.get("pending_tool_calls") == [{"name": "run_skill", "args": {"skill": "filesystem"}}]
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_process_task_tool_calls_then_user_reply_returns():
+    """_process_task: assistant returns tool_calls -> tool agent returns user_reply -> publish and return."""
+    config = MagicMock()
+    config.orchestrator.max_iterations = 5
+    config.orchestrator.autonomous_mode = False
+    config.redis.url = "redis://localhost:6379/0"
+    bus = MagicMock()
+    bus.publish_outgoing = AsyncMock()
+    tasks = MagicMock()
+    get_returns = [
+        {"state": "assistant", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": []},
+        {"state": "tool", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": [], "pending_tool_calls": [{"name": "x"}]},
+    ]
+    tasks.get = AsyncMock(side_effect=get_returns)
+    tasks.update = AsyncMock()
+    mock_registry = AgentRegistry()
+    assistant_agent = MagicMock()
+    assistant_agent.handle = AsyncMock(
+        return_value=AgentResult(
+            success=True,
+            output_text="",
+            next_agent="tool",
+            tool_calls=[{"name": "run_skill", "args": {}}],
+        )
+    )
+    tool_agent = MagicMock()
+    tool_agent.handle = AsyncMock(
+        return_value=AgentResult(
+            success=True,
+            output_text="",
+            next_agent="assistant",
+            metadata={"tool_results": [{"user_reply": "Готово, вот ответ."}]},
+        )
+    )
+    mock_registry.register("assistant", assistant_agent)
+    mock_registry.register("tool", tool_agent)
+    orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=None)
+    orch._tasks = tasks
+    orch._agents = mock_registry
+    payload = _make_incoming_payload()
+    await orch._process_task("task_1", payload)
+    assert bus.publish_outgoing.call_count >= 1
+    last_call = bus.publish_outgoing.call_args[0][0]
+    assert last_call.text == "Готово, вот ответ."
+    assert last_call.done is True
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_process_task_max_iterations_publishes_limit_message():
+    """_process_task: hit max_iterations without final answer -> publish limit message."""
+    config = MagicMock()
+    config.orchestrator.max_iterations = 2
+    config.orchestrator.autonomous_mode = True
+    config.redis.url = "redis://localhost:6379/0"
+    bus = MagicMock()
+    bus.publish_outgoing = AsyncMock()
+    tasks = MagicMock()
+    base = {"stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": []}
+    tasks.get = AsyncMock(
+        side_effect=[
+            {**base, "state": "assistant"},
+            {**base, "state": "tool", "pending_tool_calls": [{"name": "x"}]},
+            {**base, "state": "assistant"},
+            {**base, "state": "assistant"},  # for iteration >= max_iterations block
+        ]
+    )
+    tasks.update = AsyncMock()
+    mock_registry = AgentRegistry()
+    agent = MagicMock()
+    agent.handle = AsyncMock(
+        return_value=AgentResult(
+            success=True,
+            output_text="",
+            next_agent="tool",
+            tool_calls=[{"name": "run_skill"}],
+        )
+    )
+    mock_registry.register("assistant", agent)
+    mock_registry.register("tool", MagicMock(handle=AsyncMock(return_value=AgentResult(success=True, output_text="", next_agent="assistant", metadata={"tool_results": []}))))
+    orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=None)
+    orch._tasks = tasks
+    orch._agents = mock_registry
+    payload = _make_incoming_payload()
+    await orch._process_task("task_1", payload)
+    calls = [c[0][0].text for c in bus.publish_outgoing.call_args_list]
+    assert any("Превышено число шагов" in t for t in calls)
