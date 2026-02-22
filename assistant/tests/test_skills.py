@@ -140,6 +140,22 @@ async def test_file_ref_send_no_file_id_in_ref():
 
 
 @pytest.mark.asyncio
+async def test_file_ref_action_send_without_ref_id_returns_error():
+    skill = FileRefSkill("redis://localhost:6379/99")
+    out = await skill.run({"user_id": "u1", "action": "send"})
+    assert out.get("ok") is False
+    assert "file_ref_id" in out.get("error", "").lower() or "ref_id" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_file_ref_unknown_action():
+    skill = FileRefSkill("redis://localhost:6379/99")
+    out = await skill.run({"user_id": "u1", "action": "delete"})
+    assert out.get("ok") is False
+    assert "action" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
 async def test_checklist_create():
     skill = ChecklistSkill()
     out = await skill.run(
