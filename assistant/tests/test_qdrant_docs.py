@@ -176,3 +176,42 @@ def test_get_repo_rev_returns_short_sha(tmp_path):
         m.return_value = type("R", (), {"returncode": 0, "stdout": "abc123def456\n"})()
         out = qdrant_docs._get_repo_rev(tmp_path)
     assert out == "abc123def456"
+
+
+# --- Итерация 7.2: search_qdrant, get_qdrant_collection ---
+
+
+def test_get_qdrant_collection_default(monkeypatch):
+    monkeypatch.delenv("QDRANT_REPOS_COLLECTION", raising=False)
+    with patch("assistant.dashboard.config_store.get_config_from_redis_sync", return_value={}):
+        assert qdrant_docs.get_qdrant_collection("redis://x", "QDRANT_REPOS_COLLECTION", "repos") == "repos"
+
+
+def test_get_qdrant_collection_from_env(monkeypatch):
+    monkeypatch.setenv("QDRANT_REPOS_COLLECTION", "my_repos")
+    assert qdrant_docs.get_qdrant_collection(None, "QDRANT_REPOS_COLLECTION", "repos") == "my_repos"
+
+
+def test_search_qdrant_empty_query():
+    assert qdrant_docs.search_qdrant("http://q:6333", "repos", "") == []
+    assert qdrant_docs.search_qdrant("", "repos", "x") == []
+
+
+def test_search_qdrant_success():
+    resp = MagicMock(
+        status_code=200,
+        json=lambda: {
+            "result": [
+                {"id": "1", "score": 0.9, "payload": {"text": "chunk one", "repo": "r1", "path": "a.py"}},
+                {"id": "2", "score": 0.8, "payload": {"text": "chunk two", "repo": "r1", "path": "b.py"}},
+            ]
+        },
+    )
+    with patch("assistant.core.qdrant_docs._embed_texts", return_value=[[0.1] * 384]):
+        with patch.object(httpx.Client, "post", return_value=resp):
+            with patch.object(httpx.Client, "close"):
+                out = qdrant_docs.search_qdrant("http://qdrant:6333", "repos", "test query", top_k=5)
+    assert len(out) == 2
+    assert out[0]["text"] == "chunk one"
+    assert out[0]["payload"]["repo"] == "r1"
+    assert out[0]["score"] == 0.9

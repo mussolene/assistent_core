@@ -38,6 +38,7 @@ async def run_core(config: Config) -> None:
     from assistant.skills.document_index_skill import DocumentIndexSkill
     from assistant.skills.file_ref import FileRefSkill
     from assistant.skills.index_repo_skill import IndexRepoSkill
+    from assistant.skills.search_repos_skill import SearchReposSkill
     from assistant.skills.filesystem import FilesystemSkill
     from assistant.skills.git import GitSkill
     from assistant.skills.mcp_adapter import McpAdapterSkill
@@ -150,6 +151,7 @@ async def run_core(config: Config) -> None:
     skills.register(SendEmailSkill(redis_url=config.redis.url))
     skills.register(DocumentIndexSkill(redis_url=config.redis.url))
     skills.register(IndexRepoSkill(redis_url=config.redis.url))
+    skills.register(SearchReposSkill(redis_url=config.redis.url))
     skills.register(McpAdapterSkill())
     runner = SandboxRunner()
     agent_registry = AgentRegistry()

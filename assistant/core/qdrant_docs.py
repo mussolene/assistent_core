@@ -42,6 +42,25 @@ def get_qdrant_url(redis_url: str | None = None) -> str:
     return ""
 
 
+def get_qdrant_collection(redis_url: str | None, key: str, default: str) -> str:
+    """Имя коллекции из env (QDRANT_REPOS_COLLECTION / QDRANT_DOCUMENTS_COLLECTION) или Redis."""
+    env_key = key if key.startswith("QDRANT_") else f"QDRANT_{key}"
+    name = os.getenv(env_key, "").strip()
+    if name:
+        return name
+    if redis_url:
+        try:
+            from assistant.dashboard.config_store import get_config_from_redis_sync
+
+            cfg = get_config_from_redis_sync(redis_url)
+            name = (cfg.get(env_key) or "").strip()
+            if name:
+                return name
+        except Exception as e:
+            logger.debug("get_qdrant_collection %s: %s", key, e)
+    return default
+
+
 def _embed_texts(texts: list[str], model_name: str = "all-MiniLM-L6-v2") -> list[list[float]]:
     """Эмбеддинг списка текстов через sentence-transformers. Возвращает список векторов."""
     if not texts:
@@ -116,6 +135,56 @@ def upsert_points(
     except Exception as e:
         logger.warning("upsert_points: %s", e)
         return False
+    finally:
+        if own and client:
+            client.close()
+
+
+def search_qdrant(
+    base_url: str,
+    collection: str,
+    query: str,
+    top_k: int = 5,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
+    client: httpx.Client | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Поиск по коллекции Qdrant: эмбеддинг запроса, POST /points/search, возврат списка {text, payload, score}.
+    """
+    if not base_url or not collection or not query or not query.strip():
+        return []
+    if embed_fn is None:
+        vectors = _embed_texts([query.strip()])
+    else:
+        vectors = embed_fn([query.strip()])
+    if not vectors:
+        return []
+    vector = vectors[0]
+    url = f"{base_url}/collections/{collection}/points/search"
+    payload = {"vector": vector, "limit": top_k, "with_payload": True}
+    own = client is None
+    if own:
+        client = httpx.Client(timeout=15.0)
+    try:
+        r = client.post(url, json=payload)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        result = data.get("result") if isinstance(data, dict) else None
+        if not isinstance(result, list):
+            return []
+        out: list[dict[str, Any]] = []
+        for item in result:
+            if not isinstance(item, dict):
+                continue
+            pl = item.get("payload") or {}
+            score = item.get("score")
+            text = pl.get("text", "")
+            out.append({"text": text, "payload": pl, "score": score})
+        return out
+    except Exception as e:
+        logger.debug("search_qdrant: %s", e)
+        return []
     finally:
         if own and client:
             client.close()
