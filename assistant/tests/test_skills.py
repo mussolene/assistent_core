@@ -218,6 +218,29 @@ async def test_checklist_empty_tasks():
 
 
 @pytest.mark.asyncio
+async def test_checklist_create_task_with_custom_id():
+    """Tasks can have optional id; title truncated to 255."""
+    skill = ChecklistSkill()
+    out = await skill.run(
+        {"action": "create", "title": "T", "tasks": [{"id": 100, "text": "Item"}]}
+    )
+    assert out.get("ok") is True
+    assert out["send_checklist"]["tasks"][0]["id"] == 100
+    assert out["send_checklist"]["tasks"][0]["text"] == "Item"
+
+
+@pytest.mark.asyncio
+async def test_checklist_create_tasks_as_strings():
+    """Tasks can be plain strings (mapped to id i+1, text)."""
+    skill = ChecklistSkill()
+    out = await skill.run({"action": "create", "title": "List", "tasks": ["A", "B"]})
+    assert out.get("ok") is True
+    assert len(out["send_checklist"]["tasks"]) == 2
+    assert out["send_checklist"]["tasks"][0]["text"] == "A"
+    assert out["send_checklist"]["tasks"][1]["id"] == 2
+
+
+@pytest.mark.asyncio
 async def test_mcp_stub():
     skill = McpAdapterSkill()
     out = await skill.run({})
