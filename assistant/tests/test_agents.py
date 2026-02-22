@@ -201,6 +201,23 @@ async def test_assistant_agent_handle_stream_callback():
 
 
 @pytest.mark.asyncio
+async def test_assistant_agent_handle_model_error_with_stream_cb():
+    """When model raises and stream_callback is set, callback gets done=True and user sees error message."""
+    model = MagicMock()
+    model.generate = AsyncMock(side_effect=ConnectionError("Connection refused"))
+    memory = MagicMock()
+    memory.get_context_for_user = AsyncMock(return_value=[])
+    memory.append_message = AsyncMock()
+    stream_cb = AsyncMock()
+    agent = AssistantAgent(model_gateway=model, memory=memory)
+    ctx = _ctx(metadata={"stream_callback": stream_cb})
+    result = await agent.handle(ctx)
+    assert result.success is True
+    assert "недоступна" in result.output_text or "Ollama" in result.output_text
+    stream_cb.assert_any_call("", done=True)
+
+
+@pytest.mark.asyncio
 async def test_assistant_agent_handle_model_error_connection():
     """When model.generate raises connection error, returns user-friendly message."""
     model = MagicMock()
