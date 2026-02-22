@@ -131,6 +131,31 @@ async def test_bus_subscribe_and_run_listener_one_message():
 
 
 @pytest.mark.asyncio
+async def test_bus_disconnect_closes_pubsub():
+    """disconnect() closes _pubsub when it was set by run_listener."""
+    mock_client = MagicMock()
+    mock_client.ping = AsyncMock()
+    mock_client.publish = AsyncMock()
+    mock_client.close = AsyncMock()
+    mock_pubsub = MagicMock()
+    mock_pubsub.subscribe = AsyncMock()
+    mock_pubsub.unsubscribe = AsyncMock()
+    mock_pubsub.close = AsyncMock()
+    mock_pubsub.listen = AsyncMock(return_value=iter([]))
+    mock_client.pubsub = MagicMock(return_value=mock_pubsub)
+    with patch("assistant.core.bus.aioredis") as m:
+        m.from_url = MagicMock(return_value=mock_client)
+        bus = EventBus("redis://fake:6379/0")
+        await bus.connect()
+        bus._pubsub = mock_pubsub
+        await bus.disconnect()
+        mock_pubsub.close.assert_called_once()
+        mock_client.close.assert_called_once()
+    assert bus._pubsub is None
+    assert bus._client is None
+
+
+@pytest.mark.asyncio
 async def test_bus_ensure_connected_on_first_publish():
     """publish_* without connect() calls connect() via _ensure_connected."""
     mock_client = MagicMock()
