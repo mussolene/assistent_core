@@ -1,11 +1,11 @@
 """Tests for agents (Assistant, Tool) with mocks."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from assistant.agents.assistant import AssistantAgent, _format_model_error_for_user
-from assistant.agents.base import TaskContext
+from assistant.agents.base import AgentResult, TaskContext
 from assistant.agents.tool_agent import ToolAgent
 from assistant.skills.registry import SkillRegistry
 from assistant.skills.runner import SandboxRunner
@@ -33,6 +33,21 @@ def test_format_model_error_404_and_5xx():
     assert "404" in _format_model_error_for_user(Exception("404 Not Found"))
     assert "5xx" in _format_model_error_for_user(Exception("502 Bad Gateway"))
     assert "5xx" in _format_model_error_for_user(Exception("503 Service Unavailable"))
+
+
+def test_format_model_error_html_404_5xx():
+    assert "404" in _format_model_error_for_user(Exception("<html>404 Not Found</html>"))
+    assert "5xx" in _format_model_error_for_user(Exception("<!DOCTYPE html><body>502</body>"))
+
+
+def test_format_model_error_connection_refused():
+    msg = _format_model_error_for_user(Exception("Connection refused"))
+    assert "недоступна" in msg or "Ollama" in msg or "OPENAI_BASE_URL" in msg
+
+
+def test_format_model_error_400_bad_request():
+    msg = _format_model_error_for_user(Exception("400 Bad Request"))
+    assert "400" in msg
 
 
 def test_format_model_error_long_text_truncated():
@@ -108,6 +123,63 @@ async def test_assistant_agent_handle_with_tool_results():
     result = await agent.handle(ctx)
     assert result.success is True
     assert "Tool results" in (model.generate.call_args[0][0] or "")
+
+
+@pytest.mark.asyncio
+async def test_assistant_agent_handle_skips_system_messages_in_prompt():
+    model = MagicMock()
+    model.generate = AsyncMock(return_value="Ok")
+    memory = MagicMock()
+    memory.get_context_for_user = AsyncMock(
+        return_value=[
+            {"role": "system", "content": "Secret system"},
+            {"role": "user", "content": "hi"},
+        ]
+    )
+    memory.append_message = AsyncMock()
+    agent = AssistantAgent(model_gateway=model, memory=memory)
+    result = await agent.handle(_ctx(text="hi"))
+    prompt = model.generate.call_args[0][0]
+    assert "Secret system" not in prompt
+    assert "User:" in prompt and "hi" in prompt
+
+
+@pytest.mark.asyncio
+async def test_assistant_agent_handle_stream_sync_fallback():
+    model = MagicMock()
+    model.generate = AsyncMock(return_value="Sync response")
+    memory = MagicMock()
+    memory.get_context_for_user = AsyncMock(return_value=[])
+    memory.append_message = AsyncMock()
+    stream_cb = AsyncMock()
+    agent = AssistantAgent(model_gateway=model, memory=memory)
+    ctx = _ctx(metadata={"stream_callback": stream_cb})
+    result = await agent.handle(ctx)
+    assert result.success is True
+    assert "Sync response" in result.output_text
+
+
+@pytest.mark.asyncio
+async def test_assistant_agent_handle_appends_assistant_message_when_no_tool_results():
+    model = MagicMock()
+    model.generate = AsyncMock(return_value="Reply")
+    memory = MagicMock()
+    memory.get_context_for_user = AsyncMock(return_value=[])
+    memory.append_message = AsyncMock()
+    agent = AssistantAgent(model_gateway=model, memory=memory)
+    ctx = _ctx(text="hi", tool_results=[])
+    await agent.handle(ctx)
+    assert memory.append_message.call_count >= 1
+    calls = [c for c in memory.append_message.call_args_list if len(c[0]) >= 3 and c[0][1] == "assistant"]
+    assert len(calls) >= 1
+    assert calls[0][0][2] == "Reply"
+
+
+@pytest.mark.asyncio
+async def test_assistant_agent_parse_tool_calls_invalid_json():
+    agent = AssistantAgent(model_gateway=MagicMock(), memory=MagicMock())
+    out = agent._parse_tool_calls('{"tool_calls": [invalid]}')
+    assert out == []
 
 
 @pytest.mark.asyncio
@@ -220,5 +292,32 @@ async def test_tool_agent_unknown_skill():
     assert result.success is True
     assert result.metadata
     assert any(r.get("ok") is False for r in result.metadata.get("tool_results", []))
+
+
+@pytest.mark.asyncio
+async def test_tool_agent_tasks_normalizes_action_and_params():
+    reg = SkillRegistry()
+    run_params: list[dict] = []
+
+    async def capture_run(name, params, runner):
+        run_params.append((name, dict(params)))
+        return {"ok": True}
+
+    reg.run = AsyncMock(side_effect=capture_run)
+    runner = SandboxRunner()
+    memory = MagicMock()
+    memory.append_tool_result = AsyncMock()
+    agent = ToolAgent(reg, runner, memory)
+    ctx = _ctx(
+        metadata={
+            "pending_tool_calls": [
+                {"name": "tasks", "params": {"action": "createtask", "title": "T"}}
+            ]
+        }
+    )
+    await agent.handle(ctx)
+    assert len(run_params) == 1
+    assert run_params[0][0] == "tasks"
+    assert run_params[0][1].get("action") == "create_task"
 
 
