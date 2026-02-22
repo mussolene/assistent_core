@@ -25,4 +25,5 @@ ENV TMPDIR=/app/tmp
 
 USER app
 EXPOSE 8080
-CMD ["gunicorn", "-b", "0.0.0.0:8080", "-w", "1", "--timeout", "90", "--worker-tmp-dir", "/app/tmp", "--access-logfile", "-", "assistant.dashboard.app:app"]
+# --log-level info и --capture-output чтобы в консоль шли и [MCP] логи приложения
+CMD ["gunicorn", "-b", "0.0.0.0:8080", "-w", "1", "--timeout", "90", "--worker-tmp-dir", "/app/tmp", "--access-logfile", "-", "--log-level", "info", "--capture-output", "assistant.dashboard.app:app"]

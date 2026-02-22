@@ -992,11 +992,25 @@ MCP_TOOLS_SPEC = [
 ]
 
 
+def _mcp_client_address():
+    """IP клиента для MCP (учёт X-Forwarded-For за прокси)."""
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
 @app.route("/mcp/v1/agent/<endpoint_id>", methods=["POST"])
 def mcp_api_base_post(endpoint_id):
     """POST базового URL: JSON-RPC MCP (initialize, tools/list, tools/call) для Cursor."""
+    client_addr = _mcp_client_address()
     chat_id = _mcp_api_auth(endpoint_id)
     if not chat_id:
+        logger.info(
+            "[MCP] POST /mcp/v1/agent/%s method=(auth failed) address=%s -> 401 Unauthorized",
+            endpoint_id,
+            client_addr,
+        )
         return jsonify(
             {"jsonrpc": "2.0", "error": {"code": -32001, "message": "Unauthorized"}}
         ), 401
@@ -1004,6 +1018,13 @@ def mcp_api_base_post(endpoint_id):
     method = data.get("method")
     params = data.get("params") or {}
     req_id = data.get("id")
+    logger.info(
+        "[MCP] POST /mcp/v1/agent/%s method=%s address=%s chat_id=%s",
+        endpoint_id,
+        method or "(empty)",
+        client_addr,
+        chat_id,
+    )
 
     def reply(result=None, error=None):
         out = {"jsonrpc": "2.0", "id": req_id}
@@ -1028,46 +1049,40 @@ def mcp_api_base_post(endpoint_id):
     if method == "tools/call":
         name = params.get("name", "")
         args = params.get("arguments") or {}
-        client_addr = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip() or request.remote_addr or "unknown"
-        logger.info(
-            "MCP tools/call request address=%s endpoint_id=%s chat_id=%s tool=%s arguments=%s",
-            client_addr,
-            endpoint_id,
-            chat_id,
-            name,
-            json.dumps(args, ensure_ascii=False)[:500],
-        )
+        args_str = json.dumps(args, ensure_ascii=False)[:400].replace("\n", " ")
         try:
             result = _mcp_tools_call(chat_id, endpoint_id, name, args)
             resp_preview = ""
             if isinstance(result, dict) and "content" in result:
                 for c in result.get("content", [])[:1]:
                     if isinstance(c, dict) and c.get("type") == "text":
-                        t = (c.get("text") or "")[:200]
-                        resp_preview = t.replace("\n", " ")
+                        t = (c.get("text") or "")[:300]
+                        resp_preview = t.replace("\n", " ").strip()
                         break
             logger.info(
-                "MCP tools/call response address=%s endpoint_id=%s tool=%s result_preview=%s",
-                client_addr,
+                "[MCP] tools/call endpoint_id=%s tool=%s address=%s request=%s -> response=%s",
                 endpoint_id,
                 name,
+                client_addr,
+                args_str or "{}",
                 resp_preview or "(empty)",
             )
             return reply(result)
         except Exception as e:
+            err_msg = str(e)[:300]
             logger.exception(
-                "MCP tools/call %s (endpoint_id=%s): %s",
-                name,
+                "MCP tools/call endpoint_id=%s tool=%s error=%s",
                 endpoint_id,
-                e,
-                exc_info=True,
+                name,
+                err_msg,
             )
             logger.warning(
-                "MCP tools/call response address=%s endpoint_id=%s tool=%s error=%s",
-                client_addr,
+                "[MCP] tools/call endpoint_id=%s tool=%s address=%s request=%s -> error=%s",
                 endpoint_id,
                 name,
-                str(e)[:200],
+                client_addr,
+                args_str or "{}",
+                err_msg,
             )
             return reply(error={"code": -32603, "message": str(e)})
     return reply(error={"code": -32601, "message": f"Method not found: {method}"})
