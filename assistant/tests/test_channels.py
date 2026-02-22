@@ -238,3 +238,48 @@ async def test_handle_task_view_callback_not_found():
             assert len(send_calls) >= 1
             body = send_calls[0][1]["json"]
             assert "Задача не найдена" in body["text"] or "доступ запрещён" in body["text"]
+
+
+# --- Итерация 10.5: callback task:done — отметить выполненной и обновить список ---
+
+
+@pytest.mark.asyncio
+async def test_handle_task_done_callback_updates_and_edits_message():
+    """При callback task:done:id вызываются update_task, list_tasks и editMessageText с новым списком."""
+    from assistant.channels.telegram import _handle_task_done_callback
+
+    call_count = 0
+
+    async def mock_run(params):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return {"ok": True}
+        return {
+            "ok": True,
+            "text_telegram": "Задачи:\n\n1. **Осталась** (01.02) [open]",
+            "inline_keyboard": [[{"text": "1. Осталась", "callback_data": "task:view:other"}]],
+        }
+
+    with patch("assistant.skills.tasks.TaskSkill") as mock_skill_cls:
+        mock_skill = MagicMock()
+        mock_skill.run = AsyncMock(side_effect=mock_run)
+        mock_skill_cls.return_value = mock_skill
+        with patch("assistant.channels.telegram.httpx.AsyncClient") as mock_client:
+            mock_post = AsyncMock()
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+            await _handle_task_done_callback(
+                "https://api.telegram.org/bot1",
+                "chat_1",
+                "cq_1",
+                100,
+                "task-id-1",
+                "user_1",
+            )
+            edit_calls = [c for c in mock_post.call_args_list if "editMessageText" in (c[0][0] or "")]
+            assert len(edit_calls) >= 1
+            body = edit_calls[0][1]["json"]
+            assert body["chat_id"] == "chat_1"
+            assert body["message_id"] == 100
+            assert "inline_keyboard" in body.get("reply_markup", {})
+            assert mock_skill.run.call_count == 2

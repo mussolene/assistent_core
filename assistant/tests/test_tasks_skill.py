@@ -661,6 +661,8 @@ async def test_tasks_list_only_actual(skill, redis_mock):
     assert out.get("total") == 1
     assert any(t["title"] == "Open" for t in out["tasks"])
     assert "inline_keyboard" in out
+    assert "text_telegram" in out
+    assert "Выполнена" in str(out["inline_keyboard"]) or len(out["inline_keyboard"]) >= 1
 
 
 def test_normalize_task_params():

@@ -605,9 +605,10 @@ class TaskSkill(BaseSkill):
         out = {"ok": True, "tasks": tasks, "total": len(tasks), "formatted": formatted}
         if only_actual and tasks:
             _text, inline_keyboard = format_tasks_for_telegram(
-                tasks, action="view", show_done_button=False
+                tasks, action="view", show_done_button=True
             )
             out["inline_keyboard"] = inline_keyboard
+            out["text_telegram"] = _text
         return out
 
     async def _get_one(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:

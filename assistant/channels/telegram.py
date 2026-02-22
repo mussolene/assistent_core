@@ -153,6 +153,71 @@ async def _handle_task_view_callback(
         logger.warning("sendMessage task details: %s", e)
 
 
+async def _handle_task_done_callback(
+    base_url: str,
+    chat_id: str,
+    callback_query_id: str,
+    message_id: int,
+    task_id: str,
+    user_id: str,
+) -> None:
+    """
+    Обработка callback task:done:id — отметить задачу выполненной и обновить сообщение со списком (итерация 10.5).
+    """
+    await _answer_callback(base_url, callback_query_id, "Ок")
+    from assistant.skills.tasks import TaskSkill
+
+    skill = TaskSkill()
+    result = await skill.run(
+        {"action": "update_task", "task_id": task_id, "user_id": user_id, "status": "done"}
+    )
+    if not result.get("ok"):
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{base_url}/answerCallbackQuery",
+                    json={"callback_query_id": callback_query_id, "text": result.get("error", "Ошибка")[:200]},
+                    timeout=5.0,
+                )
+        except Exception:
+            pass
+        return
+    list_result = await skill.run({"action": "list_tasks", "user_id": user_id, "only_actual": True})
+    if list_result.get("ok") and "text_telegram" in list_result and "inline_keyboard" in list_result:
+        text = _markdown_to_telegram_html(list_result["text_telegram"])
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{base_url}/editMessageText",
+                    json={
+                        "chat_id": chat_id,
+                        "message_id": message_id,
+                        "text": text or "Нет актуальных задач.",
+                        "parse_mode": PARSE_MODE,
+                        "reply_markup": {"inline_keyboard": list_result["inline_keyboard"]},
+                    },
+                    timeout=5.0,
+                )
+        except Exception as e:
+            logger.warning("editMessageText task list: %s", e)
+    else:
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{base_url}/editMessageText",
+                    json={
+                        "chat_id": chat_id,
+                        "message_id": message_id,
+                        "text": _escape_html("Задача отмечена выполненной."),
+                        "parse_mode": PARSE_MODE,
+                        "reply_markup": {"inline_keyboard": []},
+                    },
+                    timeout=5.0,
+                )
+        except Exception as e:
+            logger.warning("editMessageText task done fallback: %s", e)
+
+
 # Telegram принимает HTML — корректное отображение без «сырых» знаков разметки
 PARSE_MODE = "HTML"
 
@@ -685,7 +750,7 @@ async def run_telegram_adapter() -> None:
                             else:
                                 await _answer_callback(base_url, cq["id"], "Нет активного запроса.")
                         elif callback_data.startswith("task:"):
-                            # task:view:id — ответ с деталями задачи сразу из адаптера; остальные — в шину
+                            # task:view:id — детали в адаптере; task:done:id — отметить выполненной и обновить список (10.5); остальные — в шину
                             parts = callback_data.split(":", 2)
                             if len(parts) >= 3:
                                 action, task_id = parts[1], parts[2]
@@ -693,6 +758,19 @@ async def run_telegram_adapter() -> None:
                                     await _handle_task_view_callback(
                                         base_url, chat_id, cq["id"], task_id, str(uid_int)
                                     )
+                                elif action == "done":
+                                    msg_id = cq.get("message", {}).get("message_id")
+                                    if msg_id is not None:
+                                        await _handle_task_done_callback(
+                                            base_url,
+                                            chat_id,
+                                            cq["id"],
+                                            msg_id,
+                                            task_id,
+                                            str(uid_int),
+                                        )
+                                    else:
+                                        await _answer_callback(base_url, cq["id"], "Ок")
                                 else:
                                     instructions = {
                                         "delete": "Удали задачу с id {}.",
