@@ -63,14 +63,17 @@ def test_config_load_telegram_allowed_user_ids_from_yaml(tmp_path):
 def test_config_load_telegram_allowed_user_ids_from_env(monkeypatch, tmp_path):
     """TELEGRAM_ALLOWED_USER_IDS from env is parsed and set in telegram and security."""
     import os
+
     path = tmp_path / "c.yaml"
     path.write_text("redis:\n  url: redis://localhost:6379/0\n")
     # Patch os.getenv in loader so only the loader sees this; avoid pydantic env conflict
     with patch("assistant.config.loader.os.getenv") as mock_getenv:
+
         def getenv(key, default=None):
             if key == "TELEGRAM_ALLOWED_USER_IDS":
                 return "111, 222"
             return os.environ.get(key, default)
+
         mock_getenv.side_effect = getenv
         config = Config.load(config_path=path)
     assert config.telegram.allowed_user_ids == [111, 222]

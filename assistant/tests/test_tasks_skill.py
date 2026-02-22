@@ -330,7 +330,12 @@ async def test_tasks_set_reminder_invalid_datetime_returns_error(skill, redis_mo
         cr = await skill.run({"action": "create_task", "user_id": "u1", "title": "T"})
         task_id = cr["task_id"]
         out = await skill.run(
-            {"action": "set_reminder", "user_id": "u1", "task_id": task_id, "reminder_at": "not-a-date"}
+            {
+                "action": "set_reminder",
+                "user_id": "u1",
+                "task_id": task_id,
+                "reminder_at": "not-a-date",
+            }
         )
     assert out.get("ok") is False
     assert "reminder_at" in out.get("error", "") or "ISO" in out.get("error", "")
@@ -342,9 +347,7 @@ async def test_tasks_add_link_missing_link_returns_error(skill, redis_mock):
         "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
     ):
         cr = await skill.run({"action": "create_task", "user_id": "u1", "title": "T"})
-        out = await skill.run(
-            {"action": "add_link", "user_id": "u1", "task_id": cr["task_id"]}
-        )
+        out = await skill.run({"action": "add_link", "user_id": "u1", "task_id": cr["task_id"]})
     assert out.get("ok") is False
     assert "link" in out.get("error", "").lower() or "task_id" in out.get("error", "").lower()
 
@@ -383,7 +386,11 @@ async def test_tasks_add_document_no_task_id_returns_error(skill, redis_mock):
         "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
     ):
         out = await skill.run(
-            {"action": "add_document", "user_id": "u1", "document": {"name": "d", "url": "http://d"}}
+            {
+                "action": "add_document",
+                "user_id": "u1",
+                "document": {"name": "d", "url": "http://d"},
+            }
         )
     assert out.get("ok") is False
     assert "task_id" in out.get("error", "").lower()
@@ -395,9 +402,7 @@ async def test_tasks_add_document_no_document_returns_error(skill, redis_mock):
         "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
     ):
         cr = await skill.run({"action": "create_task", "user_id": "u1", "title": "T"})
-        out = await skill.run(
-            {"action": "add_document", "user_id": "u1", "task_id": cr["task_id"]}
-        )
+        out = await skill.run({"action": "add_document", "user_id": "u1", "task_id": cr["task_id"]})
     assert out.get("ok") is False
     assert "document" in out.get("error", "").lower()
 

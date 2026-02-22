@@ -142,7 +142,10 @@ async def test_memory_manager_get_context_with_user_data():
     mgr._task = MagicMock()
     mgr._task.get_tool_results = AsyncMock(return_value=[])
     ctx = await mgr.get_context_for_user("u1", "task1", include_vector=False)
-    assert any("User data:" in str(m.get("content", "")) and "Alice" in str(m.get("content", "")) for m in ctx)
+    assert any(
+        "User data:" in str(m.get("content", "")) and "Alice" in str(m.get("content", ""))
+        for m in ctx
+    )
 
 
 def test_memory_manager_get_vector_medium_long():

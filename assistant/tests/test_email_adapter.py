@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 import httpx
+
 from assistant.channels.email_adapter import get_email_config, send_email
 from assistant.core.events import ChannelKind, OutgoingReply
 
@@ -62,7 +63,12 @@ def test_send_email_smtp_no_host_returns_false(monkeypatch):
 def test_send_email_sendgrid_no_key_returns_false(monkeypatch):
     monkeypatch.setattr(
         "assistant.channels.email_adapter.get_email_config",
-        lambda url: {"enabled": True, "provider": "sendgrid", "sendgrid_api_key": "", "from": "x@y"},
+        lambda url: {
+            "enabled": True,
+            "provider": "sendgrid",
+            "sendgrid_api_key": "",
+            "from": "x@y",
+        },
     )
     assert send_email("user@test.com", "Subj", "Body", "redis://localhost/0") is False
 

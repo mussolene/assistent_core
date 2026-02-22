@@ -1,11 +1,11 @@
 """Tests for agents (Assistant, Tool) with mocks."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from assistant.agents.assistant import AssistantAgent, _format_model_error_for_user
-from assistant.agents.base import AgentResult, TaskContext
+from assistant.agents.base import TaskContext
 from assistant.agents.tool_agent import ToolAgent
 from assistant.skills.registry import SkillRegistry
 from assistant.skills.runner import SandboxRunner
@@ -138,7 +138,7 @@ async def test_assistant_agent_handle_skips_system_messages_in_prompt():
     )
     memory.append_message = AsyncMock()
     agent = AssistantAgent(model_gateway=model, memory=memory)
-    result = await agent.handle(_ctx(text="hi"))
+    await agent.handle(_ctx(text="hi"))
     prompt = model.generate.call_args[0][0]
     assert "Secret system" not in prompt
     assert "User:" in prompt and "hi" in prompt
@@ -170,7 +170,9 @@ async def test_assistant_agent_handle_appends_assistant_message_when_no_tool_res
     ctx = _ctx(text="hi", tool_results=[])
     await agent.handle(ctx)
     assert memory.append_message.call_count >= 1
-    calls = [c for c in memory.append_message.call_args_list if len(c[0]) >= 3 and c[0][1] == "assistant"]
+    calls = [
+        c for c in memory.append_message.call_args_list if len(c[0]) >= 3 and c[0][1] == "assistant"
+    ]
     assert len(calls) >= 1
     assert calls[0][0][2] == "Reply"
 
@@ -336,5 +338,3 @@ async def test_tool_agent_tasks_normalizes_action_and_params():
     assert len(run_params) == 1
     assert run_params[0][0] == "tasks"
     assert run_params[0][1].get("action") == "create_task"
-
-

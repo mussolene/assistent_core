@@ -183,7 +183,9 @@ def test_orchestrator_is_only_file_content_question():
     assert Orchestrator._is_only_file_content_question("Что в файле?") is True
     assert Orchestrator._is_only_file_content_question("опиши документ") is True
     assert Orchestrator._is_only_file_content_question("содержимое файла") is True
-    assert Orchestrator._is_only_file_content_question("") is False  # пустой обрабатывается отдельно в caller
+    assert (
+        Orchestrator._is_only_file_content_question("") is False
+    )  # пустой обрабатывается отдельно в caller
     assert Orchestrator._is_only_file_content_question("напомни завтра про встречу") is False
     assert Orchestrator._is_only_file_content_question("x" * 150) is False
 
@@ -221,8 +223,10 @@ async def test_orchestrator_file_summary_for_user_with_gateway_returns_summary()
     bus = MagicMock()
     gateway = MagicMock()
     gateway.generate = AsyncMock(return_value="Краткое содержание документа.")
+
     async def get_gw():
         return gateway
+
     orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=get_gw)
     out = await orch._file_summary_for_user("Document text here.", ["ref1"])
     assert "Краткое содержание" in out
@@ -233,8 +237,10 @@ async def test_orchestrator_file_summary_for_user_with_gateway_returns_summary()
 async def test_orchestrator_file_summary_for_user_gateway_raises_fallback():
     config = MagicMock()
     bus = MagicMock()
+
     async def get_gw():
         raise RuntimeError("model unavailable")
+
     orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=get_gw)
     out = await orch._file_summary_for_user("text", ["ref1"])
     assert "проиндексирован" in out or "Можешь спросить" in out
@@ -303,12 +309,15 @@ async def test_orchestrator_process_task_attachments_index_raises_publishes_erro
     bus = MagicMock()
     bus.publish_outgoing = AsyncMock()
     memory = MagicMock()
-    with patch(
-        "assistant.dashboard.config_store.get_config_from_redis_sync",
-        return_value={"TELEGRAM_BOT_TOKEN": "token"},
-    ), patch(
-        "assistant.core.file_indexing.index_telegram_attachments",
-        side_effect=RuntimeError("network error"),
+    with (
+        patch(
+            "assistant.dashboard.config_store.get_config_from_redis_sync",
+            return_value={"TELEGRAM_BOT_TOKEN": "token"},
+        ),
+        patch(
+            "assistant.core.file_indexing.index_telegram_attachments",
+            side_effect=RuntimeError("network error"),
+        ),
     ):
         orch = Orchestrator(config=config, bus=bus, memory=memory, gateway_factory=None)
         orch._tasks = MagicMock()
@@ -335,7 +344,15 @@ async def test_orchestrator_process_task_agent_success_publishes_outgoing():
     tasks = MagicMock()
     tasks.get = AsyncMock(
         side_effect=[
-            {"state": "assistant", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": []},
+            {
+                "state": "assistant",
+                "stream": False,
+                "chat_id": "c1",
+                "user_id": "u1",
+                "message_id": "m1",
+                "text": "hi",
+                "tool_results": [],
+            },
             None,
         ]
     )
@@ -343,7 +360,9 @@ async def test_orchestrator_process_task_agent_success_publishes_outgoing():
     mock_registry = AgentRegistry()
     mock_agent = MagicMock()
     mock_agent.handle = AsyncMock(
-        return_value=AgentResult(success=True, output_text="Answer", next_agent=None, tool_calls=None)
+        return_value=AgentResult(
+            success=True, output_text="Answer", next_agent=None, tool_calls=None
+        )
     )
     mock_registry.register("assistant", mock_agent)
     orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=None)
@@ -368,7 +387,15 @@ async def test_orchestrator_process_task_agent_error_publishes_error():
     bus.publish_outgoing = AsyncMock()
     tasks = MagicMock()
     tasks.get = AsyncMock(
-        return_value={"state": "assistant", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": []}
+        return_value={
+            "state": "assistant",
+            "stream": False,
+            "chat_id": "c1",
+            "user_id": "u1",
+            "message_id": "m1",
+            "text": "hi",
+            "tool_results": [],
+        }
     )
     mock_registry = AgentRegistry()
     mock_agent = MagicMock()
@@ -417,11 +444,16 @@ async def test_orchestrator_file_summary_no_readable_uses_placeholder_prompt():
     bus = MagicMock()
     gateway = MagicMock()
     gateway.generate = AsyncMock(return_value="Файл сохранён. По изображениям описать не могу.")
+
     async def get_gw():
         return gateway
+
     orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=get_gw)
     out = await orch._file_summary_for_user(" [изображение] ", ["ref1"])
-    assert "изображение" in gateway.generate.call_args[0][0].lower() or "файл" in gateway.generate.call_args[0][0].lower()
+    assert (
+        "изображение" in gateway.generate.call_args[0][0].lower()
+        or "файл" in gateway.generate.call_args[0][0].lower()
+    )
     assert "Файл сохранён" in out or "проиндексирован" in out
 
 
@@ -458,7 +490,9 @@ def test_orchestrator_task_to_context_includes_pending_tool_calls():
         "pending_tool_calls": [{"name": "run_skill", "args": {"skill": "filesystem"}}],
     }
     ctx = orch._task_to_context("tid_1", task_data, payload)
-    assert ctx.metadata.get("pending_tool_calls") == [{"name": "run_skill", "args": {"skill": "filesystem"}}]
+    assert ctx.metadata.get("pending_tool_calls") == [
+        {"name": "run_skill", "args": {"skill": "filesystem"}}
+    ]
 
 
 @pytest.mark.asyncio
@@ -472,15 +506,34 @@ async def test_orchestrator_process_task_tool_returns_formatted_inline_keyboard_
     bus.publish_outgoing = AsyncMock()
     tasks = MagicMock()
     get_returns = [
-        {"state": "assistant", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": []},
-        {"state": "tool", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": [], "pending_tool_calls": [{"name": "x"}]},
+        {
+            "state": "assistant",
+            "stream": False,
+            "chat_id": "c1",
+            "user_id": "u1",
+            "message_id": "m1",
+            "text": "hi",
+            "tool_results": [],
+        },
+        {
+            "state": "tool",
+            "stream": False,
+            "chat_id": "c1",
+            "user_id": "u1",
+            "message_id": "m1",
+            "text": "hi",
+            "tool_results": [],
+            "pending_tool_calls": [{"name": "x"}],
+        },
     ]
     tasks.get = AsyncMock(side_effect=get_returns)
     tasks.update = AsyncMock()
     mock_registry = AgentRegistry()
     assistant_agent = MagicMock()
     assistant_agent.handle = AsyncMock(
-        return_value=AgentResult(success=True, output_text="", next_agent="tool", tool_calls=[{"name": "run_skill"}])
+        return_value=AgentResult(
+            success=True, output_text="", next_agent="tool", tool_calls=[{"name": "run_skill"}]
+        )
     )
     tool_agent = MagicMock()
     tool_agent.handle = AsyncMock(
@@ -490,7 +543,10 @@ async def test_orchestrator_process_task_tool_returns_formatted_inline_keyboard_
             next_agent="assistant",
             metadata={
                 "tool_results": [
-                    {"formatted": "Choose one:", "inline_keyboard": [[{"text": "A", "callback_data": "a"}]]}
+                    {
+                        "formatted": "Choose one:",
+                        "inline_keyboard": [[{"text": "A", "callback_data": "a"}]],
+                    }
                 ]
             },
         )
@@ -505,7 +561,9 @@ async def test_orchestrator_process_task_tool_returns_formatted_inline_keyboard_
     assert bus.publish_outgoing.call_count >= 1
     last = bus.publish_outgoing.call_args[0][0]
     assert last.text == "Choose one:"
-    assert getattr(last, "reply_markup", None) is not None and last.reply_markup.get("inline_keyboard")
+    assert getattr(last, "reply_markup", None) is not None and last.reply_markup.get(
+        "inline_keyboard"
+    )
 
 
 @pytest.mark.asyncio
@@ -519,8 +577,25 @@ async def test_orchestrator_process_task_tool_calls_then_user_reply_returns():
     bus.publish_outgoing = AsyncMock()
     tasks = MagicMock()
     get_returns = [
-        {"state": "assistant", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": []},
-        {"state": "tool", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": [], "pending_tool_calls": [{"name": "x"}]},
+        {
+            "state": "assistant",
+            "stream": False,
+            "chat_id": "c1",
+            "user_id": "u1",
+            "message_id": "m1",
+            "text": "hi",
+            "tool_results": [],
+        },
+        {
+            "state": "tool",
+            "stream": False,
+            "chat_id": "c1",
+            "user_id": "u1",
+            "message_id": "m1",
+            "text": "hi",
+            "tool_results": [],
+            "pending_tool_calls": [{"name": "x"}],
+        },
     ]
     tasks.get = AsyncMock(side_effect=get_returns)
     tasks.update = AsyncMock()
@@ -566,7 +641,14 @@ async def test_orchestrator_process_task_max_iterations_publishes_limit_message(
     bus = MagicMock()
     bus.publish_outgoing = AsyncMock()
     tasks = MagicMock()
-    base = {"stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": []}
+    base = {
+        "stream": False,
+        "chat_id": "c1",
+        "user_id": "u1",
+        "message_id": "m1",
+        "text": "hi",
+        "tool_results": [],
+    }
     tasks.get = AsyncMock(
         side_effect=[
             {**base, "state": "assistant"},
@@ -587,7 +669,19 @@ async def test_orchestrator_process_task_max_iterations_publishes_limit_message(
         )
     )
     mock_registry.register("assistant", agent)
-    mock_registry.register("tool", MagicMock(handle=AsyncMock(return_value=AgentResult(success=True, output_text="", next_agent="assistant", metadata={"tool_results": []}))))
+    mock_registry.register(
+        "tool",
+        MagicMock(
+            handle=AsyncMock(
+                return_value=AgentResult(
+                    success=True,
+                    output_text="",
+                    next_agent="assistant",
+                    metadata={"tool_results": []},
+                )
+            )
+        ),
+    )
     orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=None)
     orch._tasks = tasks
     orch._agents = mock_registry

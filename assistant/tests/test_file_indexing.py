@@ -50,6 +50,7 @@ def test_extract_text_md(tmp_path):
 def test_extract_text_xlsx(tmp_path):
     pytest.importorskip("openpyxl")
     from openpyxl import Workbook
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Data"
@@ -59,7 +60,9 @@ def test_extract_text_xlsx(tmp_path):
     ws["B2"] = "b"
     xlsx_path = tmp_path / "book.xlsx"
     wb.save(xlsx_path)
-    out = fi._extract_text(xlsx_path, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "book.xlsx")
+    out = fi._extract_text(
+        xlsx_path, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "book.xlsx"
+    )
     assert "Col1" in out and "Col2" in out and "a" in out and "b" in out
     assert "Data" in out or "Лист" in out
 
@@ -201,7 +204,11 @@ def test_extract_text_docx_with_docx(tmp_path):
     doc.add_paragraph("Hello from docx")
     doc_path = tmp_path / "t.docx"
     doc.save(doc_path)
-    out = fi._extract_text(doc_path, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "t.docx")
+    out = fi._extract_text(
+        doc_path,
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "t.docx",
+    )
     assert "Hello" in out
 
 
@@ -215,9 +222,11 @@ def test_extract_text_pdf_import_error_returns_empty(tmp_path):
     """_extract_text for PDF when pypdf is not installed returns ''."""
     (tmp_path / "x.pdf").write_bytes(b"dummy")
     import sys
+
     class FakePypdf:
         def __getattr__(self, name):
             raise ImportError("No module named 'pypdf'")
+
     with patch.dict(sys.modules, {"pypdf": FakePypdf()}):
         out = fi._extract_text(tmp_path / "x.pdf", "application/pdf", "x.pdf")
     assert out == ""
@@ -263,11 +272,17 @@ def test_extract_text_xlsx_import_error_returns_empty(tmp_path):
     """_extract_text for XLSX when openpyxl is not installed returns ''."""
     (tmp_path / "x.xlsx").write_bytes(b"dummy")
     import sys
+
     class FakeOpenpyxl:
         def __getattr__(self, name):
             raise ImportError("No module named 'openpyxl'")
+
     with patch.dict(sys.modules, {"openpyxl": FakeOpenpyxl()}):
-        out = fi._extract_text(tmp_path / "x.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml", "x.xlsx")
+        out = fi._extract_text(
+            tmp_path / "x.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml",
+            "x.xlsx",
+        )
     assert out == ""
 
 
@@ -482,12 +497,15 @@ def test_list_file_refs_empty():
 
 
 def test_list_file_refs_with_refs():
-    with patch(
-        "assistant.core.file_indexing._list_file_refs_sync",
-        return_value=["r1", "r2"],
-    ), patch(
-        "assistant.core.file_indexing._get_file_ref_sync",
-        side_effect=lambda _u, rid: {"filename": f"f_{rid}.txt"},
+    with (
+        patch(
+            "assistant.core.file_indexing._list_file_refs_sync",
+            return_value=["r1", "r2"],
+        ),
+        patch(
+            "assistant.core.file_indexing._get_file_ref_sync",
+            side_effect=lambda _u, rid: {"filename": f"f_{rid}.txt"},
+        ),
     ):
         out = fi.list_file_refs("redis://localhost/0", "u1")
         assert len(out) == 2
@@ -497,12 +515,15 @@ def test_list_file_refs_with_refs():
 
 def test_list_file_refs_skips_ref_when_get_returns_none():
     """list_file_refs skips refs for which _get_file_ref_sync returns None."""
-    with patch(
-        "assistant.core.file_indexing._list_file_refs_sync",
-        return_value=["r1", "r2"],
-    ), patch(
-        "assistant.core.file_indexing._get_file_ref_sync",
-        side_effect=lambda _u, rid: {"filename": "a.txt"} if rid == "r1" else None,
+    with (
+        patch(
+            "assistant.core.file_indexing._list_file_refs_sync",
+            return_value=["r1", "r2"],
+        ),
+        patch(
+            "assistant.core.file_indexing._get_file_ref_sync",
+            side_effect=lambda _u, rid: {"filename": "a.txt"} if rid == "r1" else None,
+        ),
     ):
         out = fi.list_file_refs("redis://localhost/0", "u1")
         assert len(out) == 1
@@ -551,6 +572,7 @@ def test_extract_from_archive_7z_import_error(tmp_path):
     """When py7zr is not installed, 7z extraction is skipped (ImportError)."""
     try:
         import py7zr  # noqa: F401
+
         pytest.skip("py7zr installed, cannot test ImportError path")
     except ImportError:
         pass

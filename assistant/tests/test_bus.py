@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from assistant.core.bus import (
-    CH_INCOMING,
     CH_AGENT_RESULT,
+    CH_INCOMING,
     CH_OUTGOING,
     CH_STREAM,
     CH_TASK_CREATED,
@@ -164,14 +164,19 @@ async def test_bus_disconnect_closes_pubsub():
 def test_bus_subscribe_all_channels_registers_handlers():
     """subscribe_task_created, subscribe_agent_result, subscribe_outgoing, subscribe_stream register handlers."""
     bus = EventBus("redis://fake:6379/0")
+
     async def noop_task(_: TaskCreated) -> None:
         pass
+
     async def noop_agent(_: AgentResult) -> None:
         pass
+
     async def noop_outgoing(_: OutgoingReply) -> None:
         pass
+
     async def noop_stream(_: StreamToken) -> None:
         pass
+
     bus.subscribe_task_created(noop_task)
     bus.subscribe_agent_result(noop_agent)
     bus.subscribe_outgoing(noop_outgoing)

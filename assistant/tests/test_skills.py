@@ -125,7 +125,10 @@ async def test_file_ref_send_without_ref_id():
 
 @pytest.mark.asyncio
 async def test_file_ref_send_with_ref_id():
-    with patch("assistant.skills.file_ref.get_file_ref", return_value={"file_id": "tg_file_123", "filename": "doc.pdf"}):
+    with patch(
+        "assistant.skills.file_ref.get_file_ref",
+        return_value={"file_id": "tg_file_123", "filename": "doc.pdf"},
+    ):
         skill = FileRefSkill("redis://localhost:6379/99")
         out = await skill.run({"user_id": "u1", "action": "send", "file_ref_id": "ref1"})
     assert out.get("ok") is True
@@ -297,12 +300,14 @@ async def test_memory_control_clear_vector_and_reset_memory():
     assert out["ok"] is False
     assert "scope" in out.get("error", "").lower()
 
-    out = await skill.run({
-        "action": "reset_memory",
-        "user_id": "u1",
-        "scope": "short_term",
-        "session_id": "sess1",
-    })
+    out = await skill.run(
+        {
+            "action": "reset_memory",
+            "user_id": "u1",
+            "scope": "short_term",
+            "session_id": "sess1",
+        }
+    )
     assert out["ok"] is True
     memory.reset_memory.assert_called_with("u1", scope="short_term", session_id="sess1")
 

@@ -105,7 +105,9 @@ def test_consume_pending_confirmation_reject():
     r.close = MagicMock()
     with patch("redis.from_url", return_value=r):
         with patch("assistant.core.notify.set_pending_confirmation_result") as set_result:
-            with patch("assistant.dashboard.mcp_endpoints.get_endpoint_id_for_chat", return_value=None):
+            with patch(
+                "assistant.dashboard.mcp_endpoints.get_endpoint_id_for_chat", return_value=None
+            ):
                 out = notify.consume_pending_confirmation("123", "reject")
             assert out is True
             arg = set_result.call_args[0][1]

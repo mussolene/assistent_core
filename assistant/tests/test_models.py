@@ -114,12 +114,12 @@ async def test_gateway_cloud_fallback_on_local_failure():
 
 @pytest.mark.asyncio
 async def test_gateway_lm_studio_native_stream():
-    with patch(
-        "assistant.models.gateway.lm_studio.stream_lm_studio"
-    ) as mock_stream:
+    with patch("assistant.models.gateway.lm_studio.stream_lm_studio") as mock_stream:
+
         async def gen():
             yield "A"
             yield "B"
+
         mock_stream.return_value = gen()
         gw = ModelGateway(use_lm_studio_native=True, openai_base_url="http://x/v1")
         result = await gw.generate("Hi", stream=True)
@@ -150,9 +150,11 @@ async def test_gateway_cloud_fallback_stream():
         mock_local_cls.return_value = mock_local
         with patch("assistant.models.gateway.CloudModelGateway") as mock_cloud_cls:
             mock_cloud = MagicMock()
+
             async def stream():
                 yield "C"
                 yield "loud"
+
             mock_cloud.generate_stream = MagicMock(return_value=stream())
             mock_cloud_cls.return_value = mock_cloud
             gw = ModelGateway(
