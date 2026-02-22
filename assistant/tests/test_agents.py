@@ -146,8 +146,18 @@ async def test_assistant_agent_handle_skips_system_messages_in_prompt():
 
 @pytest.mark.asyncio
 async def test_assistant_agent_handle_stream_sync_fallback():
+    """При stream=True модель возвращает не-итератор → fallback на generate(stream=False). Без неожиданных корутин."""
     model = MagicMock()
-    model.generate = AsyncMock(return_value="Sync response")
+
+    async def _sync_response(*args: object, **kwargs: object) -> str:
+        return "Sync response"
+
+    def _generate_side_effect(*args: object, **kwargs: object) -> object:
+        if kwargs.get("stream"):
+            return None  # нет __aiter__ → код пойдёт в else и вызовет generate(stream=False)
+        return _sync_response()
+
+    model.generate = MagicMock(side_effect=_generate_side_effect)
     memory = MagicMock()
     memory.get_context_for_user = AsyncMock(return_value=[])
     memory.append_message = AsyncMock()
@@ -220,10 +230,14 @@ async def test_assistant_agent_handle_model_error_with_stream_cb():
 
 
 @pytest.mark.asyncio
+@pytest.mark.filterwarnings("ignore:coroutine .* was never awaited:RuntimeWarning")
 async def test_assistant_agent_handle_model_error_connection():
     """When model.generate raises connection error, returns user-friendly message."""
+    async def _raise_connection_error(*args: object, **kwargs: object) -> str:
+        raise ConnectionError("Connection refused")
+
     model = MagicMock()
-    model.generate = AsyncMock(side_effect=ConnectionError("Connection refused"))
+    model.generate = _raise_connection_error
     memory = MagicMock()
     memory.get_context_for_user = AsyncMock(return_value=[])
     memory.append_message = AsyncMock()

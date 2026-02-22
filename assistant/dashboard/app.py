@@ -1551,12 +1551,12 @@ def api_test_model():
         from openai import AsyncOpenAI
 
         http_client = httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=8.0))
-        client = AsyncOpenAI(
-            base_url=normalized_base,
-            api_key=api_key,
-            http_client=http_client,
-        )
         try:
+            client = AsyncOpenAI(
+                base_url=normalized_base,
+                api_key=api_key,
+                http_client=http_client,
+            )
             r = await client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "user", "content": "Hi"}],
@@ -1565,6 +1565,8 @@ def api_test_model():
             return bool(r.choices)
         except Exception as e:
             return _model_check_hint(str(e))
+        finally:
+            await http_client.aclose()
 
     try:
         err = asyncio.run(_check())

@@ -305,7 +305,10 @@ async def test_handle_task_done_callback_updates_and_edits_message():
         mock_skill_cls.return_value = mock_skill
         with patch("assistant.channels.telegram.httpx.AsyncClient") as mock_client:
             mock_post = AsyncMock()
-            mock_client.return_value.__aenter__.return_value.post = mock_post
+            entered = MagicMock()
+            entered.post = mock_post
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=entered)
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
             await _handle_task_done_callback(
                 "https://api.telegram.org/bot1",
                 "chat_1",

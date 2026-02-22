@@ -11,6 +11,7 @@ def mock_mcp_server():
     server, port = run_mock_mcp_server(port=0)
     yield f"http://127.0.0.1:{port}"
     server.shutdown()
+    server.server_close()
 
 
 def test_mock_mcp_tools(mock_mcp_server):

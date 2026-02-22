@@ -162,6 +162,7 @@ def test_api_cloned_repos_with_repos(client, auth_mock, monkeypatch):
     assert j["repos"][0]["remote_url"] == "https://github.com/o/r"
 
 
+@pytest.mark.filterwarnings("ignore:unclosed event loop:ResourceWarning")
 def test_api_test_model_returns_json(monkeypatch, client, auth_mock):
     """Dashboard API test-model returns JSON with ok key (may fail without real model)."""
     monkeypatch.setattr(
