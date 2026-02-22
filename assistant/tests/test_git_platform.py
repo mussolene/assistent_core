@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from assistant.skills.git_platform import (
+    _parse_repo_url,
     create_merge_request,
     search_github_repos,
     search_gitlab_repos,
@@ -28,6 +29,42 @@ def _mock_httpx_client(status_code: int = 201, json_data: dict | None = None):
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=None)
     return client
+
+
+def test_parse_repo_url_https_github():
+    assert _parse_repo_url("https://github.com/owner/repo") == ("github", "owner/repo")
+    assert _parse_repo_url("https://github.com/owner/repo.git") == ("github", "owner/repo")
+
+
+def test_parse_repo_url_https_gitlab():
+    assert _parse_repo_url("https://gitlab.com/g/r") == ("gitlab", "g/r")
+
+
+def test_parse_repo_url_git_at_github():
+    assert _parse_repo_url("git@github.com:owner/repo.git") == ("github", "owner/repo")
+
+
+def test_parse_repo_url_git_at_gitlab():
+    assert _parse_repo_url("git@gitlab.com:g/r.git") == ("gitlab", "g/r")
+
+
+def test_parse_repo_url_invalid():
+    assert _parse_repo_url("not-a-url") is None
+    assert _parse_repo_url("http://other.com/path") is None
+    assert _parse_repo_url("") is None
+
+
+@pytest.mark.asyncio
+async def test_create_merge_request_parse_url_fails():
+    out = await create_merge_request(
+        repo="https://other.com/o/r",
+        source_branch="f",
+        target_branch="main",
+        title="T",
+        github_token="gh",
+    )
+    assert out["ok"] is False
+    assert "parse" in out.get("error", "").lower() or "url" in out.get("error", "").lower()
 
 
 @pytest.mark.asyncio
