@@ -115,6 +115,43 @@ async def _answer_callback(telegram_base_url: str, callback_query_id: str, text:
         logger.debug("answerCallbackQuery failed: %s", e)
 
 
+async def _handle_task_view_callback(
+    base_url: str, chat_id: str, callback_query_id: str, task_id: str, user_id: str
+) -> None:
+    """
+    Обработка callback task:view:id — получить задачу через скилл, отправить детали в чат.
+    Итерация 10.3: ответ с деталями задачи (или «Задача не найдена») без вызова ассистента.
+    """
+    from assistant.skills.tasks import TaskSkill
+
+    await _answer_callback(base_url, callback_query_id, "Ок")
+    skill = TaskSkill()
+    result = await skill.run(
+        {"action": "get_task", "task_id": task_id, "user_id": user_id}
+    )
+    if result.get("ok") and result.get("formatted_details"):
+        body = result["formatted_details"]
+        dashboard_url = os.getenv("DASHBOARD_URL", "").strip()
+        if dashboard_url:
+            body = body + "\n\nОткрыть в дашборде: " + dashboard_url
+        body = _to_telegram_html(body)
+    else:
+        body = _escape_html(result.get("error") or "Задача не найдена")
+    try:
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                f"{base_url}/sendMessage",
+                json={
+                    "chat_id": chat_id,
+                    "text": body or "—",
+                    "parse_mode": PARSE_MODE,
+                },
+                timeout=10.0,
+            )
+    except Exception as e:
+        logger.warning("sendMessage task details: %s", e)
+
+
 # Telegram принимает HTML — корректное отображение без «сырых» знаков разметки
 PARSE_MODE = "HTML"
 
@@ -547,35 +584,39 @@ async def run_telegram_adapter() -> None:
                             else:
                                 await _answer_callback(base_url, cq["id"], "Нет активного запроса.")
                         elif callback_data.startswith("task:"):
-                            # task:view:id | task:delete:id | task:update:id | task:add_document:id | task:add_link:id
+                            # task:view:id — ответ с деталями задачи сразу из адаптера; остальные — в шину
                             parts = callback_data.split(":", 2)
                             if len(parts) >= 3:
                                 action, task_id = parts[1], parts[2]
-                                instructions = {
-                                    "view": "Покажи детали задачи с id {}.",
-                                    "delete": "Удали задачу с id {}.",
-                                    "done": "Отметь задачу с id {} как выполненную (status=done).",
-                                    "update": "Открой задачу с id {} для правки (учти предыдущее сообщение пользователя).",
-                                    "add_document": "Добавь документ к задаче с id {} (данные из предыдущего сообщения или вложения).",
-                                    "add_link": "Добавь ссылку к задаче с id {} (данные из предыдущего сообщения).",
-                                }
-                                text_instruction = (
-                                    instructions.get(action)
-                                    or "Выполни действие для задачи с id {}."
-                                ).format(task_id)
-                                await _answer_callback(base_url, cq["id"], "Ок")
-                                await bus.publish_incoming(
-                                    IncomingMessage(
-                                        message_id=str(cq["message"].get("message_id", "")),
-                                        user_id=str(uid_int),
-                                        chat_id=chat_id,
-                                        text=text_instruction,
-                                        metadata={
-                                            "task_callback": callback_data,
-                                            "task_id": task_id,
-                                        },
+                                if action == "view":
+                                    await _handle_task_view_callback(
+                                        base_url, chat_id, cq["id"], task_id, str(uid_int)
                                     )
-                                )
+                                else:
+                                    instructions = {
+                                        "delete": "Удали задачу с id {}.",
+                                        "done": "Отметь задачу с id {} как выполненную (status=done).",
+                                        "update": "Открой задачу с id {} для правки (учти предыдущее сообщение пользователя).",
+                                        "add_document": "Добавь документ к задаче с id {} (данные из предыдущего сообщения или вложения).",
+                                        "add_link": "Добавь ссылку к задаче с id {} (данные из предыдущего сообщения).",
+                                    }
+                                    text_instruction = (
+                                        instructions.get(action)
+                                        or "Выполни действие для задачи с id {}."
+                                    ).format(task_id)
+                                    await _answer_callback(base_url, cq["id"], "Ок")
+                                    await bus.publish_incoming(
+                                        IncomingMessage(
+                                            message_id=str(cq["message"].get("message_id", "")),
+                                            user_id=str(uid_int),
+                                            chat_id=chat_id,
+                                            text=text_instruction,
+                                            metadata={
+                                                "task_callback": callback_data,
+                                                "task_id": task_id,
+                                            },
+                                        )
+                                    )
                             else:
                                 await _answer_callback(base_url, cq["id"])
                         else:

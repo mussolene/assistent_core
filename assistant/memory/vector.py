@@ -11,6 +11,9 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# Один экземпляр модели на процесс (model_name, model_path) — избегаем тройной загрузки при short/medium/long.
+_embedding_model_cache: dict[tuple[str, str], Any] = {}
+
 
 class VectorMemory:
     """In-process vector store using sentence-transformers. Поддержка max_size (FIFO) и clear()."""
@@ -39,20 +42,24 @@ class VectorMemory:
 
     def _get_model(self):
         if self._model is None:
-            try:
-                from sentence_transformers import SentenceTransformer
+            cache_key = (self._model_name, str(self._model_path) if self._model_path else "")
+            if cache_key not in _embedding_model_cache:
+                try:
+                    from sentence_transformers import SentenceTransformer
 
-                # Локальный путь — без обращения к Hugging Face (офлайн). Иначе имя модели (из кэша при TRANSFORMERS_OFFLINE=1).
-                load_path = (
-                    self._model_path
-                    if self._model_path and self._model_path.exists()
-                    else self._model_name
-                )
-                self._model = SentenceTransformer(str(load_path))
-            except Exception as e:
-                logger.warning(
-                    "sentence_transformers not available: %s. Vector memory disabled.", e
-                )
+                    # Локальный путь — без обращения к Hugging Face (офлайн). Иначе имя модели (из кэша при TRANSFORMERS_OFFLINE=1).
+                    load_path = (
+                        self._model_path
+                        if self._model_path and self._model_path.exists()
+                        else self._model_name
+                    )
+                    _embedding_model_cache[cache_key] = SentenceTransformer(str(load_path))
+                except Exception as e:
+                    logger.warning(
+                        "sentence_transformers not available: %s. Vector memory disabled.", e
+                    )
+                    return None
+            self._model = _embedding_model_cache.get(cache_key)
         return self._model
 
     def _load(self) -> None:

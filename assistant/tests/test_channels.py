@@ -173,3 +173,68 @@ async def test_send_typing_calls_telegram_api():
         call_args = mock_post.call_args
         assert "sendChatAction" in call_args[0][0]
         assert call_args[1]["json"] == {"chat_id": "chat_456", "action": "typing"}
+
+
+# --- Итерация 10.3: callback task:view — ответ с деталями задачи ---
+
+
+@pytest.mark.asyncio
+async def test_handle_task_view_callback_sends_details():
+    """При callback task:view:id адаптер запрашивает задачу и шлёт в чат детали (HTML)."""
+    from assistant.channels.telegram import _handle_task_view_callback
+
+    with patch("assistant.skills.tasks.TaskSkill") as mock_skill_cls:
+        mock_skill = MagicMock()
+        mock_skill.run = AsyncMock(
+            return_value={
+                "ok": True,
+                "formatted_details": "**Задача**\nСтатус: open. Создана: 2025-01-01.",
+            }
+        )
+        mock_skill_cls.return_value = mock_skill
+        with patch("assistant.channels.telegram.httpx.AsyncClient") as mock_client:
+            mock_post = AsyncMock()
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+            await _handle_task_view_callback(
+                "https://api.telegram.org/bot1",
+                "chat_123",
+                "cq_456",
+                "task-uuid-1",
+                "user_42",
+            )
+            # answerCallbackQuery + sendMessage
+            assert mock_post.call_count >= 2
+            send_calls = [c for c in mock_post.call_args_list if "sendMessage" in (c[0][0] or "")]
+            assert len(send_calls) >= 1
+            body = send_calls[0][1]["json"]
+            assert body["chat_id"] == "chat_123"
+            assert "parse_mode" in body
+            assert "<b>Задача</b>" in body["text"] or "Задача" in body["text"]
+            assert "open" in body["text"]
+
+
+@pytest.mark.asyncio
+async def test_handle_task_view_callback_not_found():
+    """Если задача не найдена, в чат уходит сообщение об ошибке."""
+    from assistant.channels.telegram import _handle_task_view_callback
+
+    with patch("assistant.skills.tasks.TaskSkill") as mock_skill_cls:
+        mock_skill = MagicMock()
+        mock_skill.run = AsyncMock(
+            return_value={"ok": False, "error": "Задача не найдена или доступ запрещён"}
+        )
+        mock_skill_cls.return_value = mock_skill
+        with patch("assistant.channels.telegram.httpx.AsyncClient") as mock_client:
+            mock_post = AsyncMock()
+            mock_client.return_value.__aenter__.return_value.post = mock_post
+            await _handle_task_view_callback(
+                "https://api.telegram.org/bot1",
+                "chat_99",
+                "cq_0",
+                "missing-id",
+                "user_1",
+            )
+            send_calls = [c for c in mock_post.call_args_list if "sendMessage" in (c[0][0] or "")]
+            assert len(send_calls) >= 1
+            body = send_calls[0][1]["json"]
+            assert "Задача не найдена" in body["text"] or "доступ запрещён" in body["text"]
