@@ -82,6 +82,7 @@
 - **set_reminder** записывает в задачу `reminder_at` и добавляет task_id в sorted set с score = timestamp.
 - **get_due_reminders_sync(redis_url)** — синхронная функция: возвращает список задач, у которых напоминание уже должно было сработать, и удаляет их из set. Вызывается воркером или по крону.
 - Рекомендуемый сценарий: отдельный процесс/скрипт раз в минуту вызывает `get_due_reminders_sync`, для каждой записи отправляет уведомление в Telegram (chat_id = user_id или через MCP notify) с текстом «Напоминание: задача …» и при необходимости подсказкой по решению.
+- **Воркер напоминаний:** скрипт `reminders-worker` (или `python -m assistant.reminders_worker`) читает `REDIS_URL`, вызывает `get_due_reminders_sync`, публикует по каждому напоминанию `OutgoingReply` в шину (канал Telegram). Запуск по крону, например каждую минуту: `* * * * * REDIS_URL=redis://... reminders-worker`.
 
 ---
 

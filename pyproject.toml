@@ -48,6 +48,7 @@ assistant-core = "assistant.main:main"
 telegram-adapter = "assistant.channels.telegram:main"
 email-adapter = "assistant.channels.email_adapter:main"
 assistant-mcp-server = "assistant.mcp_server:main"
+reminders-worker = "assistant.reminders_worker:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -66,6 +67,7 @@ omit = [
     "assistant/tests/*",
     "assistant/__init__.py",
     "assistant/main.py",
+    "assistant/reminders_worker.py",
     "assistant/channels/telegram.py",
     "assistant/security/sandbox.py",
     "assistant/models/streaming.py",
