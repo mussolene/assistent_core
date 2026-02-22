@@ -28,7 +28,10 @@ class ChecklistSkill(BaseSkill):
 
         raw_tasks = params.get("tasks")
         if not isinstance(raw_tasks, list):
-            return {"ok": False, "error": "Укажи tasks — массив объектов с полем text (и опционально id)."}
+            return {
+                "ok": False,
+                "error": "Укажи tasks — массив объектов с полем text (и опционально id).",
+            }
 
         tasks: list[dict[str, Any]] = []
         for i, t in enumerate(raw_tasks[:30]):

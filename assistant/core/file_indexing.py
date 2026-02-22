@@ -7,7 +7,6 @@ import gzip
 import html.parser
 import json
 import logging
-import os
 import re
 import shutil
 import tarfile
@@ -123,6 +122,7 @@ def _extract_text(path: Path, mime_type: str, filename: str) -> str:
 
 def _strip_html(html_str: str) -> str:
     """Удалить теги HTML, оставить текст."""
+
     class _TextExtractor(html.parser.HTMLParser):
         def __init__(self) -> None:
             super().__init__()
@@ -141,7 +141,17 @@ def _strip_html(html_str: str) -> str:
 
 def _is_archive(suffix: str, mime_type: str) -> bool:
     """Является ли файл архивом (zip, tar, gz, 7z, rar)."""
-    archive_suffixes = (".zip", ".tar", ".tgz", ".tar.gz", ".tar.bz2", ".tbz2", ".gz", ".7z", ".rar")
+    archive_suffixes = (
+        ".zip",
+        ".tar",
+        ".tgz",
+        ".tar.gz",
+        ".tar.bz2",
+        ".tbz2",
+        ".gz",
+        ".7z",
+        ".rar",
+    )
     return any(suffix.endswith(s) for s in archive_suffixes) or "zip" in (mime_type or "")
 
 
@@ -189,7 +199,9 @@ def _extract_from_archive(
                         continue
                     try:
                         data = zf.read(name)
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(safe_name).suffix) as tmp:
+                        with tempfile.NamedTemporaryFile(
+                            delete=False, suffix=Path(safe_name).suffix
+                        ) as tmp:
                             tmp.write(data)
                             tmp_path = Path(tmp.name)
                         try:
@@ -203,7 +215,13 @@ def _extract_from_archive(
                                 tmp_path.unlink(missing_ok=True)
                     except Exception as e:
                         logger.debug("Zip member %s: %s", name, e)
-        elif suffix.endswith(".tar") or suffix.endswith(".tar.gz") or suffix.endswith(".tgz") or suffix.endswith(".tar.bz2") or suffix.endswith(".tbz2"):
+        elif (
+            suffix.endswith(".tar")
+            or suffix.endswith(".tar.gz")
+            or suffix.endswith(".tgz")
+            or suffix.endswith(".tar.bz2")
+            or suffix.endswith(".tbz2")
+        ):
             with tarfile.open(path, "r:*") as tf:
                 for member in tf.getmembers()[:200]:
                     if file_count["n"] >= MAX_ARCHIVE_FILES:
@@ -219,7 +237,9 @@ def _extract_from_archive(
                             continue
                         data = f.read()
                         f.close()
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(safe_name).suffix) as tmp:
+                        with tempfile.NamedTemporaryFile(
+                            delete=False, suffix=Path(safe_name).suffix
+                        ) as tmp:
                             tmp.write(data)
                             tmp_path = Path(tmp.name)
                         try:
@@ -243,6 +263,7 @@ def _extract_from_archive(
         elif suffix.endswith(".7z"):
             try:
                 import py7zr
+
                 with py7zr.SevenZipFile(path, "r") as zf:
                     tmpdir = Path(tempfile.mkdtemp())
                     try:
@@ -266,6 +287,7 @@ def _extract_from_archive(
         elif suffix.endswith(".rar"):
             try:
                 from rarfile import RarFile
+
                 with RarFile(path, "r") as rf:
                     tmpdir = Path(tempfile.mkdtemp())
                     try:
@@ -369,7 +391,9 @@ async def index_telegram_attachments(
         ref_id = str(uuid.uuid4())[:12]
         try:
             async with httpx.AsyncClient() as client:
-                r = await client.get(f"{base_url}/getFile", params={"file_id": file_id}, timeout=10.0)
+                r = await client.get(
+                    f"{base_url}/getFile", params={"file_id": file_id}, timeout=10.0
+                )
             data = r.json()
             if not data.get("ok"):
                 logger.warning("Telegram getFile failed: %s", data)
@@ -423,7 +447,7 @@ async def index_telegram_attachments(
             logger.exception("Index attachment %s: %s", filename, e)
     combined = "\n\n".join(extracted_parts)
     if len(combined) > EXTRACTED_TEXT_CAP:
-        combined = combined[: EXTRACTED_TEXT_CAP] + "\n\n[...]"
+        combined = combined[:EXTRACTED_TEXT_CAP] + "\n\n[...]"
     return ref_ids, combined
 
 

@@ -485,9 +485,7 @@ async def test_tasks_set_reminder_naive_datetime_treated_as_utc(skill, redis_moc
     with patch(
         "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
     ):
-        cr = await skill.run(
-            {"action": "create_task", "title": "Напомнить", "user_id": "u1"}
-        )
+        cr = await skill.run({"action": "create_task", "title": "Напомнить", "user_id": "u1"})
         assert cr["ok"] is True
         task_id = cr["task_id"]
         out = await skill.run(

@@ -69,8 +69,8 @@ class Orchestrator:
         original_text = (payload.text or "").strip()
         if payload.attachments and self._memory:
             try:
-                from assistant.dashboard.config_store import get_config_from_redis_sync
                 from assistant.core.file_indexing import index_telegram_attachments
+                from assistant.dashboard.config_store import get_config_from_redis_sync
 
                 # 1. Сразу сообщить пользователю
                 await self._bus.publish_outgoing(
@@ -107,9 +107,7 @@ class Orchestrator:
                 )
                 if ref_ids:
                     if not original_text:
-                        payload.text = (
-                            "[Индексированы файлы в память. Можешь спросить по содержимому или попросить «отправь файл …».]"
-                        )
+                        payload.text = "[Индексированы файлы в память. Можешь спросить по содержимому или попросить «отправь файл …».]"
                     else:
                         payload.text = original_text
                     await self._tasks.update(task_id, text=payload.text)
@@ -245,8 +243,12 @@ class Orchestrator:
                 )
                 break
         if iteration >= max_iterations:
-            text_to_send = last_output.strip() if last_output else (
-                "Превышено число шагов. Ответьте коротко или упростите запрос (например: «напомни про задачу X через 5 минут»)."
+            text_to_send = (
+                last_output.strip()
+                if last_output
+                else (
+                    "Превышено число шагов. Ответьте коротко или упростите запрос (например: «напомни про задачу X через 5 минут»)."
+                )
             )
             if text_to_send:
                 task_data = await self._tasks.get(task_id)
@@ -313,8 +315,7 @@ class Orchestrator:
                 excerpt += "\n\n[...]"
             prompt = (
                 "Кратко опиши содержимое документа для пользователя (2–4 предложения). "
-                "Только суть, без вводных фраз вроде «В документе…». Текст документа:\n\n"
-                + excerpt
+                "Только суть, без вводных фраз вроде «В документе…». Текст документа:\n\n" + excerpt
             )
         try:
             gateway = await self._gateway_factory()

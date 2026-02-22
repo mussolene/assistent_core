@@ -56,7 +56,9 @@ def get_config() -> dict:
     c = get_config()
     return {
         "token": c.telegram.bot_token or os.getenv("TELEGRAM_BOT_TOKEN", ""),
-        "business_connection_id": (c.telegram.business_connection_id or os.getenv("TELEGRAM_BUSINESS_CONNECTION_ID", "")).strip(),
+        "business_connection_id": (
+            c.telegram.business_connection_id or os.getenv("TELEGRAM_BUSINESS_CONNECTION_ID", "")
+        ).strip(),
         "allowed_ids": set(c.telegram.allowed_user_ids or []),
         "rate_limit_per_minute": c.telegram.rate_limit_per_user_per_minute,
         "poll_timeout": c.telegram.long_poll_timeout,
@@ -339,7 +341,9 @@ async def run_telegram_adapter() -> None:
 
             redis_cfg = await get_config_from_redis(redis_url)
             cfg["token"] = redis_cfg.get("TELEGRAM_BOT_TOKEN") or ""
-            cfg["business_connection_id"] = (redis_cfg.get("TELEGRAM_BUSINESS_CONNECTION_ID") or "").strip()
+            cfg["business_connection_id"] = (
+                redis_cfg.get("TELEGRAM_BUSINESS_CONNECTION_ID") or ""
+            ).strip()
             ids = redis_cfg.get("TELEGRAM_ALLOWED_USER_IDS")
             cfg["allowed_ids"] = (
                 set(ids)
@@ -577,13 +581,20 @@ async def run_telegram_adapter() -> None:
                         "chat_id": payload.chat_id,
                         "checklist": {
                             "title": send_checklist["title"][:255],
-                            "tasks": [{"id": t.get("id", i + 1), "text": (t.get("text") or "")[:100]} for i, t in enumerate(tasks[:30])],
+                            "tasks": [
+                                {"id": t.get("id", i + 1), "text": (t.get("text") or "")[:100]}
+                                for i, t in enumerate(tasks[:30])
+                            ],
                         },
                     }
                     if "others_can_add_tasks" in send_checklist:
-                        body["checklist"]["others_can_add_tasks"] = bool(send_checklist["others_can_add_tasks"])
+                        body["checklist"]["others_can_add_tasks"] = bool(
+                            send_checklist["others_can_add_tasks"]
+                        )
                     if "others_can_mark_tasks_as_done" in send_checklist:
-                        body["checklist"]["others_can_mark_tasks_as_done"] = bool(send_checklist["others_can_mark_tasks_as_done"])
+                        body["checklist"]["others_can_mark_tasks_as_done"] = bool(
+                            send_checklist["others_can_mark_tasks_as_done"]
+                        )
                     async with httpx.AsyncClient() as client:
                         r = await client.post(
                             f"{base_url}/sendChecklist",
@@ -724,22 +735,30 @@ async def run_telegram_adapter() -> None:
                     attachments: list[dict] = []
                     if msg.get("document"):
                         doc = msg["document"]
-                        attachments.append({
-                            "file_id": doc["file_id"],
-                            "filename": doc.get("file_name") or "document",
-                            "mime_type": doc.get("mime_type") or "application/octet-stream",
-                            "source": "telegram",
-                        })
+                        attachments.append(
+                            {
+                                "file_id": doc["file_id"],
+                                "filename": doc.get("file_name") or "document",
+                                "mime_type": doc.get("mime_type") or "application/octet-stream",
+                                "source": "telegram",
+                            }
+                        )
                     if msg.get("photo"):
                         largest = msg["photo"][-1]
-                        attachments.append({
-                            "file_id": largest["file_id"],
-                            "filename": "photo.jpg",
-                            "mime_type": "image/jpeg",
-                            "source": "telegram",
-                        })
+                        attachments.append(
+                            {
+                                "file_id": largest["file_id"],
+                                "filename": "photo.jpg",
+                                "mime_type": "image/jpeg",
+                                "source": "telegram",
+                            }
+                        )
                     if attachments and not text:
-                        text = "[Файл: " + ", ".join(a.get("filename") or "файл" for a in attachments) + "]"
+                        text = (
+                            "[Файл: "
+                            + ", ".join(a.get("filename") or "файл" for a in attachments)
+                            + "]"
+                        )
                     # Pairing: /start CODE or /pair CODE (one-time code from dashboard)
                     if text.startswith("/start ") or text.startswith("/pair "):
                         code = (
@@ -925,7 +944,9 @@ async def run_telegram_adapter() -> None:
                     checklist_tasks_added = msg.get("checklist_tasks_added")
                     if checklist_tasks_done or checklist_tasks_added:
                         if not text:
-                            text = _format_checklist_update_for_agent(checklist_tasks_done, checklist_tasks_added)
+                            text = _format_checklist_update_for_agent(
+                                checklist_tasks_done, checklist_tasks_added
+                            )
                     async with pending_lock:
                         pending_chats.add(chat_id)
                         _ensure_pending_typing_loop()

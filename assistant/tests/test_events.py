@@ -67,7 +67,10 @@ def test_outgoing_reply_send_checklist():
         chat_id="c1",
         text="Чеклист ниже.",
         done=True,
-        send_checklist={"title": "День", "tasks": [{"id": 1, "text": "Утро"}, {"id": 2, "text": "Обед"}]},
+        send_checklist={
+            "title": "День",
+            "tasks": [{"id": 1, "text": "Утро"}, {"id": 2, "text": "Обед"}],
+        },
     )
     assert payload.send_checklist is not None
     assert payload.send_checklist["title"] == "День"

@@ -1372,12 +1372,16 @@ def _monitor_services(redis_url: str) -> dict:
     out = {"dashboard": "ok"}
     try:
         cfg = get_config_from_redis_sync(redis_url)
-        base_url = (cfg.get("OPENAI_BASE_URL") or "").strip().rstrip("/") or "http://localhost:11434"
+        base_url = (cfg.get("OPENAI_BASE_URL") or "").strip().rstrip(
+            "/"
+        ) or "http://localhost:11434"
         if not base_url.endswith("/v1"):
             base_url = base_url + "/v1"
         use_lm = (cfg.get("LM_STUDIO_NATIVE") or "").lower() in ("true", "1", "yes")
         if use_lm:
-            base_url = (cfg.get("OPENAI_BASE_URL") or "").strip().rstrip("/") or "http://localhost:1234"
+            base_url = (cfg.get("OPENAI_BASE_URL") or "").strip().rstrip(
+                "/"
+            ) or "http://localhost:1234"
         r = httpx.get(base_url, timeout=2.0)
         out["model"] = "ok" if r.status_code < 500 else "error"
     except Exception:

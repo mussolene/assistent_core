@@ -203,7 +203,9 @@ def run_stdio() -> None:
                     os.getcwd(),
                     sys.path[:3],
                 )
-                logger.warning("MCP tools/call response transport=stdio tool=%s error=%s", name, str(e)[:200])
+                logger.warning(
+                    "MCP tools/call response transport=stdio tool=%s error=%s", name, str(e)[:200]
+                )
                 reply(error={"code": -32603, "message": str(e)})
             continue
         if req_id is not None:

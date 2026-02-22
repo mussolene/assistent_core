@@ -6,8 +6,8 @@ import pytest
 
 from assistant.memory.manager import VECTOR_LEVEL_SHORT
 from assistant.skills.checklist import ChecklistSkill
-from assistant.skills.filesystem import FilesystemSkill
 from assistant.skills.file_ref import FileRefSkill
+from assistant.skills.filesystem import FilesystemSkill
 from assistant.skills.mcp_adapter import McpAdapterSkill
 from assistant.skills.memory_control import MemoryControlSkill
 from assistant.skills.registry import SkillRegistry
