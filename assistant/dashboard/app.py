@@ -65,39 +65,7 @@ if _secret_key == "change-me-in-production":
         "SECRET_KEY not set; using default. Set SECRET_KEY in production."
     )
 
-LAYOUT_CSS = """
-:root { --bg: #0c0c0f; --card: #16161a; --text: #e4e4e7; --muted: #71717a; --accent: #22c55e; --border: #27272a; --danger: #ef4444; }
-* { box-sizing: border-box; }
-body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; min-height: 100vh; }
-.nav { display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 1.5rem; background: var(--card); }
-.nav a { padding: 1rem 1.25rem; color: var(--muted); text-decoration: none; font-weight: 500; border-bottom: 2px solid transparent; }
-.nav a:hover, .nav a.active { color: var(--text); border-bottom-color: var(--accent); }
-.container { max-width: 640px; margin: 0 auto; padding: 2rem 1.5rem; }
-h1 { font-size: 1.35rem; margin-bottom: 0.25rem; }
-.sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 1.5rem; }
-.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.25rem; margin-bottom: 1rem; }
-label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
-input[type="text"], input[type="password"], input[type="url"] { width: 100%; padding: 0.6rem 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 1rem; }
-input:focus { outline: none; border-color: var(--accent); }
-input[type="checkbox"] { width: 1rem; height: 1rem; margin-right: 0.5rem; }
-.hint { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
-.row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
-.btn { background: var(--accent); color: var(--bg); border: none; padding: 0.6rem 1.1rem; border-radius: 8px; font-size: 0.95rem; cursor: pointer; font-weight: 600; text-decoration: none; display: inline-block; }
-.btn:hover { opacity: 0.9; }
-.btn-secondary { background: var(--border); color: var(--text); }
-.btn-danger { background: var(--danger); color: #fff; }
-.flash { padding: 0.75rem; border-radius: 8px; margin-bottom: 1rem; }
-.flash.success { background: rgba(34, 197, 94, 0.15); border: 1px solid var(--accent); }
-.flash.error { background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); }
-.monitor-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; }
-.monitor-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; text-align: center; }
-.monitor-card .val { font-size: 1.25rem; font-weight: 600; color: var(--accent); }
-.monitor-card .label { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
-.mcp-list { list-style: none; padding: 0; margin: 0; }
-.mcp-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--border); }
-.mcp-list li:last-child { border-bottom: none; }
-"""
-
+# CSS вынесен в static/css/layout.css (UX_UI_ROADMAP 4.1)
 INDEX_HTML = """
 <!DOCTYPE html>
 <html lang="ru">
@@ -106,7 +74,7 @@ INDEX_HTML = """
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Assistant — Панель</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
-  <style>{{ layout_css }}</style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
 </head>
 <body>
   <nav class="nav">
@@ -142,7 +110,7 @@ LOGIN_HTML = """
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Вход — Assistant</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
-  <style>{{ layout_css }}</style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
 </head>
 <body>
   <div class="container" style="max-width:360px;padding-top:4rem">
@@ -178,7 +146,7 @@ SETUP_HTML = """
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Первичная настройка — Assistant</title>
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
-  <style>{{ layout_css }}</style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
 </head>
 <body>
   <div class="container" style="max-width:400px;padding-top:3rem">
@@ -262,7 +230,7 @@ def _require_auth():
 def login():
     if request.method == "GET":
         return render_template_string(
-            LOGIN_HTML.replace("{{ layout_css }}", LAYOUT_CSS),
+            LOGIN_HTML,
             next=request.args.get("next"),
         )
     login_name = (request.form.get("login") or "").strip()
@@ -349,11 +317,11 @@ def setup():
         r = get_redis()
     except Exception as e:
         flash(f"Ошибка подключения к Redis: {e}", "error")
-        return render_template_string(SETUP_HTML.replace("{{ layout_css }}", LAYOUT_CSS))
+        return render_template_string(SETUP_HTML)
     if setup_done(r):
         return redirect(url_for("index"))
     if request.method == "GET":
-        return render_template_string(SETUP_HTML.replace("{{ layout_css }}", LAYOUT_CSS))
+        return render_template_string(SETUP_HTML)
     login_name = (request.form.get("login") or "").strip()
     password = request.form.get("password") or ""
     password2 = request.form.get("password2") or ""
@@ -392,7 +360,7 @@ _TELEGRAM_BODY = """
     <label for="token">Bot Token</label>
     <input id="token" name="telegram_bot_token" type="password" value="{{ config.get('TELEGRAM_BOT_TOKEN', '') }}" placeholder="123456:ABC..." autocomplete="off">
     <p class="hint">Получить у @BotFather.</p>
-    <button type="button" class="btn btn-secondary" style="margin-top:0.75rem" onclick="testBot()">Проверить бота</button>
+    <button type="button" id="btn-test-bot" class="btn btn-secondary" style="margin-top:0.75rem" onclick="testBot()">Проверить бота</button>
     <span id="bot-result" style="margin-left:0.5rem;font-size:0.9rem"></span>
   </div>
   <div class="card">
@@ -428,11 +396,14 @@ _TELEGRAM_BODY = """
 <script>
 function testBot() {
   var r = document.getElementById('bot-result');
+  var btn = document.getElementById('btn-test-bot');
   r.textContent = '…';
+  if (btn) btn.disabled = true;
   fetch('/api/test-bot', { method: 'POST' })
     .then(function(res) { return res.json(); })
     .then(function(d) { r.textContent = d.ok ? 'OK: ' + (d.username || '') : 'Ошибка: ' + (d.error || 'unknown'); })
-    .catch(function(e) { r.textContent = 'Ошибка: ' + e.message; });
+    .catch(function(e) { r.textContent = 'Ошибка: ' + e.message; })
+    .finally(function() { if (btn) btn.disabled = false; });
 }
 function genPairingCode() {
   var block = document.getElementById('pairing-code-block');
@@ -465,9 +436,7 @@ def index():
     config = load_config()
     content = _TELEGRAM_BODY + _CHANNELS_HR + _EMAIL_BODY
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", content
-        ),
+        INDEX_HTML.replace("{% block content %}{% endblock %}", content),
         config=config,
         section="channels",
     )
@@ -531,17 +500,20 @@ _MODEL_BODY = """
     <input id="api_key" name="openai_api_key" type="password" value="{{ config.get('OPENAI_API_KEY', '') }}" placeholder="sk-... или ollama" autocomplete="off">
   </div>
   <button type="submit" class="btn">Сохранить</button>
-  <button type="button" class="btn btn-secondary" style="margin-left:0.5rem" onclick="testModel()">Проверить подключение</button>
+  <button type="button" id="btn-test-model" class="btn btn-secondary" style="margin-left:0.5rem" onclick="testModel()">Проверить подключение</button>
   <span id="model-result" style="margin-left:0.5rem;font-size:0.9rem"></span>
 </form>
 <script>
 function testModel() {
   var r = document.getElementById('model-result');
+  var btn = document.getElementById('btn-test-model');
   r.textContent = '…';
+  if (btn) btn.disabled = true;
   fetch('/api/test-model', { method: 'POST' })
     .then(function(res) { return res.json(); })
     .then(function(d) { r.textContent = d.ok ? 'OK' : 'Ошибка: ' + (d.error || 'unknown'); })
-    .catch(function(e) { r.textContent = 'Ошибка: ' + e.message; });
+    .catch(function(e) { r.textContent = 'Ошибка: ' + e.message; })
+    .finally(function() { if (btn) btn.disabled = false; });
 }
 </script>
 """
@@ -551,9 +523,7 @@ function testModel() {
 def model():
     config = load_config()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", _MODEL_BODY
-        ),
+        INDEX_HTML.replace("{% block content %}{% endblock %}", _MODEL_BODY),
         config=config,
         section="model",
     )
@@ -637,9 +607,7 @@ _EMAIL_BODY = """
 def email_settings():
     config = load_config()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", _EMAIL_BODY
-        ),
+        INDEX_HTML.replace("{% block content %}{% endblock %}", _EMAIL_BODY),
         config=config,
         section="email",
     )
@@ -718,9 +686,7 @@ _DATA_BODY = """
 def data_page():
     config = load_config()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", _DATA_BODY
-        ),
+        INDEX_HTML.replace("{% block content %}{% endblock %}", _DATA_BODY),
         config=config,
         section="data",
     )
@@ -739,9 +705,7 @@ def save_data():
 def memory_page():
     config = load_config()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", _MEMORY_BODY
-        ),
+        INDEX_HTML.replace("{% block content %}{% endblock %}", _MEMORY_BODY),
         config=config,
         section="memory",
     )
@@ -801,9 +765,7 @@ _MCP_BODY = """
 def mcp():
     config = load_config()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", _MCP_BODY
-        ),
+        INDEX_HTML.replace("{% block content %}{% endblock %}", _MCP_BODY),
         config=config,
         section="mcp",
     )
@@ -921,9 +883,7 @@ def integrations_page():
     )
     content = part_mcp + _CHANNELS_HR + part_agent
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", content
-        ),
+        INDEX_HTML.replace("{% block content %}{% endblock %}", content),
         config=config,
         section="integrations",
     )
@@ -939,9 +899,7 @@ def mcp_agent():
         new_secret = session.pop("mcp_new_secret", None)
     base_url = _mcp_agent_base_url()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", _MCP_AGENT_BODY
-        ),
+        INDEX_HTML.replace("{% block content %}{% endblock %}", _MCP_AGENT_BODY),
         config=config,
         section="mcp_agent",
         mcp_endpoints=list_endpoints(),
@@ -1448,9 +1406,7 @@ def repos_page():
         except Exception:
             pass
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", _REPOS_BODY
-        ),
+        INDEX_HTML.replace("{% block content %}{% endblock %}", _REPOS_BODY),
         config=config,
         section="repos",
         workspace_dir=workspace_dir or None,
@@ -1464,9 +1420,7 @@ def system_page():
     config = load_config()
     monitor_data = _monitor_data()
     return render_template_string(
-        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", _MONITOR_BODY
-        ),
+        INDEX_HTML.replace("{% block content %}{% endblock %}", _MONITOR_BODY),
         config=config,
         section="system",
         monitor=monitor_data,

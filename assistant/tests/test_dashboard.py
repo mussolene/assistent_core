@@ -308,6 +308,25 @@ def test_index_channels_page_renders(client, auth_mock, monkeypatch):
     assert "Каналы" in body or "channels" in body.lower()
 
 
+def test_layout_includes_stylesheet(client, auth_mock, monkeypatch):
+    """Страницы подключают layout.css из static (UX_UI_ROADMAP 4.1)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.get("/")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "css/layout.css" in body or "layout.css" in body
+
+
+def test_test_bot_button_has_id_for_loading(client, auth_mock, monkeypatch):
+    """Кнопка «Проверить бота» имеет id для отключения при загрузке (4.2)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.get("/")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "btn-test-bot" in body
+    assert "btn.disabled" in body or "disabled" in body
+
+
 def test_data_page_renders(client, auth_mock, monkeypatch):
     """Страница Данные: Qdrant URL, ссылки на Репо и Память."""
     monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
