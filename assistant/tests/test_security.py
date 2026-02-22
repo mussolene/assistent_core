@@ -1,5 +1,7 @@
 """Tests for security: whitelist, audit."""
 
+from unittest.mock import patch
+
 from assistant.security.audit import _redact
 from assistant.security.command_whitelist import CommandWhitelist
 
@@ -50,3 +52,26 @@ def test_whitelist_parse_command_empty_returns_none():
     w = CommandWhitelist(["ls"])
     out = w.parse_command("")
     assert out is None
+
+
+def test_whitelist_is_allowed_empty_or_whitespace():
+    w = CommandWhitelist(["ls"])
+    ok, reason = w.is_allowed("")
+    assert not ok
+    assert "empty" in reason.lower()
+    ok, reason = w.is_allowed("   ")
+    assert not ok
+
+
+def test_whitelist_parse_command_shlex_value_error():
+    w = CommandWhitelist(["ls"])
+    with patch.object(w, "is_allowed", return_value=(True, "")):
+        out = w.parse_command('ls "unclosed')
+    assert out is None
+
+
+def test_whitelist_denies_command_not_in_list():
+    w = CommandWhitelist(["ls", "cat"])
+    ok, reason = w.is_allowed("pytest")
+    assert not ok
+    assert "pytest" in reason or "whitelist" in reason.lower()

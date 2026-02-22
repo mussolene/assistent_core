@@ -47,6 +47,17 @@ def test_config_load_telegram_env(monkeypatch):
     assert config.telegram.bot_token == "secret-token"
 
 
+def test_config_load_telegram_allowed_user_ids_from_yaml(tmp_path):
+    path = tmp_path / "c.yaml"
+    path.write_text(
+        "redis:\n  url: redis://localhost:6379/0\ntelegram:\n  allowed_user_ids: [123, 456]\n"
+        "security:\n  allowed_user_ids: [123, 456]\n"
+    )
+    config = Config.load(config_path=path)
+    assert config.telegram.allowed_user_ids == [123, 456]
+    assert config.security.allowed_user_ids == [123, 456]
+
+
 def test_config_load_cloud_fallback(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("CLOUD_FALLBACK_ENABLED", "true")
