@@ -1,7 +1,19 @@
 """Tests for email adapter: config, send_email (SMTP/SendGrid mocks), outgoing handler."""
 
+from unittest.mock import patch
+
+import httpx
 from assistant.channels.email_adapter import get_email_config, send_email
 from assistant.core.events import ChannelKind, OutgoingReply
+
+
+def test_get_email_config_exception_returns_disabled():
+    with patch(
+        "assistant.dashboard.config_store.get_config_from_redis_sync",
+        side_effect=RuntimeError("redis down"),
+    ):
+        cfg = get_email_config("redis://localhost/0")
+    assert cfg.get("enabled") is False
 
 
 def test_get_email_config_disabled_when_empty(monkeypatch):
@@ -35,6 +47,22 @@ def test_send_email_disabled_returns_false(monkeypatch):
     monkeypatch.setattr(
         "assistant.channels.email_adapter.get_email_config",
         lambda url: {"enabled": False},
+    )
+    assert send_email("user@test.com", "Subj", "Body", "redis://localhost/0") is False
+
+
+def test_send_email_smtp_no_host_returns_false(monkeypatch):
+    monkeypatch.setattr(
+        "assistant.channels.email_adapter.get_email_config",
+        lambda url: {"enabled": True, "provider": "smtp", "smtp_host": "", "from": "x@y"},
+    )
+    assert send_email("user@test.com", "Subj", "Body", "redis://localhost/0") is False
+
+
+def test_send_email_sendgrid_no_key_returns_false(monkeypatch):
+    monkeypatch.setattr(
+        "assistant.channels.email_adapter.get_email_config",
+        lambda url: {"enabled": True, "provider": "sendgrid", "sendgrid_api_key": "", "from": "x@y"},
     )
     assert send_email("user@test.com", "Subj", "Body", "redis://localhost/0") is False
 
@@ -90,6 +118,26 @@ def test_send_email_smtp_success(monkeypatch):
     assert sent[0][1] == ["user@test.com"]
 
 
+def test_send_email_smtp_exception_returns_false(monkeypatch):
+    import smtplib as _smtplib
+
+    def smtp_raise(host, port, timeout=None):
+        raise _smtplib.SMTPException("connection refused")
+
+    monkeypatch.setattr(_smtplib, "SMTP", smtp_raise)
+    monkeypatch.setattr(
+        "assistant.channels.email_adapter.get_email_config",
+        lambda url: {
+            "enabled": True,
+            "from": "x@y",
+            "provider": "smtp",
+            "smtp_host": "smtp.test",
+            "smtp_port": "587",
+        },
+    )
+    assert send_email("user@test.com", "Subj", "Body", "redis://localhost/0") is False
+
+
 def test_send_email_sendgrid_success(monkeypatch):
     requests = []
 
@@ -119,6 +167,41 @@ def test_send_email_sendgrid_success(monkeypatch):
     assert requests[0][1]["personalizations"][0]["to"][0]["email"] == "user@test.com"
     assert requests[0][1]["subject"] == "Subj"
     assert "Bearer SG.xxx" in requests[0][2]["Authorization"]
+
+
+def test_send_email_sendgrid_non_200_returns_false(monkeypatch):
+    class R:
+        status_code = 500
+        text = "error"
+
+    monkeypatch.setattr("httpx.post", lambda *a, **k: R())
+    monkeypatch.setattr(
+        "assistant.channels.email_adapter.get_email_config",
+        lambda url: {
+            "enabled": True,
+            "from": "x@y",
+            "provider": "sendgrid",
+            "sendgrid_api_key": "SG.xxx",
+        },
+    )
+    assert send_email("user@test.com", "Subj", "Body", "redis://localhost/0") is False
+
+
+def test_send_email_sendgrid_exception_returns_false(monkeypatch):
+    def _post_raise(*a, **k):
+        raise httpx.ConnectError("fail")
+
+    monkeypatch.setattr("httpx.post", _post_raise)
+    monkeypatch.setattr(
+        "assistant.channels.email_adapter.get_email_config",
+        lambda url: {
+            "enabled": True,
+            "from": "x@y",
+            "provider": "sendgrid",
+            "sendgrid_api_key": "SG.xxx",
+        },
+    )
+    assert send_email("user@test.com", "Subj", "Body", "redis://localhost/0") is False
 
 
 def test_outgoing_payload_email_uses_chat_id_as_recipient():
