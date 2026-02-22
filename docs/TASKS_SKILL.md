@@ -15,7 +15,7 @@
 
 | action | Параметры | Описание |
 |--------|-----------|----------|
-| `create_task` | title, description?, start_date?, end_date?, status?, workload?, time_spent? | Создать задачу. |
+| `create_task` | title, description?, start_date?, end_date?, status?, parent_id?, … | Создать задачу. parent_id — создать подзадачу к задаче (родитель должна быть своя). |
 | `delete_task` | task_id | Удалить задачу (только свою). |
 | `update_task` | task_id, title?, start_date?, end_date?, status?, workload?, time_spent?, time_spent_minutes?, cascade?=true | Обновить задачу. При смене дат остальные задачи, попадающие в новый интервал, сдвигаются (cascade). |
 | `list_tasks` | status? | Список своих задач. Возвращает также **formatted** — готовый текст с заголовками, датами (дд.мм), оценкой загрузки и затраченным временем. |
@@ -29,6 +29,7 @@
 | `archive_completed` | — | Перенести все задачи со статусом done в архив (исключить из основного списка). Возвращает archived_count и user_reply. |
 | `list_archive` | from_date?, to_date? | Список заархивированных задач. Фильтр по периоду — по дате updated_at (YYYY-MM-DD). |
 | `search_archive` | query? (или q), from_date?, to_date? | Поиск по архиву: подстрока в title/description и опционально фильтр по датам (updated_at). |
+| `list_subtasks` | parent_id (или task_id) | Список подзадач родительской задачи. |
 
 **user_id** подставляется автоматически из контекста (ToolAgent передаёт `context.user_id` для скилла `tasks`).
 
@@ -36,7 +37,7 @@
 
 ## Модель задачи
 
-- `id`, `user_id`, `title`, `description`
+- `id`, `user_id`, `title`, `description`, `parent_id` (опционально — id родительской задачи для подзадач)
 - `start_date`, `end_date` (ISO YYYY-MM-DD)
 - `workload`, `estimate` — оценка загрузки (строка, например «2ч», «полдня»)
 - `time_spent_minutes` — затраченное время в минутах (можно задать через update_task с time_spent: «2h», «30 min»)
@@ -109,7 +110,7 @@
 
 - **Список в Telegram (10.5 — сделано):** только актуальные задачи (open, end_date ≥ сегодня); кнопка «✓ Выполнена» (callback `task:done:{id}`); при нажатии — статус задачи обновляется и сообщение со списком редактируется (актуальный список без выполненной задачи).
 - **Компактный список** неактуальных; **архивация (10.6):** archive_completed, list_archive; **поиск по архиву (10.7 — сделано):** search_archive(query, from_date, to_date).
-- **Подзадачи**: поле `parent_id`, создание подзадачи, список подзадач.
+- **Подзадачи (10.8 — сделано):** поле `parent_id` в задаче; create_task(parent_id=…); list_subtasks(parent_id); get_task возвращает subtasks и добавляет блок «Подзадачи» в formatted_details.
 
 См. **docs/TASKS_REQUIREMENTS.md** и блок 10.5–10.8 в **docs/ITERATIONS_ROADMAP.md**.
 

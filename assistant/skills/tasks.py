@@ -101,6 +101,7 @@ ACTION_ALIASES = {
     "archivecompleted": "archive_completed",
     "listarchive": "list_archive",
     "searcharchive": "search_archive",
+    "listsubtasks": "list_subtasks",
 }
 
 
@@ -125,6 +126,7 @@ PARAM_ALIASES = {
     "showdonebutton": "show_done_button",
     "fromdate": "from_date",
     "todate": "to_date",
+    "parentid": "parent_id",
 }
 
 
@@ -439,6 +441,8 @@ class TaskSkill(BaseSkill):
                 return await self._list_archive(client, user_id, params)
             if action == "search_archive":
                 return await self._search_archive(client, user_id, params)
+            if action == "list_subtasks":
+                return await self._list_subtasks(client, user_id, params)
             return {"ok": False, "error": f"Неизвестное действие: {action}"}
         finally:
             await client.aclose()
@@ -465,6 +469,11 @@ class TaskSkill(BaseSkill):
             start_date = None
         if end_date and (_year_of(end_date) or current_year) < current_year:
             end_date = None
+        parent_id = (params.get("parent_id") or "").strip() or None
+        if parent_id:
+            parent = await _load_task(client, parent_id)
+            if not parent or not _check_owner(parent, user_id):
+                return {"ok": False, "error": "Родительская задача не найдена или доступ запрещён"}
         task = {
             "id": task_id,
             "user_id": user_id,
@@ -482,6 +491,7 @@ class TaskSkill(BaseSkill):
             ),
             "created_at": now,
             "updated_at": now,
+            "parent_id": parent_id,
         }
         await _save_task(client, task)
         await _ensure_user_list(client, user_id, task_id)
@@ -627,6 +637,17 @@ class TaskSkill(BaseSkill):
             out["text_telegram"] = _text
         return out
 
+    async def _get_subtasks(self, client, user_id: str, parent_id: str) -> list[dict[str, Any]]:
+        """Возвращает список подзадач (tasks с parent_id == parent_id) для пользователя (итерация 10.8)."""
+        raw = await client.get(_user_list_key(user_id))
+        ids = json.loads(raw) if raw else []
+        out = []
+        for tid in ids:
+            t = await _load_task(client, tid)
+            if t and _check_owner(t, user_id) and (t.get("parent_id") or "").strip() == parent_id:
+                out.append(t)
+        return out
+
     async def _get_one(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         task_id = (params.get("task_id") or params.get("id") or "").strip()
         if not task_id:
@@ -634,7 +655,24 @@ class TaskSkill(BaseSkill):
         task = await _load_task(client, task_id)
         if not task or not _check_owner(task, user_id):
             return {"ok": False, "error": "Задача не найдена или доступ запрещён"}
-        return {"ok": True, "task": task, "formatted_details": format_task_details(task)}
+        subtasks = await self._get_subtasks(client, user_id, task_id)
+        details = format_task_details(task)
+        if subtasks:
+            details += "\n\nПодзадачи:\n" + format_tasks_list_readable(subtasks)
+        result = {"ok": True, "task": task, "formatted_details": details, "subtasks": subtasks}
+        return result
+
+    async def _list_subtasks(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Список подзадач по parent_id (итерация 10.8)."""
+        parent_id = (params.get("parent_id") or params.get("task_id") or params.get("id") or "").strip()
+        if not parent_id:
+            return {"ok": False, "error": "parent_id обязателен"}
+        parent = await _load_task(client, parent_id)
+        if not parent or not _check_owner(parent, user_id):
+            return {"ok": False, "error": "Родительская задача не найдена или доступ запрещён"}
+        tasks = await self._get_subtasks(client, user_id, parent_id)
+        formatted = format_tasks_list_readable(tasks)
+        return {"ok": True, "tasks": tasks, "total": len(tasks), "formatted": formatted}
 
     async def _add_document(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         task_id = (params.get("task_id") or params.get("id") or "").strip()

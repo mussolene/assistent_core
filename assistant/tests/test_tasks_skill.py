@@ -639,6 +639,41 @@ async def test_tasks_search_archive_with_date_filter(skill, redis_mock):
     assert "formatted" in out
 
 
+@pytest.mark.asyncio
+async def test_tasks_subtasks_create_and_list(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        parent = await skill.run({"action": "create_task", "user_id": "u1", "title": "Parent"})
+        sub1 = await skill.run(
+            {"action": "create_task", "user_id": "u1", "title": "Sub 1", "parent_id": parent["task_id"]}
+        )
+        await skill.run(
+            {"action": "create_task", "user_id": "u1", "title": "Sub 2", "parent_id": parent["task_id"]}
+        )
+        out = await skill.run({"action": "list_subtasks", "user_id": "u1", "parent_id": parent["task_id"]})
+        assert out.get("ok") is True
+        assert out.get("total") == 2
+        assert all(t.get("parent_id") == parent["task_id"] for t in out["tasks"])
+        one = await skill.run({"action": "get_task", "user_id": "u1", "task_id": parent["task_id"]})
+    assert one.get("ok") is True
+    assert len(one.get("subtasks", [])) == 2
+    assert "Подзадачи" in one.get("formatted_details", "")
+
+
+@pytest.mark.asyncio
+async def test_tasks_create_subtask_wrong_parent_returns_error(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr = await skill.run({"action": "create_task", "user_id": "u1", "title": "P"})
+        out = await skill.run(
+            {"action": "create_task", "user_id": "other", "title": "Sub", "parent_id": cr["task_id"]}
+        )
+    assert out.get("ok") is False
+    assert "Родительская" in out.get("error", "") or "доступ" in out.get("error", "")
+
+
 def test_format_tasks_for_telegram_empty():
     text, kb = format_tasks_for_telegram([])
     assert text == "Нет задач."
