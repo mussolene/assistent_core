@@ -4,7 +4,7 @@ import gzip
 import tarfile
 import zipfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -106,6 +106,17 @@ def test_extract_content_from_file_single_gz(tmp_path):
     assert "Gzipped text content" in out
 
 
+def test_extract_content_from_file_max_files(tmp_path):
+    """Zip with many files: extraction capped (zip iterates namelist()[:200])."""
+    zip_path = tmp_path / "many.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for i in range(300):
+            zf.writestr(f"f{i}.txt", f"content {i}")
+    out = fi._extract_content_from_file(zip_path, "application/zip", "many.zip")
+    assert "content 0" in out
+    assert "content 199" in out
+
+
 def test_chunk_text_empty():
     assert fi._chunk_text("") == []
     assert fi._chunk_text("   ") == []
@@ -128,6 +139,15 @@ def test_extract_text_txt(tmp_path):
     f = tmp_path / "f.txt"
     f.write_text("Hello\nWorld", encoding="utf-8")
     assert fi._extract_text(f, "text/plain", "f.txt") == "Hello\nWorld"
+
+
+def test_extract_text_txt_read_error(tmp_path):
+    """_extract_text for txt: read error -> returns ''."""
+    f = tmp_path / "f.txt"
+    f.write_text("x", encoding="utf-8")
+    with patch.object(Path, "read_text", side_effect=OSError("Permission denied")):
+        out = fi._extract_text(f, "text/plain", "f.txt")
+    assert out == ""
 
 
 def test_extract_text_image_returns_placeholder():
@@ -162,6 +182,97 @@ async def test_index_telegram_attachments_no_token():
     )
     assert ref_ids == []
     assert text == ""
+
+
+@pytest.mark.asyncio
+async def test_index_telegram_attachments_skip_non_telegram():
+    memory = MagicMock()
+    memory.add_to_vector = AsyncMock()
+    ref_ids, text = await fi.index_telegram_attachments(
+        "redis://localhost:6379/0",
+        memory,
+        "u1",
+        "c1",
+        [{"file_id": "x", "filename": "a.txt", "source": "email"}],
+        "token",
+    )
+    assert ref_ids == []
+    assert text == ""
+    memory.add_to_vector.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_index_telegram_attachments_skip_no_file_id():
+    memory = MagicMock()
+    ref_ids, text = await fi.index_telegram_attachments(
+        "redis://localhost:6379/0",
+        memory,
+        "u1",
+        "c1",
+        [{"filename": "a.txt", "source": "telegram"}],
+        "token",
+    )
+    assert ref_ids == []
+    assert text == ""
+
+
+@pytest.mark.asyncio
+async def test_index_telegram_attachments_getfile_fails():
+    memory = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"ok": False, "description": "Bad Request"}
+    with patch("assistant.core.file_indexing.httpx.AsyncClient") as ac:
+        instance = MagicMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=None)
+        instance.get = AsyncMock(return_value=mock_resp)
+        ac.return_value = instance
+        ref_ids, text = await fi.index_telegram_attachments(
+            "redis://localhost:6379/0",
+            memory,
+            "u1",
+            "c1",
+            [{"file_id": "f1", "filename": "a.txt", "source": "telegram"}],
+            "token",
+        )
+    assert ref_ids == []
+    assert text == ""
+
+
+@pytest.mark.asyncio
+async def test_index_telegram_attachments_success():
+    memory = MagicMock()
+    memory.add_to_vector = AsyncMock()
+    get_file_resp = MagicMock()
+    get_file_resp.json.return_value = {"ok": True, "result": {"file_path": "documents/file.txt"}}
+    get_file_resp.raise_for_status = MagicMock()
+    download_resp = MagicMock()
+    download_resp.content = b"Hello from file"
+    download_resp.raise_for_status = MagicMock()
+
+    async def fake_get(url, **kwargs):
+        if "getFile" in url:
+            return get_file_resp
+        return download_resp
+
+    with patch("assistant.core.file_indexing.httpx.AsyncClient") as ac:
+        instance = MagicMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=None)
+        instance.get = AsyncMock(side_effect=fake_get)
+        ac.return_value = instance
+        with patch("assistant.core.file_indexing._save_file_ref_sync"):
+            ref_ids, text = await fi.index_telegram_attachments(
+                "redis://localhost:6379/0",
+                memory,
+                "u1",
+                "c1",
+                [{"file_id": "f1", "filename": "file.txt", "source": "telegram"}],
+                "bot_token",
+            )
+    assert len(ref_ids) == 1
+    assert "Hello from file" in text
+    assert memory.add_to_vector.call_count >= 1
 
 
 def test_get_file_ref_missing():
