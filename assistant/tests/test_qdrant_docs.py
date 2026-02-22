@@ -126,3 +126,53 @@ def test_index_document_to_qdrant_embed_fn_called(tmp_path):
     assert err == ""
     assert len(embed_calls) == 1
     assert len(embed_calls[0]) == count
+
+
+# --- Итерация 7.1: index_repo_to_qdrant ---
+
+
+def test_index_repo_to_qdrant_no_dir():
+    chunks, files, err = qdrant_docs.index_repo_to_qdrant(
+        "/nonexistent/repo",
+        "http://qdrant:6333",
+    )
+    assert chunks == 0 and files == 0
+    assert "Каталог" in err or "найден" in err
+
+
+def test_index_repo_to_qdrant_no_qdrant_url(tmp_path):
+    (tmp_path / "a.py").write_text("x = 1")
+    chunks, files, err = qdrant_docs.index_repo_to_qdrant(str(tmp_path), "")
+    assert chunks == 0 and files == 0
+    assert "Qdrant" in err
+
+
+def test_index_repo_to_qdrant_success(tmp_path):
+    (tmp_path / "readme.md").write_text("Hello world. " * 100)
+
+    def fake_embed(texts):
+        return [[0.1] * 384] * len(texts)
+
+    with patch("assistant.core.qdrant_docs._embed_texts", side_effect=fake_embed):
+        with patch("assistant.core.qdrant_docs.ensure_collection", return_value=True):
+            with patch("assistant.core.qdrant_docs.upsert_points", return_value=True):
+                chunks, files, err = qdrant_docs.index_repo_to_qdrant(
+                    str(tmp_path),
+                    "http://qdrant:6333",
+                )
+    assert err == ""
+    assert files == 1
+    assert chunks >= 1
+
+
+def test_get_repo_rev_empty_for_non_git(tmp_path):
+    (tmp_path / "x.txt").write_text("a")
+    assert qdrant_docs._get_repo_rev(tmp_path) == ""
+
+
+def test_get_repo_rev_returns_short_sha(tmp_path):
+    (tmp_path / ".git").mkdir()
+    with patch("subprocess.run") as m:
+        m.return_value = type("R", (), {"returncode": 0, "stdout": "abc123def456\n"})()
+        out = qdrant_docs._get_repo_rev(tmp_path)
+    assert out == "abc123def456"
