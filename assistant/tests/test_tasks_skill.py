@@ -555,6 +555,47 @@ async def test_tasks_cannot_access_other_user_task(skill, redis_mock):
     assert del_other.get("ok") is False
 
 
+@pytest.mark.asyncio
+async def test_tasks_archive_completed(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "Open"})
+        cr2 = await skill.run({"action": "create_task", "user_id": "u1", "title": "Done"})
+        await skill.run(
+            {"action": "update_task", "user_id": "u1", "task_id": cr2["task_id"], "status": "done"}
+        )
+        out = await skill.run({"action": "archive_completed", "user_id": "u1"})
+        assert out.get("ok") is True
+        assert out.get("archived_count") == 1
+        list_out = await skill.run({"action": "list_tasks", "user_id": "u1"})
+        assert list_out.get("total") == 1
+        assert all(t.get("status") != "done" for t in list_out["tasks"])
+        archive_out = await skill.run({"action": "list_archive", "user_id": "u1"})
+    assert archive_out.get("ok") is True
+    assert archive_out.get("total") == 1
+    assert archive_out["tasks"][0]["title"] == "Done"
+
+
+@pytest.mark.asyncio
+async def test_tasks_list_archive_with_date_filter(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "T1"})
+        cr2 = await skill.run({"action": "create_task", "user_id": "u1", "title": "T2"})
+        await skill.run(
+            {"action": "update_task", "user_id": "u1", "task_id": cr2["task_id"], "status": "done"}
+        )
+        await skill.run({"action": "archive_completed", "user_id": "u1"})
+        out = await skill.run(
+            {"action": "list_archive", "user_id": "u1", "from_date": "2020-01-01", "to_date": "2030-12-31"}
+        )
+    assert out.get("ok") is True
+    assert out.get("total") >= 1
+    assert "formatted" in out
+
+
 def test_format_tasks_for_telegram_empty():
     text, kb = format_tasks_for_telegram([])
     assert text == "Нет задач."

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 REDIS_TASKS_USER_PREFIX = "assistant:tasks:user:"
 REDIS_TASK_PREFIX = "assistant:task:"
+REDIS_ARCHIVE_USER_PREFIX = "assistant:tasks:archive:user:"
 REDIS_REMINDERS_KEY = "assistant:reminders:due"
 TASK_TTL_DAYS = 365 * 2  # 2 years
 
@@ -33,6 +34,10 @@ def _task_key(task_id: str) -> str:
 
 def _user_list_key(user_id: str) -> str:
     return f"{REDIS_TASKS_USER_PREFIX}{user_id}"
+
+
+def _archive_list_key(user_id: str) -> str:
+    return f"{REDIS_ARCHIVE_USER_PREFIX}{user_id}"
 
 
 async def _get_redis():
@@ -93,6 +98,8 @@ ACTION_ALIASES = {
     "setreminder": "set_reminder",
     "getduereminders": "get_due_reminders",
     "formatfortelegram": "format_for_telegram",
+    "archivecompleted": "archive_completed",
+    "listarchive": "list_archive",
 }
 
 
@@ -115,6 +122,8 @@ PARAM_ALIASES = {
     "maxitems": "max_items",
     "onlyactual": "only_actual",
     "showdonebutton": "show_done_button",
+    "fromdate": "from_date",
+    "todate": "to_date",
 }
 
 
@@ -423,6 +432,10 @@ class TaskSkill(BaseSkill):
                 return await self._format_for_telegram(client, user_id, params)
             if action == "search_tasks":
                 return await self._search_tasks(client, user_id, params)
+            if action == "archive_completed":
+                return await self._archive_completed(client, user_id, params)
+            if action == "list_archive":
+                return await self._list_archive(client, user_id, params)
             return {"ok": False, "error": f"Неизвестное действие: {action}"}
         finally:
             await client.aclose()
@@ -738,3 +751,61 @@ class TaskSkill(BaseSkill):
             if t and _check_owner(t, user_id) and _task_matches_query(t, query):
                 tasks.append(t)
         return {"ok": True, "tasks": tasks, "total": len(tasks)}
+
+    async def _archive_completed(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        """Перенос всех выполненных (status=done) задач в архив: убираем из основного списка, добавляем в архив (итерация 10.6)."""
+        raw = await client.get(_user_list_key(user_id))
+        ids = list(json.loads(raw) if raw else [])
+        archive_key = _archive_list_key(user_id)
+        archive_raw = await client.get(archive_key)
+        archive_ids = list(json.loads(archive_raw) if archive_raw else [])
+        archived_count = 0
+        new_user_ids = []
+        for tid in ids:
+            t = await _load_task(client, tid)
+            if not t or not _check_owner(t, user_id):
+                new_user_ids.append(tid)
+                continue
+            if (t.get("status") or "open") == "done":
+                if tid not in archive_ids:
+                    archive_ids.append(tid)
+                    archived_count += 1
+            else:
+                new_user_ids.append(tid)
+        await client.set(_user_list_key(user_id), json.dumps(new_user_ids), ex=TASK_TTL_DAYS * 86400)
+        await client.set(archive_key, json.dumps(archive_ids), ex=TASK_TTL_DAYS * 86400)
+        return {"ok": True, "archived_count": archived_count, "user_reply": f"Заархивировано задач: {archived_count}."}
+
+    async def _list_archive(
+        self, client, user_id: str, params: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Список заархивированных задач с опциональным фильтром по периоду (from_date, to_date по updated_at) (итерация 10.6)."""
+        archive_key = _archive_list_key(user_id)
+        raw = await client.get(archive_key)
+        ids = json.loads(raw) if raw else []
+        tasks = []
+        for tid in ids:
+            t = await _load_task(client, tid)
+            if t and _check_owner(t, user_id):
+                tasks.append(t)
+        from_date = (params.get("from_date") or "").strip() or None
+        to_date = (params.get("to_date") or "").strip() or None
+        if from_date or to_date:
+            from_ord = _date_to_ordinal(from_date) if from_date else None
+            to_ord = _date_to_ordinal(to_date) if to_date else None
+            filtered = []
+            for t in tasks:
+                # Фильтр по updated_at (дата обновления задачи)
+                upd = (t.get("updated_at") or "")[:10]
+                upd_ord = _date_to_ordinal(upd) if upd else None
+                if upd_ord is None:
+                    filtered.append(t)
+                    continue
+                if from_ord is not None and upd_ord < from_ord:
+                    continue
+                if to_ord is not None and upd_ord > to_ord:
+                    continue
+                filtered.append(t)
+            tasks = filtered
+        formatted = format_tasks_list_readable(tasks)
+        return {"ok": True, "tasks": tasks, "total": len(tasks), "formatted": formatted}
