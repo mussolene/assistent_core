@@ -36,6 +36,65 @@ def _strip_think_blocks(text: str) -> str:
 
 
 TELEGRAM_API = "https://api.telegram.org/bot"
+# Максимальный размер скачиваемого файла (байт) для сохранения в хранилище (итерация 3.1)
+TELEGRAM_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024
+
+
+def _get_telegram_downloads_dir() -> str:
+    """Каталог для сохранения скачанных из Telegram файлов (песочница или временное хранилище)."""
+    path = (
+        os.getenv("TELEGRAM_DOWNLOADS_DIR", "").strip()
+        or os.getenv("SANDBOX_WORKSPACE_DIR", "").strip()
+        or os.getenv("WORKSPACE_DIR", "").strip()
+    )
+    if path:
+        base = path.rstrip("/")
+        return f"{base}/telegram_uploads"
+    return "/tmp/telegram_downloads"
+
+
+async def _download_telegram_attachment(
+    token: str,
+    file_id: str,
+    dest_dir: str,
+    filename: str,
+    client: httpx.AsyncClient,
+) -> Optional[str]:
+    """Скачать файл по file_id через getFile, сохранить в dest_dir. Возвращает путь или None при ошибке."""
+    if not token or not file_id:
+        return None
+    try:
+        r = await client.get(
+            f"{TELEGRAM_API}{token}/getFile",
+            params={"file_id": file_id},
+            timeout=10.0,
+        )
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        if not data.get("ok"):
+            return None
+        file_path = (data.get("result") or {}).get("file_path")
+        if not file_path:
+            return None
+        download_url = f"https://api.telegram.org/file/bot{token}/{file_path}"
+        r2 = await client.get(download_url, timeout=30.0)
+        if r2.status_code != 200:
+            return None
+        content = r2.content
+        if len(content) > TELEGRAM_DOWNLOAD_MAX_BYTES:
+            logger.warning("telegram file too large, skip save: %s bytes", len(content))
+            return None
+        os.makedirs(dest_dir, exist_ok=True)
+        safe_name = re.sub(r'[^\w\-\.]', '_', filename)[:200] or "file"
+        full_path = os.path.join(dest_dir, safe_name)
+        with open(full_path, "wb") as f:
+            f.write(content)
+        return full_path
+    except Exception as e:
+        logger.debug("download telegram file %s: %s", file_id, e)
+        return None
+
 
 BOT_COMMANDS = [
     {"command": "start", "description": "Начать / pairing"},
@@ -831,6 +890,29 @@ async def run_telegram_adapter() -> None:
                                 "source": "telegram",
                             }
                         )
+                    # Итерация 3.1: скачать вложения в песочницу/временное хранилище, добавить path в событие
+                    if attachments and token:
+                        downloads_root = _get_telegram_downloads_dir()
+                        subdir = os.path.join(downloads_root, user_id)
+                        async with httpx.AsyncClient() as http_client:
+                            for i, att in enumerate(attachments):
+                                fname = att.get("filename") or f"file_{i}"
+                                unique = f"{message_id}_{i}_{fname}"
+                                path = await _download_telegram_attachment(
+                                    token,
+                                    att["file_id"],
+                                    subdir,
+                                    unique,
+                                    http_client,
+                                )
+                                if path:
+                                    att["path"] = path
+                                    if (fname.endswith(".txt") or att.get("mime_type", "").startswith("text/")) and os.path.isfile(path):
+                                        try:
+                                            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                                                att["extracted_text"] = f.read(100_000)
+                                        except Exception:
+                                            pass
                     if attachments and not text:
                         text = (
                             "[Файл: "

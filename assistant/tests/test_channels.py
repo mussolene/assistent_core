@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from assistant.channels.telegram import (
@@ -283,3 +284,127 @@ async def test_handle_task_done_callback_updates_and_edits_message():
             assert body["message_id"] == 100
             assert "inline_keyboard" in body.get("reply_markup", {})
             assert mock_skill.run.call_count == 2
+
+
+# --- Итерация 3.1: приём документов/фото — сохранение в хранилище, path в событии ---
+
+
+def test_get_telegram_downloads_dir_default(monkeypatch):
+    """Без env — возвращается /tmp/telegram_downloads."""
+    from assistant.channels.telegram import _get_telegram_downloads_dir
+
+    monkeypatch.delenv("TELEGRAM_DOWNLOADS_DIR", raising=False)
+    monkeypatch.delenv("SANDBOX_WORKSPACE_DIR", raising=False)
+    monkeypatch.delenv("WORKSPACE_DIR", raising=False)
+    assert _get_telegram_downloads_dir() == "/tmp/telegram_downloads"
+
+
+def test_get_telegram_downloads_dir_from_env(monkeypatch):
+    """TELEGRAM_DOWNLOADS_DIR задаёт каталог напрямую (без суффикса telegram_uploads)."""
+    from assistant.channels.telegram import _get_telegram_downloads_dir
+
+    monkeypatch.setenv("TELEGRAM_DOWNLOADS_DIR", "/data/tg")
+    monkeypatch.delenv("SANDBOX_WORKSPACE_DIR", raising=False)
+    monkeypatch.delenv("WORKSPACE_DIR", raising=False)
+    assert _get_telegram_downloads_dir() == "/data/tg/telegram_uploads"
+
+
+def test_get_telegram_downloads_dir_workspace(monkeypatch):
+    """SANDBOX_WORKSPACE_DIR -> .../telegram_uploads."""
+    from assistant.channels.telegram import _get_telegram_downloads_dir
+
+    monkeypatch.delenv("TELEGRAM_DOWNLOADS_DIR", raising=False)
+    monkeypatch.setenv("SANDBOX_WORKSPACE_DIR", "/workspace")
+    assert _get_telegram_downloads_dir() == "/workspace/telegram_uploads"
+
+
+@pytest.mark.asyncio
+async def test_download_telegram_attachment_success(tmp_path):
+    """getFile + download возвращают путь к сохранённому файлу."""
+    from assistant.channels.telegram import _download_telegram_attachment
+
+    get_file_resp = MagicMock()
+    get_file_resp.status_code = 200
+    get_file_resp.json.return_value = {"ok": True, "result": {"file_path": "documents/abc.pdf"}}
+    file_resp = MagicMock()
+    file_resp.status_code = 200
+    file_resp.content = b"file content here"
+
+    async with httpx.AsyncClient() as client:
+        with patch.object(client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [get_file_resp, file_resp]
+            path = await _download_telegram_attachment(
+                "fake-token",
+                "file_id_123",
+                str(tmp_path),
+                "saved.pdf",
+                client,
+            )
+    assert path is not None
+    assert path == str(tmp_path / "saved.pdf")
+    assert (tmp_path / "saved.pdf").read_bytes() == b"file content here"
+
+
+@pytest.mark.asyncio
+async def test_download_telegram_attachment_getfile_fail():
+    """getFile не ok — возвращается None."""
+    from assistant.channels.telegram import _download_telegram_attachment
+
+    get_file_resp = MagicMock()
+    get_file_resp.status_code = 200
+    get_file_resp.json.return_value = {"ok": False}
+
+    async with httpx.AsyncClient() as client:
+        with patch.object(client, "get", new_callable=AsyncMock, return_value=get_file_resp):
+            path = await _download_telegram_attachment(
+                "token", "fid", "/tmp", "x", client
+            )
+    assert path is None
+
+
+@pytest.mark.asyncio
+async def test_download_telegram_attachment_too_large(tmp_path):
+    """Файл больше TELEGRAM_DOWNLOAD_MAX_BYTES — не сохраняем, возвращаем None."""
+    from assistant.channels.telegram import (
+        TELEGRAM_DOWNLOAD_MAX_BYTES,
+        _download_telegram_attachment,
+    )
+
+    get_file_resp = MagicMock()
+    get_file_resp.status_code = 200
+    get_file_resp.json.return_value = {"ok": True, "result": {"file_path": "documents/big"}}
+    file_resp = MagicMock()
+    file_resp.status_code = 200
+    file_resp.content = b"x" * (TELEGRAM_DOWNLOAD_MAX_BYTES + 1)
+
+    async with httpx.AsyncClient() as client:
+        with patch.object(client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [get_file_resp, file_resp]
+            path = await _download_telegram_attachment(
+                "token", "fid", str(tmp_path), "big", client
+            )
+    assert path is None
+
+
+def test_incoming_message_attachments_with_path():
+    """IncomingMessage принимает attachments с полем path (итерация 3.1)."""
+    from assistant.core.events import IncomingMessage
+
+    payload = IncomingMessage(
+        message_id="1",
+        user_id="2",
+        chat_id="3",
+        text="[Файл: doc.pdf]",
+        attachments=[
+            {
+                "file_id": "tg_123",
+                "filename": "doc.pdf",
+                "mime_type": "application/pdf",
+                "source": "telegram",
+                "path": "/workspace/telegram_uploads/2/1_0_doc.pdf",
+            }
+        ],
+    )
+    assert len(payload.attachments) == 1
+    assert payload.attachments[0]["path"] == "/workspace/telegram_uploads/2/1_0_doc.pdf"
+    assert payload.attachments[0]["file_id"] == "tg_123"
