@@ -1247,6 +1247,11 @@ _REPOS_BODY = """
     <input id="git_workspace_dir" name="git_workspace_dir" type="text" value="{{ config.get('GIT_WORKSPACE_DIR', '') }}" placeholder="/workspace или /git_repos">
     <p class="hint">Пусто — используется общий workspace (/workspace). Для отдельного тома укажите путь (напр. /git_repos) и смонтируйте его в Docker.</p>
   </div>
+  <div class="card">
+    <label for="qdrant_url">Qdrant URL (индексация документов)</label>
+    <input id="qdrant_url" name="qdrant_url" type="url" value="{{ config.get('QDRANT_URL', '') }}" placeholder="http://localhost:6333">
+    <p class="hint">Для скилла index_document и пайплайна документ→Qdrant. Пусто — индексация в Qdrant отключена.</p>
+  </div>
   <button type="submit" class="btn">Сохранить</button>
 </form>
 <hr style="margin:1.5rem 0; border:0; border-top:1px solid var(--border);">
@@ -1304,11 +1309,13 @@ def save_repos():
     github = (request.form.get("github_token") or "").strip()
     gitlab = (request.form.get("gitlab_token") or "").strip()
     git_workspace = (request.form.get("git_workspace_dir") or "").strip()
+    qdrant_url = (request.form.get("qdrant_url") or "").strip()
     if github:
         set_config_in_redis_sync(redis_url, "GITHUB_TOKEN", github)
     if gitlab:
         set_config_in_redis_sync(redis_url, "GITLAB_TOKEN", gitlab)
     set_config_in_redis_sync(redis_url, "GIT_WORKSPACE_DIR", git_workspace)
+    set_config_in_redis_sync(redis_url, "QDRANT_URL", qdrant_url)
     flash(
         "Настройки репозиториев сохранены. Перезапустите assistant-core для применения токенов и пути.",
         "success",

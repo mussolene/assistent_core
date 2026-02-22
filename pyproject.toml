@@ -87,6 +87,7 @@ omit = [
     "assistant/models/lm_studio.py",
     "assistant/skills/filesystem.py",
     "assistant/mcp_server.py",
+    "assistant/core/qdrant_docs.py",
 ]
 
 [tool.coverage.report]

@@ -35,6 +35,7 @@ async def run_core(config: Config) -> None:
     from assistant.memory.manager import MemoryManager
     from assistant.models.gateway import ModelGateway
     from assistant.skills.checklist import ChecklistSkill
+    from assistant.skills.document_index_skill import DocumentIndexSkill
     from assistant.skills.file_ref import FileRefSkill
     from assistant.skills.filesystem import FilesystemSkill
     from assistant.skills.git import GitSkill
@@ -146,6 +147,7 @@ async def run_core(config: Config) -> None:
     skills.register(ChecklistSkill())
     skills.register(TaskSkill())
     skills.register(SendEmailSkill(redis_url=config.redis.url))
+    skills.register(DocumentIndexSkill(redis_url=config.redis.url))
     skills.register(McpAdapterSkill())
     runner = SandboxRunner()
     agent_registry = AgentRegistry()
