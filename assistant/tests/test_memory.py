@@ -148,6 +148,45 @@ async def test_memory_manager_get_context_with_user_data():
     )
 
 
+@pytest.mark.asyncio
+async def test_memory_manager_get_context_includes_conversation_memory():
+    """get_context_for_user with Qdrant URL adds Relevant conversation memory when search returns hits (8.2)."""
+    mgr = MemoryManager("redis://localhost:6379/0")
+    mgr._short = MagicMock()
+    mgr._short.get_messages = AsyncMock(return_value=[{"role": "user", "content": "hi"}])
+    mgr._summary = MagicMock()
+    mgr._summary.get_summary = AsyncMock(return_value=None)
+    mgr._get_vector_memory = MagicMock(
+        return_value=MagicMock(_get_model=MagicMock(return_value=None))
+    )
+    mgr._user_data = MagicMock()
+    mgr._user_data.get = AsyncMock(return_value={})
+    mgr._task = MagicMock()
+    mgr._task.get_tool_results = AsyncMock(return_value=[])
+
+    conv_hits = [
+        {"text": "user: past question", "payload": {}},
+        {"text": "assistant: past answer", "payload": {}},
+    ]
+
+    with patch("assistant.core.qdrant_docs.get_qdrant_url", return_value="http://qdrant:6333"):
+        with patch("assistant.core.qdrant_docs.search_conversation_memory", return_value=conv_hits):
+            import asyncio
+            loop = asyncio.get_event_loop()
+
+            async def run_in_executor(executor, fn, *args):
+                return fn(*args) if args else fn()
+
+            with patch.object(loop, "run_in_executor", side_effect=run_in_executor):
+                ctx = await mgr.get_context_for_user(
+                    "u1", "task1", include_vector=True, chat_id="c1"
+                )
+    assert any(
+        "Relevant conversation memory" in str(m.get("content", "")) for m in ctx
+    ), "expected a system message with conversation memory"
+    assert any("past question" in str(m.get("content", "")) for m in ctx)
+
+
 def test_memory_manager_get_vector_medium_long():
     """get_vector_medium and get_vector_long return vector memory for level."""
     mgr = MemoryManager("redis://localhost:6379/0")

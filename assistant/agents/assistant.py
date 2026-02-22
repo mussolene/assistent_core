@@ -114,7 +114,10 @@ class AssistantAgent(BaseAgent):
 
     async def handle(self, context: TaskContext) -> AgentResult:
         messages = await self._memory.get_context_for_user(
-            context.user_id, context.task_id, include_vector=True
+            context.user_id,
+            context.task_id,
+            include_vector=True,
+            chat_id=context.chat_id,
         )
         if context.text:
             await self._memory.append_message(context.user_id, "user", context.text)

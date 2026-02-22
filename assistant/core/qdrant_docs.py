@@ -146,10 +146,12 @@ def search_qdrant(
     query: str,
     top_k: int = 5,
     embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
+    filter_conditions: dict[str, Any] | None = None,
     client: httpx.Client | None = None,
 ) -> list[dict[str, Any]]:
     """
     Поиск по коллекции Qdrant: эмбеддинг запроса, POST /points/search, возврат списка {text, payload, score}.
+    filter_conditions: опционально {"must": [{"key": "user_id", "match": {"value": "u1"}}, ...]}.
     """
     if not base_url or not collection or not query or not query.strip():
         return []
@@ -162,6 +164,8 @@ def search_qdrant(
     vector = vectors[0]
     url = f"{base_url}/collections/{collection}/points/search"
     payload = {"vector": vector, "limit": top_k, "with_payload": True}
+    if filter_conditions:
+        payload["filter"] = filter_conditions
     own = client is None
     if own:
         client = httpx.Client(timeout=15.0)
@@ -414,3 +418,38 @@ def index_conversation_to_qdrant(
         if not upsert_points(qdrant_url, collection_name, ids, vectors, payloads, client):
             return 0, "Ошибка записи в Qdrant"
     return len(texts), ""
+
+
+def search_conversation_memory(
+    base_url: str,
+    query: str,
+    user_id: str,
+    chat_id: str | None = None,
+    collection: str = CONVERSATION_MEMORY_COLLECTION,
+    top_k: int = 5,
+    redis_url: str | None = None,
+    embed_fn: Callable[[list[str]], list[list[float]]] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Поиск по коллекции conversation_memory с фильтром по user_id и опционально chat_id.
+    Возвращает список {text, payload, score} для подмешивания в контекст (итерация 8.2).
+    """
+    if not base_url or not user_id:
+        return []
+    collection_name = get_qdrant_collection(
+        redis_url, "CONVERSATION_MEMORY_COLLECTION", collection
+    )
+    must = [{"key": "user_id", "match": {"value": user_id}}]
+    if chat_id:
+        must.append({"key": "chat_id", "match": {"value": chat_id}})
+    filter_conditions = {"must": must}
+    if not query or not query.strip():
+        query = "conversation"
+    return search_qdrant(
+        base_url,
+        collection_name,
+        query,
+        top_k=top_k,
+        embed_fn=embed_fn,
+        filter_conditions=filter_conditions,
+    )

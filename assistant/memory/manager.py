@@ -57,6 +57,7 @@ class MemoryManager:
         self._vector_model_path = vector_model_path
         self._vector_cache: dict[tuple[str, str], VectorMemory] = {}
         self._summary_threshold = summary_threshold_messages
+        self._redis_url = redis_url
 
     def _get_vector_memory(self, user_id: str, level: str) -> VectorMemory:
         """Векторное хранилище для пользователя и уровня (short/medium/long). Кэш по (user_id, level)."""
@@ -116,8 +117,9 @@ class MemoryManager:
         task_id: str,
         session_id: str = "default",
         include_vector: bool = True,
+        chat_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Контекст: summary + short-term + векторные попадания (все 3 уровня) + данные о пользователе."""
+        """Контекст: summary + short-term + векторные попадания (все 3 уровня) + Qdrant conversation memory + данные о пользователе."""
         messages = []
         summary = await self._summary.get_summary(user_id, session_id)
         if summary:
@@ -155,6 +157,33 @@ class MemoryManager:
                 if unique:
                     ref = "Relevant memory:\n" + "\n".join(h["text"] for h in unique)
                     messages.append({"role": "system", "content": ref})
+            # Итерация 8.2: выборка из Qdrant conversation_memory по user_id/chat_id
+            try:
+                from assistant.core.qdrant_docs import get_qdrant_url, search_conversation_memory
+                import asyncio
+
+                qdrant_url = get_qdrant_url(self._redis_url)
+                if qdrant_url:
+                    conv_query = query or "conversation"
+                    loop = asyncio.get_event_loop()
+                    conv_hits = await loop.run_in_executor(
+                        None,
+                        lambda: search_conversation_memory(
+                            qdrant_url,
+                            conv_query,
+                            user_id,
+                            chat_id=chat_id,
+                            redis_url=self._redis_url,
+                            top_k=4,
+                        ),
+                    )
+                    if conv_hits:
+                        conv_ref = "Relevant conversation memory:\n" + "\n".join(
+                            h.get("text", "")[:300] for h in conv_hits[:4]
+                        )
+                        messages.append({"role": "system", "content": conv_ref})
+            except Exception as e:
+                logger.debug("get_context_for_user conversation memory: %s", e)
         return messages
 
     async def append_message(

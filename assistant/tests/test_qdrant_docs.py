@@ -271,3 +271,59 @@ def test_index_conversation_to_qdrant_success():
     assert points[0]["payload"]["role"] == "user"
     assert "user: What is Python?" in points[0]["payload"]["text"]
     assert points[1]["payload"]["role"] == "assistant"
+
+
+# --- Iteration 8.2: search conversation memory with filter ---
+
+
+def test_search_conversation_memory_no_base_url():
+    out = qdrant_docs.search_conversation_memory("", "query", "u1")
+    assert out == []
+
+
+def test_search_conversation_memory_no_user_id():
+    out = qdrant_docs.search_conversation_memory("http://qdrant:6333", "q", "")
+    assert out == []
+
+
+def test_search_conversation_memory_success():
+    resp = MagicMock(
+        status_code=200,
+        json=lambda: {
+            "result": [
+                {"id": "1", "score": 0.85, "payload": {"text": "user: hello", "user_id": "u1", "chat_id": "c1"}},
+            ]
+        },
+    )
+    with patch("assistant.core.qdrant_docs._embed_texts", return_value=[[0.1] * 384]):
+        with patch.object(httpx.Client, "post", return_value=resp):
+            with patch.object(httpx.Client, "close"):
+                out = qdrant_docs.search_conversation_memory(
+                    "http://qdrant:6333", "hello", "u1", chat_id="c1", top_k=3
+                )
+    assert len(out) == 1
+    assert out[0]["payload"]["user_id"] == "u1"
+    assert out[0]["payload"]["chat_id"] == "c1"
+    assert "user: hello" in out[0]["text"]
+
+
+def test_search_qdrant_with_filter():
+    """search_qdrant accepts filter_conditions and passes them in the request."""
+    resp = MagicMock(
+        status_code=200,
+        json=lambda: {"result": [{"id": "1", "score": 0.9, "payload": {"text": "x"}}]},
+    )
+    with patch("assistant.core.qdrant_docs._embed_texts", return_value=[[0.1] * 384]):
+        with patch.object(httpx.Client, "post", return_value=resp) as mock_post:
+            with patch.object(httpx.Client, "close"):
+                qdrant_docs.search_qdrant(
+                    "http://qdrant:6333",
+                    "repos",
+                    "query",
+                    top_k=2,
+                    filter_conditions={"must": [{"key": "user_id", "match": {"value": "u1"}}]},
+                )
+    call_json = mock_post.call_args[1]["json"]
+    assert "filter" in call_json
+    assert call_json["filter"]["must"][0]["key"] == "user_id"
+    assert call_json["filter"]["must"][0]["match"]["value"] == "u1"
