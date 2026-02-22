@@ -18,13 +18,18 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r /app/requirements.txt
 
-# 2) Пакет приложения
+# 2) Tesseract OCR и unrar для извлечения текста из изображений и RAR-архивов
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr tesseract-ocr-rus unrar \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3) Пакет приложения
 COPY pyproject.toml /app/
 COPY assistant /app/assistant
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -e . --no-deps
 
-# 3) Скачать модель эмбеддингов при сборке (нужен доступ в сеть; в рантайме TRANSFORMERS_OFFLINE=1)
+# 4) Скачать модель эмбеддингов при сборке (нужен доступ в сеть; в рантайме TRANSFORMERS_OFFLINE=1)
 RUN mkdir -p /app/.cache/huggingface \
     && TRANSFORMERS_OFFLINE=0 python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
     && chown -R app:app /app/.cache
