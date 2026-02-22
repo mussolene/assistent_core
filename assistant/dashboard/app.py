@@ -1199,8 +1199,29 @@ _MONITOR_BODY = """
 
 
 _REPOS_BODY = """
-<h1>Склонированные репозитории</h1>
-<p class="sub">Список директорий с .git в workspace (путь задаётся через WORKSPACE_DIR или SANDBOX_WORKSPACE_DIR).</p>
+<h1>Репозитории</h1>
+<p class="sub">Авторизация GitHub/GitLab и путь для клонирования. После сохранения перезапустите assistant-core, чтобы подхватить токены и путь.</p>
+<form method="post" action="{{ url_for('save_repos') }}">
+  <div class="card">
+    <label for="github_token">GitHub Token (для поиска и PR)</label>
+    <input id="github_token" name="github_token" type="password" placeholder="ghp_... (оставьте пустым, чтобы не менять)" autocomplete="off">
+    <p class="hint">Settings → Developer settings → Personal access tokens. Нужны права repo (для clone/PR) и read:user.</p>
+  </div>
+  <div class="card">
+    <label for="gitlab_token">GitLab Token (для поиска и MR)</label>
+    <input id="gitlab_token" name="gitlab_token" type="password" placeholder="glpat-... (оставьте пустым, чтобы не менять)" autocomplete="off">
+    <p class="hint">Preferences → Access Tokens. Нужны read_repository, api.</p>
+  </div>
+  <div class="card">
+    <label for="git_workspace_dir">Путь для клонирования (workspace)</label>
+    <input id="git_workspace_dir" name="git_workspace_dir" type="text" value="{{ config.get('GIT_WORKSPACE_DIR', '') }}" placeholder="/workspace или /git_repos">
+    <p class="hint">Пусто — используется общий workspace (/workspace). Для отдельного тома укажите путь (напр. /git_repos) и смонтируйте его в Docker.</p>
+  </div>
+  <button type="submit" class="btn">Сохранить</button>
+</form>
+<hr style="margin:1.5rem 0; border:0; border-top:1px solid var(--border);">
+<h2>Склонированные репозитории</h2>
+<p class="sub">Директории с .git в выбранном workspace.</p>
 <div class="card">
   <p class="hint" style="margin-bottom:0.5rem">Workspace: {{ workspace_dir or '— не задан —' }}</p>
   {% if repos %}
@@ -1228,15 +1249,41 @@ _REPOS_BODY = """
 
 
 def _get_workspace_dir() -> str:
-    """Путь к workspace для сканирования репо (дашборд/API)."""
-    env = os.getenv("WORKSPACE_DIR", "").strip() or os.getenv("SANDBOX_WORKSPACE_DIR", "").strip()
-    if env:
-        return env
+    """Путь к workspace для сканирования репо (дашборд/API). Приоритет: GIT_WORKSPACE_DIR из Redis, затем WORKSPACE_DIR, затем env."""
     try:
         cfg = get_config_from_redis_sync(get_redis_url())
-        return (cfg.get("WORKSPACE_DIR") or "").strip()
+        git_ws = (cfg.get("GIT_WORKSPACE_DIR") or "").strip()
+        if git_ws:
+            return git_ws
+        ws = (cfg.get("WORKSPACE_DIR") or "").strip()
+        if ws:
+            return ws
     except Exception:
-        return ""
+        pass
+    return (
+        os.getenv("GIT_WORKSPACE_DIR", "").strip()
+        or os.getenv("WORKSPACE_DIR", "").strip()
+        or os.getenv("SANDBOX_WORKSPACE_DIR", "").strip()
+    )
+
+
+@app.route("/save-repos", methods=["POST"])
+def save_repos():
+    """Сохранить GITHUB_TOKEN, GITLAB_TOKEN, GIT_WORKSPACE_DIR в Redis. Токены обновляются только если поле не пустое."""
+    redis_url = get_redis_url()
+    github = (request.form.get("github_token") or "").strip()
+    gitlab = (request.form.get("gitlab_token") or "").strip()
+    git_workspace = (request.form.get("git_workspace_dir") or "").strip()
+    if github:
+        set_config_in_redis_sync(redis_url, "GITHUB_TOKEN", github)
+    if gitlab:
+        set_config_in_redis_sync(redis_url, "GITLAB_TOKEN", gitlab)
+    set_config_in_redis_sync(redis_url, "GIT_WORKSPACE_DIR", git_workspace)
+    flash(
+        "Настройки репозиториев сохранены. Перезапустите assistant-core для применения токенов и пути.",
+        "success",
+    )
+    return redirect(url_for("repos_page"))
 
 
 @app.route("/repos")

@@ -89,6 +89,7 @@ class OrchestratorSettings(BaseSettings):
 class SandboxSettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SANDBOX_", extra="ignore")
     workspace_dir: str = "/workspace"
+    git_workspace_dir: str = Field(default="", alias="GIT_WORKSPACE_DIR")
     cpu_limit_seconds: int = 30
     memory_limit_mb: int = 256
     network_enabled: bool = False

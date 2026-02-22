@@ -29,8 +29,10 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       WORKSPACE_DIR: /workspace
+      GIT_WORKSPACE_DIR: ${GIT_WORKSPACE_DIR:-/workspace}
     volumes:
       - workspace_sandbox:/workspace
+      - git_repos:/git_repos
     depends_on:
       redis:
         condition: service_healthy
@@ -56,11 +58,15 @@ services:
       # Модель эмбеддингов уже в образе; в рантайме Hugging Face не вызываем
       TRANSFORMERS_OFFLINE: 1
       HF_HOME: /app/.cache/huggingface
-      # Песочница: клоны репо и векторная память в одном volume (индексация репо в память)
+      # Песочница: клоны репо и векторная память (по умолчанию /workspace)
       MEMORY_VECTOR_PERSIST_DIR: /workspace/assistant_vectors
       SANDBOX_WORKSPACE_DIR: /workspace
+      # Путь для клонирования репо: по умолчанию /workspace; для отдельного тома задайте GIT_WORKSPACE_DIR=/git_repos
+      GIT_WORKSPACE_DIR: ${GIT_WORKSPACE_DIR:-/workspace}
     volumes:
       - workspace_sandbox:/workspace
+      # Отдельный том для репо: смонтирован в /git_repos; задайте GIT_WORKSPACE_DIR=/git_repos в .env для использования
+      - git_repos:/git_repos
     depends_on:
       redis:
         condition: service_healthy
@@ -95,8 +101,10 @@ services:
 
 volumes:
   redis_data:
-  # Песочница для клонирования репозиториев и векторной памяти (индексация репо в память)
+  # Песочница (общий workspace по умолчанию)
   workspace_sandbox:
+  # Том для клонирования репо: задайте GIT_WORKSPACE_DIR=/git_repos в .env, чтобы клоны шли сюда
+  git_repos:
 
 networks:
   assistant:

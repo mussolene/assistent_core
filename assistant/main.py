@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -58,7 +59,21 @@ async def run_core(config: Config) -> None:
     )
     await memory.connect()
 
-    from assistant.dashboard.config_store import get_config_from_redis
+    from assistant.dashboard.config_store import get_config_from_redis, get_config_from_redis_sync
+
+    # Токены и путь для Git: из Redis (дашборд) или env, чтобы поиск и клонирование работали
+    redis_cfg = get_config_from_redis_sync(config.redis.url)
+    if redis_cfg.get("GITHUB_TOKEN"):
+        os.environ.setdefault("GITHUB_TOKEN", redis_cfg["GITHUB_TOKEN"])
+    if redis_cfg.get("GITLAB_TOKEN"):
+        os.environ.setdefault("GITLAB_TOKEN", redis_cfg["GITLAB_TOKEN"])
+    git_workspace_dir = (
+        (redis_cfg.get("GIT_WORKSPACE_DIR") or "").strip()
+        or config.sandbox.git_workspace_dir
+        or config.sandbox.workspace_dir
+    )
+    if not git_workspace_dir:
+        git_workspace_dir = config.sandbox.workspace_dir
 
     async def get_gateway() -> ModelGateway:
         """Build gateway from current Redis config. Settings apply without restart."""
@@ -116,7 +131,7 @@ async def run_core(config: Config) -> None:
     )
     skills.register(
         GitSkill(
-            workspace_dir=config.sandbox.workspace_dir,
+            workspace_dir=git_workspace_dir,
             cpu_limit_seconds=config.sandbox.cpu_limit_seconds,
             memory_limit_mb=config.sandbox.memory_limit_mb,
             network_enabled=config.sandbox.network_enabled,

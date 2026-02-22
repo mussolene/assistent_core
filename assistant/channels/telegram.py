@@ -714,7 +714,7 @@ async def run_telegram_adapter() -> None:
                         except Exception as e:
                             logger.debug("sendMessage settings/channels: %s", e)
                         continue
-                    # /repos, /github, /gitlab — репозитории (задел 9.2: список и поиск с кнопками)
+                    # /repos, /github, /gitlab — репозитории: настройки в дашборде, поиск/клонирование через ассистента
                     if text in ("/repos", "/github", "/gitlab"):
                         dashboard_url = (
                             os.getenv("DASHBOARD_URL", "http://localhost:8080")
@@ -727,8 +727,9 @@ async def run_telegram_adapter() -> None:
                         )
                         reply = (
                             f"Репозитории ({label}).\n\n"
-                            "Список склонированных репо и поиск по имени — в дашборде. "
-                            "Скоро: список и поиск прямо в чате с кнопками «назад»/«вперёд»."
+                            "В дашборде (кнопка ниже) задаются токены GitHub/GitLab и путь для клонирования. "
+                            "Список склонированных репо — там же.\n\n"
+                            "Можно написать ассистенту: «найди репо на гитхабе …», «мои репо», «клонируй <url>» — поиск и клонирование идут через него."
                         )
                         reply_markup = {
                             "inline_keyboard": [

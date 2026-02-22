@@ -45,6 +45,8 @@ orchestrator:
 
 sandbox:
   workspace_dir: "/workspace"
+  # Путь для клонирования репо (если пусто — используется workspace_dir). Переопределяется через Redis (дашборд) или GIT_WORKSPACE_DIR.
+  git_workspace_dir: ""
   cpu_limit_seconds: 30
   memory_limit_mb: 256
   network_enabled: false
