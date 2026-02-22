@@ -24,9 +24,9 @@ COPY assistant /app/assistant
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -e . --no-deps
 
-# 3) Скачать модель эмбеддингов при сборке (в рантайме сеть не нужна)
+# 3) Скачать модель эмбеддингов при сборке (нужен доступ в сеть; в рантайме TRANSFORMERS_OFFLINE=1)
 RUN mkdir -p /app/.cache/huggingface \
-    && python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
+    && TRANSFORMERS_OFFLINE=0 python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
     && chown -R app:app /app/.cache
 
 USER app
