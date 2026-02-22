@@ -36,6 +36,7 @@ async def run_core(config: Config) -> None:
     from assistant.skills.filesystem import FilesystemSkill
     from assistant.skills.git import GitSkill
     from assistant.skills.mcp_adapter import McpAdapterSkill
+    from assistant.skills.memory_control import MemoryControlSkill
     from assistant.skills.registry import SkillRegistry
     from assistant.skills.runner import SandboxRunner
     from assistant.skills.shell import ShellSkill
@@ -52,6 +53,8 @@ async def run_core(config: Config) -> None:
         vector_persist_dir=config.memory.vector_persist_dir,
         vector_short_max=config.memory.vector_short_max,
         vector_medium_max=config.memory.vector_medium_max,
+        vector_model_name=config.memory.vector_model_name,
+        vector_model_path=config.memory.vector_model_path,
     )
     await memory.connect()
 
@@ -119,7 +122,8 @@ async def run_core(config: Config) -> None:
             network_enabled=config.sandbox.network_enabled,
         )
     )
-    skills.register(VectorRagSkill(memory.get_vector()))
+    skills.register(VectorRagSkill(memory))
+    skills.register(MemoryControlSkill(memory))
     skills.register(TaskSkill())
     skills.register(McpAdapterSkill())
     runner = SandboxRunner()

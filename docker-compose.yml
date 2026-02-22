@@ -28,6 +28,9 @@ services:
       - "8080:8080"
     environment:
       REDIS_URL: redis://redis:6379/0
+      WORKSPACE_DIR: /workspace
+    volumes:
+      - workspace_sandbox:/workspace
     depends_on:
       redis:
         condition: service_healthy
@@ -50,6 +53,14 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:11434/v1}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-ollama}
       CLOUD_FALLBACK_ENABLED: ${CLOUD_FALLBACK_ENABLED:-false}
+      # Модель эмбеддингов уже в образе; в рантайме Hugging Face не вызываем
+      TRANSFORMERS_OFFLINE: 1
+      HF_HOME: /app/.cache/huggingface
+      # Песочница: клоны репо и векторная память в одном volume (индексация репо в память)
+      MEMORY_VECTOR_PERSIST_DIR: /workspace/assistant_vectors
+      SANDBOX_WORKSPACE_DIR: /workspace
+    volumes:
+      - workspace_sandbox:/workspace
     depends_on:
       redis:
         condition: service_healthy
@@ -84,6 +95,8 @@ services:
 
 volumes:
   redis_data:
+  # Песочница для клонирования репозиториев и векторной памяти (индексация репо в память)
+  workspace_sandbox:
 
 networks:
   assistant:

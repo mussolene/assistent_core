@@ -21,6 +21,8 @@ class VectorMemory:
         top_k: int = 5,
         persist_path: str | Path | None = None,
         max_size: int | None = None,
+        model_name: str = "all-MiniLM-L6-v2",
+        model_path: str | Path | None = None,
     ) -> None:
         self._collection = collection
         self._top_k = top_k
@@ -28,6 +30,8 @@ class VectorMemory:
             Path(persist_path) if persist_path else Path("/tmp/assistant_vectors.json")
         )
         self._max_size = max_size
+        self._model_name = model_name
+        self._model_path = Path(model_path) if model_path else None
         self._model = None
         self._documents: list[dict[str, Any]] = []
         self._vectors: list[list[float]] = []
@@ -38,7 +42,13 @@ class VectorMemory:
             try:
                 from sentence_transformers import SentenceTransformer
 
-                self._model = SentenceTransformer("all-MiniLM-L6-v2")
+                # Локальный путь — без обращения к Hugging Face (офлайн). Иначе имя модели (из кэша при TRANSFORMERS_OFFLINE=1).
+                load_path = (
+                    self._model_path
+                    if self._model_path and self._model_path.exists()
+                    else self._model_name
+                )
+                self._model = SentenceTransformer(str(load_path))
             except Exception as e:
                 logger.warning(
                     "sentence_transformers not available: %s. Vector memory disabled.", e

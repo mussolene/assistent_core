@@ -1,21 +1,33 @@
 # syntax=docker/dockerfile:1
-# Use BuildKit for cache mounts: DOCKER_BUILDKIT=1 docker compose build
+# Use BuildKit: DOCKER_BUILDKIT=1 docker compose build
+# Модель для векторной памяти качается при сборке — в рантайме Hugging Face не дергаем (TRANSFORMERS_OFFLINE=1).
+# PyTorch ставим CPU-only, чтобы уменьшить размер образа.
 FROM python:3.11-slim
 
 RUN groupadd -r -g 1000 app && useradd -r -u 1000 -g app -m -d /app app
 WORKDIR /app
 ENV HOME=/app
+# Кэш эмбеддингов в образе; офлайн в рантайме
+ENV HF_HOME=/app/.cache/huggingface
+ENV TRANSFORMERS_OFFLINE=1
+ENV SENTENCE_TRANSFORMERS_HOME=/app/.cache/huggingface
 
-# 1) Install deps from requirements.txt — layer cached until requirements change
+# 1) PyTorch CPU-only (меньше места, без CUDA), затем остальные зависимости
 COPY docker/requirements.txt /app/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --no-cache-dir -r /app/requirements.txt
+    pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r /app/requirements.txt
 
-# 2) Copy app and install package only (--no-deps); re-runs only when code changes
+# 2) Пакет приложения
 COPY pyproject.toml /app/
 COPY assistant /app/assistant
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -e . --no-deps
+
+# 3) Скачать модель эмбеддингов при сборке (в рантайме сеть не нужна)
+RUN mkdir -p /app/.cache/huggingface \
+    && python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')" \
+    && chown -R app:app /app/.cache
 
 USER app
 ENV PYTHONUNBUFFERED=1

@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from assistant.memory.manager import (
+    VECTOR_LEVEL_LONG,
+    VECTOR_LEVEL_MEDIUM,
     VECTOR_LEVEL_SHORT,
     MemoryManager,
 )
@@ -86,8 +88,9 @@ async def test_memory_manager_get_context_no_vector():
     )
     mgr._summary = MagicMock()
     mgr._summary.get_summary = AsyncMock(return_value="Old summary.")
-    for vec in (mgr._vector_short, mgr._vector_medium, mgr._vector_long):
-        vec._get_model = MagicMock(return_value=None)
+    mock_vec = MagicMock()
+    mock_vec._get_model = MagicMock(return_value=None)
+    mgr._get_vector_memory = MagicMock(return_value=mock_vec)
     mgr._user_data = MagicMock()
     mgr._user_data.get = AsyncMock(return_value={})
     mgr._task = MagicMock()
@@ -99,16 +102,22 @@ async def test_memory_manager_get_context_no_vector():
 
 @pytest.mark.asyncio
 async def test_memory_manager_get_context_with_vector_and_tool_results():
-    """get_context_for_user with vector model and tool_results."""
+    """get_context_for_user with vector model and tool_results (per-user vectors)."""
     mgr = MemoryManager("redis://localhost:6379/0")
     mgr._short = MagicMock()
     mgr._short.get_messages = AsyncMock(return_value=[{"role": "user", "content": "hi"}])
     mgr._summary = MagicMock()
     mgr._summary.get_summary = AsyncMock(return_value=None)
-    mgr._vector_short._get_model = MagicMock(return_value=MagicMock())
-    mgr._vector_short.search = MagicMock(return_value=[{"text": "relevant memory", "score": 0.9}])
-    mgr._vector_medium._get_model = MagicMock(return_value=None)
-    mgr._vector_long._get_model = MagicMock(return_value=None)
+    mock_vec_with_hits = MagicMock()
+    mock_vec_with_hits._get_model = MagicMock(return_value=MagicMock())
+    mock_vec_with_hits.search = MagicMock(return_value=[{"text": "relevant memory", "score": 0.9}])
+    mock_vec_empty = MagicMock()
+    mock_vec_empty._get_model = MagicMock(return_value=None)
+
+    def get_vec(user_id, level):
+        return mock_vec_with_hits if level == "short" else mock_vec_empty
+
+    mgr._get_vector_memory = MagicMock(side_effect=get_vec)
     mgr._user_data = MagicMock()
     mgr._user_data.get = AsyncMock(return_value={})
     mgr._task = MagicMock()
@@ -119,27 +128,28 @@ async def test_memory_manager_get_context_with_vector_and_tool_results():
 
 @pytest.mark.asyncio
 async def test_memory_manager_append_store_append_tool_add_vector():
-    """append_message, store_task_fact, append_tool_result, add_to_vector."""
+    """append_message, store_task_fact, append_tool_result, add_to_vector (per user_id)."""
     mgr = MemoryManager("redis://localhost:6379/0")
     mgr._short = MagicMock()
     mgr._short.append = AsyncMock()
     mgr._task = MagicMock()
     mgr._task.set = AsyncMock()
     mgr._task.append_tool_result = AsyncMock()
-    for vec in (mgr._vector_short, mgr._vector_medium, mgr._vector_long):
-        vec.add = MagicMock()
+    mock_vec = MagicMock()
+    mock_vec.add = MagicMock()
+    mgr._get_vector_memory = MagicMock(return_value=mock_vec)
     await mgr.append_message("u1", "user", "hello")
     mgr._short.append.assert_called_once_with("u1", "user", "hello", "default")
     await mgr.store_task_fact("t1", "key", "value")
     mgr._task.set.assert_called_once_with("t1", "key", "value")
     await mgr.append_tool_result("t1", "fs", {"path": "/x"})
     mgr._task.append_tool_result.assert_called_once_with("t1", "fs", {"path": "/x"})
-    await mgr.add_to_vector("some text", {"source": "test"})
-    for vec in (mgr._vector_short, mgr._vector_medium, mgr._vector_long):
-        vec.add.assert_called_once()
-        args, kwargs = vec.add.call_args
-        meta = args[1] if len(args) > 1 else kwargs
-        assert "level" in (meta or {})
+    await mgr.add_to_vector("u1", "some text", {"source": "test"})
+    assert mgr._get_vector_memory.call_count == 3
+    assert mock_vec.add.call_count == 3
+    args, kwargs = mock_vec.add.call_args
+    meta = args[1] if len(args) > 1 else kwargs
+    assert "level" in (meta or {})
 
 
 @pytest.mark.asyncio
@@ -181,7 +191,7 @@ async def test_short_term_with_mock_redis():
 
 @pytest.mark.asyncio
 async def test_memory_manager_connect_and_getters():
-    """connect() and get_short_term, get_task_memory, get_summary, get_vector, get_user_data_memory."""
+    """connect() and getters; get_vector(user_id) returns per-user long-term vector."""
     mock_short = MagicMock()
     mock_short.connect = AsyncMock()
     mock_task = MagicMock()
@@ -207,24 +217,29 @@ async def test_memory_manager_connect_and_getters():
                         assert mgr.get_short_term() is mock_short
                         assert mgr.get_task_memory() is mock_task
                         assert mgr.get_summary() is mock_summary
-                        assert mgr.get_vector() is mock_vector  # long-term
+                        assert mgr.get_vector("u1") is mock_vector
+                        assert mgr.get_vector_short("u1") is mock_vector
                         assert mgr.get_user_data_memory() is mock_user_data
 
 
 @pytest.mark.asyncio
 async def test_memory_manager_clear_vector():
-    """clear_vector(level) clears one or all levels."""
+    """clear_vector(user_id, level) clears one user's vector level or all levels."""
     mgr = MemoryManager("redis://localhost:6379/0")
-    for vec in (mgr._vector_short, mgr._vector_medium, mgr._vector_long):
-        vec.clear = MagicMock()
-    mgr.clear_vector(VECTOR_LEVEL_SHORT)
-    mgr._vector_short.clear.assert_called_once()
-    mgr._vector_medium.clear.assert_not_called()
-    mgr._vector_long.clear.assert_not_called()
-    mgr.clear_vector(None)
-    assert mgr._vector_short.clear.call_count == 2
-    assert mgr._vector_medium.clear.call_count == 1
-    assert mgr._vector_long.clear.call_count == 1
+    mock_short = MagicMock()
+    mock_medium = MagicMock()
+    mock_long = MagicMock()
+    mgr._vector_cache[("u1", VECTOR_LEVEL_SHORT)] = mock_short
+    mgr._vector_cache[("u1", VECTOR_LEVEL_MEDIUM)] = mock_medium
+    mgr._vector_cache[("u1", VECTOR_LEVEL_LONG)] = mock_long
+    mgr.clear_vector(user_id="u1", level=VECTOR_LEVEL_SHORT)
+    mock_short.clear.assert_called_once()
+    mock_medium.clear.assert_not_called()
+    mock_long.clear.assert_not_called()
+    mgr.clear_vector(user_id="u1", level=None)
+    assert mock_short.clear.call_count == 2
+    assert mock_medium.clear.call_count == 1
+    assert mock_long.clear.call_count == 1
 
 
 @pytest.mark.asyncio
@@ -240,4 +255,28 @@ async def test_memory_manager_user_data():
     await mgr.set_user_data("u1", {"tz": "Europe/Moscow"})
     mgr._user_data.set.assert_called_once_with("u1", {"tz": "Europe/Moscow"})
     await mgr.clear_user_data("u1")
+    mgr._user_data.clear.assert_called_once_with("u1")
+
+
+@pytest.mark.asyncio
+async def test_memory_manager_reset_memory_and_clear_short_term():
+    """reset_memory(scope) and clear_short_term; vector clear is per user."""
+    mgr = MemoryManager("redis://localhost:6379/0")
+    mgr._short.clear = AsyncMock()
+    mgr._summary.clear = AsyncMock()
+    mgr._user_data.clear = AsyncMock()
+    mock_short = MagicMock()
+    mock_medium = MagicMock()
+    mock_long = MagicMock()
+    mgr._vector_cache[("u1", VECTOR_LEVEL_SHORT)] = mock_short
+    mgr._vector_cache[("u1", VECTOR_LEVEL_MEDIUM)] = mock_medium
+    mgr._vector_cache[("u1", VECTOR_LEVEL_LONG)] = mock_long
+    await mgr.clear_short_term("u1", "s1")
+    mgr._short.clear.assert_called_once_with("u1", "s1")
+    await mgr.reset_memory("u1", scope="all")
+    mock_short.clear.assert_called_once()
+    mock_medium.clear.assert_called_once()
+    mock_long.clear.assert_called_once()
+    mgr._short.clear.assert_called_with("u1", "default")
+    mgr._summary.clear.assert_called_once_with("u1", "default")
     mgr._user_data.clear.assert_called_once_with("u1")

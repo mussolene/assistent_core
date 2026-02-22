@@ -36,9 +36,9 @@ class ToolAgent(BaseAgent):
             if not name:
                 results.append({"error": "missing skill name", "ok": False})
                 continue
+            if "user_id" not in params and context.user_id:
+                params["user_id"] = context.user_id
             if name == "tasks":
-                if "user_id" not in params and context.user_id:
-                    params["user_id"] = context.user_id
                 action = params.get("action")
                 if action is not None:
                     from assistant.skills.tasks import _normalize_action

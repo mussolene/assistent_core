@@ -35,6 +35,8 @@ memory:
   vector_persist_dir: "/tmp/assistant_vectors"
   vector_short_max: 100
   vector_medium_max: 500
+  vector_model_name: "all-MiniLM-L6-v2"
+  # vector_model_path: "/app/.cache/huggingface/..."  # для офлайн — путь к папке модели
 
 orchestrator:
   autonomous_mode: false

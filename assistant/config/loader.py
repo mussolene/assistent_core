@@ -75,6 +75,8 @@ class MemorySettings(BaseSettings):
     vector_persist_dir: str = "/tmp/assistant_vectors"
     vector_short_max: int = 100
     vector_medium_max: int = 500
+    vector_model_name: str = "all-MiniLM-L6-v2"
+    vector_model_path: str | None = None  # локальный путь — без обращения к Hugging Face
 
 
 class OrchestratorSettings(BaseSettings):

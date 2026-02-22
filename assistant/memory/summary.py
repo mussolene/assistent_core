@@ -34,3 +34,9 @@ class SummaryMemory:
     async def get_summary(self, user_id: str, session_id: str = "default") -> str | None:
         await self.connect()
         return await self._client.get(self._key(user_id, session_id))
+
+    async def clear(self, user_id: str, session_id: str = "default") -> None:
+        """Очистить сжатое резюме для пользователя/сессии."""
+        await self.connect()
+        await self._client.delete(self._key(user_id, session_id))
+        logger.info("Summary memory cleared for user_id=%s session_id=%s", user_id, session_id)

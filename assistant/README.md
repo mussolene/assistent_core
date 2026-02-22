@@ -119,14 +119,26 @@ Or set `ORCHESTRATOR_AUTONOMOUS_MODE=true` in `.env`. When `autonomous_mode` is 
 ## Memory: уровни и данные пользователя
 
 - **Кратковременная (short-term)**: последние N сообщений в Redis; окно задаётся `memory.short_term_window`.
-- **Векторная память** включена по умолчанию и имеет три уровня:
-  - **Краткосрочная (short)**: до `memory.vector_short_max` записей (по умолчанию 100), хранится в `vector_persist_dir/short.json`.
-  - **Среднесрочная (medium)**: до `memory.vector_medium_max` (500), `medium.json`.
-  - **Долговременная (long)**: без лимита, `long.json`.
-- Очистка векторной памяти: `memory.clear_vector(level)` — передать `"short"`, `"medium"`, `"long"` или `None` (очистить все уровни). Константы: `VECTOR_LEVEL_SHORT`, `VECTOR_LEVEL_MEDIUM`, `VECTOR_LEVEL_LONG` в `assistant.memory.manager`.
+- **Векторная память** включена по умолчанию и работает **в разрезе пользователя** (user_id). Три уровня на пользователя:
+  - **Краткосрочная (short)**: до `memory.vector_short_max` записей (по умолчанию 100), хранится в `vector_persist_dir/<user_id>/short.json`.
+  - **Среднесрочная (medium)**: до `memory.vector_medium_max` (500), `vector_persist_dir/<user_id>/medium.json`.
+  - **Долговременная (long)**: без лимита, `vector_persist_dir/<user_id>/long.json`.
+- Очистка векторной памяти: `memory.clear_vector(user_id=..., level=...)` — по пользователю и уровню (`"short"`, `"medium"`, `"long"` или `None` — все уровни). Константы: `VECTOR_LEVEL_SHORT`, `VECTOR_LEVEL_MEDIUM`, `VECTOR_LEVEL_LONG` в `assistant.memory.manager`.
 - **Данные о пользователе**: ключ–значение в Redis по `user_id` (профиль, таймзона, предпочтения). API: `get_user_data(user_id)`, `set_user_data(user_id, ...)`, `clear_user_data(user_id)`. Эти данные автоматически попадают в системный контекст при сборке сообщений для модели.
 
-Настройки в `memory`: `vector_persist_dir`, `vector_short_max`, `vector_medium_max` (см. `assistant/config/default.yaml`).
+Настройки в `memory`: `vector_persist_dir`, `vector_short_max`, `vector_medium_max`, `vector_model_name`, `vector_model_path` (см. `assistant/config/default.yaml`).
+
+**Хранение:** кратковременная память, summary, task, user_data — в Redis; векторная — в JSON-файлах в `vector_persist_dir` (по одному файлу на уровень на пользователя).
+
+**Volume `workspace_sandbox` (Docker):** в `docker-compose.yml` задан общий volume `workspace_sandbox`, смонтированный в `assistant-core` и в `dashboard` в `/workspace`. В нём совмещены: (1) песочница для клонирования репозиториев — git skill клонирует в `/workspace`, filesystem/shell работают с этим каталогом; (2) векторная память — `MEMORY_VECTOR_PERSIST_DIR=/workspace/assistant_vectors`, т.е. индексы лежат в том же volume. Так можно попросить ассистента проиндексировать весь репозиторий (файлы из `/workspace/<repo>`) и положить в векторную память; данные переживают перезапуск контейнеров.
+
+**Очистка и полный сброс:** skill `memory_control` (все действия в разрезе `user_id`):
+- `action=clear_vector`, `user_id=…`, `level=short|medium|long|all` — очистить векторную память пользователя по уровню или всю.
+- `action=reset_memory`, `user_id=…`, `scope=all|vector|short_term|summary|user_data` — сброс памяти пользователя (полный или по типу). Модель может вызвать этот skill по запросу пользователя («сбрось память», «очисти контекст»).
+
+Программно: `memory.clear_vector(user_id=..., level=...)`, `memory.clear_short_term(user_id, session_id)`, `await memory.reset_memory(user_id, scope=…)`.
+
+**Офлайн и размер образа:** в Docker-образе модель эмбеддингов (`all-MiniLM-L6-v2`) скачивается при сборке; в рантайме задаётся `TRANSFORMERS_OFFLINE=1`, обращений к Hugging Face нет. Используется PyTorch CPU-only, чтобы уменьшить размер образа.
 
 ## Adding a new skill
 

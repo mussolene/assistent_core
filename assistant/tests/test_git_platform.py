@@ -33,9 +33,7 @@ def _mock_httpx_client(status_code: int = 201, json_data: dict | None = None):
 @pytest.mark.asyncio
 async def test_create_merge_request_github_url_success():
     """GitHub repo URL: uses GitHub API and returns PR url/number."""
-    client = _mock_httpx_client(
-        201, {"html_url": "https://github.com/o/r/pull/2", "number": 2}
-    )
+    client = _mock_httpx_client(201, {"html_url": "https://github.com/o/r/pull/2", "number": 2})
     with patch(
         "assistant.skills.git_platform.httpx.AsyncClient",
         return_value=client,
