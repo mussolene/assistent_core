@@ -175,8 +175,25 @@ def run_stdio() -> None:
         if method == "tools/call":
             name = params.get("name")
             args = params.get("arguments") or {}
+            logger.info(
+                "MCP tools/call request transport=stdio tool=%s arguments=%s",
+                name,
+                json.dumps(args, ensure_ascii=False)[:500],
+            )
             try:
                 result = handle_tools_call(name, args)
+                resp_preview = ""
+                if isinstance(result, dict) and "content" in result:
+                    for c in result.get("content", [])[:1]:
+                        if isinstance(c, dict) and c.get("type") == "text":
+                            t = (c.get("text") or "")[:200]
+                            resp_preview = t.replace("\n", " ")
+                            break
+                logger.info(
+                    "MCP tools/call response transport=stdio tool=%s result_preview=%s",
+                    name,
+                    resp_preview or "(empty)",
+                )
                 reply(result)
             except Exception as e:
                 logger.exception(
@@ -186,6 +203,7 @@ def run_stdio() -> None:
                     os.getcwd(),
                     sys.path[:3],
                 )
+                logger.warning("MCP tools/call response transport=stdio tool=%s error=%s", name, str(e)[:200])
                 reply(error={"code": -32603, "message": str(e)})
             continue
         if req_id is not None:
