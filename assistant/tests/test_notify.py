@@ -205,6 +205,11 @@ def test_get_dev_chat_id_exception():
         assert notify.get_dev_chat_id() is None
 
 
+def test_pop_dev_feedback_redis_raises_returns_empty():
+    with patch("redis.from_url", side_effect=ConnectionError("redis down")):
+        assert notify.pop_dev_feedback("123") == []
+
+
 def test_push_and_pop_dev_feedback():
     r = MagicMock()
     r.rpush = MagicMock()

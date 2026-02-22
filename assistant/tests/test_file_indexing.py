@@ -6,6 +6,7 @@ import zipfile
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from assistant.core import file_indexing as fi
@@ -351,6 +352,69 @@ async def test_index_telegram_attachments_getfile_fails():
         )
     assert ref_ids == []
     assert text == ""
+
+
+@pytest.mark.asyncio
+async def test_index_telegram_attachments_getfile_ok_but_no_file_path_skips():
+    """getFile returns ok True but result has no file_path -> attachment skipped, ref_ids empty."""
+    memory = MagicMock()
+    get_file_resp = MagicMock()
+    get_file_resp.json.return_value = {"ok": True, "result": {}}
+    with patch("assistant.core.file_indexing.httpx.AsyncClient") as ac:
+        instance = MagicMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=None)
+        instance.get = AsyncMock(return_value=get_file_resp)
+        ac.return_value = instance
+        ref_ids, text = await fi.index_telegram_attachments(
+            "redis://localhost:6379/0",
+            memory,
+            "u1",
+            "c1",
+            [{"file_id": "f1", "filename": "a.txt", "source": "telegram"}],
+            "token",
+        )
+    assert ref_ids == []
+    assert text == ""
+    memory.add_to_vector.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_index_telegram_attachments_download_raises_skips_attachment():
+    """When download raises (e.g. HTTPStatusError), exception is caught, ref_ids stay empty for that attachment."""
+    memory = MagicMock()
+    memory.add_to_vector = AsyncMock()
+    get_file_resp = MagicMock()
+    get_file_resp.json.return_value = {"ok": True, "result": {"file_path": "documents/f1.txt"}}
+    download_resp = MagicMock()
+    download_resp.raise_for_status = MagicMock(
+        side_effect=httpx.HTTPStatusError("500", request=MagicMock(), response=MagicMock())
+    )
+    get_calls = []
+
+    async def fake_get(url, **kwargs):
+        get_calls.append(url)
+        if "getFile" in url:
+            return get_file_resp
+        return download_resp
+
+    with patch("assistant.core.file_indexing.httpx.AsyncClient") as ac:
+        instance = MagicMock()
+        instance.__aenter__ = AsyncMock(return_value=instance)
+        instance.__aexit__ = AsyncMock(return_value=None)
+        instance.get = AsyncMock(side_effect=fake_get)
+        ac.return_value = instance
+        ref_ids, text = await fi.index_telegram_attachments(
+            "redis://localhost:6379/0",
+            memory,
+            "u1",
+            "c1",
+            [{"file_id": "f1", "filename": "a.txt", "source": "telegram"}],
+            "token",
+        )
+    assert ref_ids == []
+    assert text == ""
+    memory.add_to_vector.assert_not_called()
 
 
 @pytest.mark.asyncio

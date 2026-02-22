@@ -6,12 +6,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from assistant.skills.tasks import (
+    REDIS_TASK_PREFIX,
     TaskSkill,
+    _check_owner,
+    _date_to_ordinal,
     _format_task_created_reply,
+    _human_date,
     _is_actual_task,
     _normalize_action,
     _normalize_task_params,
+    _ordinal_to_date,
     _parse_time_spent,
+    _task_matches_query,
     format_task_details,
     format_tasks_for_telegram,
     format_tasks_list_readable,
@@ -74,6 +80,38 @@ def redis_mock():
 @pytest.fixture
 def skill():
     return TaskSkill()
+
+
+@pytest.mark.asyncio
+async def test_tasks_redis_ping_raises_returns_error(skill):
+    with patch("assistant.skills.tasks._get_redis", new_callable=AsyncMock) as mock_get:
+        client = MagicMock()
+        client.ping = AsyncMock(side_effect=ConnectionError("redis down"))
+        client.aclose = AsyncMock()
+        mock_get.return_value = client
+        out = await skill.run({"action": "create_task", "user_id": "u1", "title": "X"})
+    assert out.get("ok") is False
+    assert "Redis" in out.get("error", "") or "redis" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_tasks_unknown_action_returns_error(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        out = await skill.run({"action": "unknown_action", "user_id": "u1"})
+    assert out.get("ok") is False
+    assert "Неизвестное" in out.get("error", "") or "действие" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_tasks_get_due_reminders_action(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        out = await skill.run({"action": "get_due_reminders", "user_id": "u1"})
+    assert out.get("ok") is True
+    assert "due_reminders" in out and isinstance(out["due_reminders"], list)
 
 
 @pytest.mark.asyncio
@@ -170,6 +208,55 @@ async def test_tasks_isolated_by_user(skill, redis_mock):
     assert len(list_b["tasks"]) == 1 and list_b["tasks"][0]["title"] == "Bob task"
 
 
+def test_tasks_check_owner():
+    assert _check_owner({"user_id": "u1"}, "u1") is True
+    assert _check_owner({"user_id": "u1"}, "u2") is False
+    assert _check_owner(None, "u1") is False
+    assert _check_owner({}, "u1") is False
+
+
+def test_tasks_normalize_action_alias():
+    assert _normalize_action("listtasks") == "list_tasks"
+    assert _normalize_action("create_task") == "create_task"
+    assert _normalize_action("  listtasks  ") == "list_tasks"
+
+
+@pytest.mark.asyncio
+async def test_tasks_list_tasks_action_alias_listtasks(skill, redis_mock):
+    """Action 'listtasks' (alias) works like list_tasks."""
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "X"})
+        out = await skill.run({"action": "listtasks", "user_id": "u1"})
+    assert out.get("ok") is True
+    assert len(out.get("tasks", [])) == 1
+
+
+@pytest.mark.asyncio
+async def test_tasks_get_task_wrong_user_returns_error(skill, redis_mock):
+    """get_task with task_id belonging to another user returns not ok."""
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr = await skill.run({"action": "create_task", "user_id": "alice", "title": "Secret"})
+        task_id = cr["task_id"]
+        out = await skill.run({"action": "get_task", "user_id": "bob", "task_id": task_id})
+    assert out.get("ok") is False or "task" not in out or out.get("task") is None
+
+
+@pytest.mark.asyncio
+async def test_tasks_delete_task_corrupt_json_returns_error(skill, redis_mock):
+    """delete_task when task key has invalid JSON -> _load_task returns None -> error or no-op."""
+    redis_mock._data[f"{REDIS_TASK_PREFIX}fake-id"] = "{invalid json"
+    redis_mock._data["assistant:tasks:user:u1"] = json.dumps(["fake-id"])
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        out = await skill.run({"action": "delete_task", "user_id": "u1", "task_id": "fake-id"})
+    assert out.get("ok") is False or "error" in out
+
+
 @pytest.mark.asyncio
 async def test_tasks_delete(skill, redis_mock):
     with patch(
@@ -184,6 +271,34 @@ async def test_tasks_delete(skill, redis_mock):
     ):
         list_out = await skill.run({"action": "list_tasks", "user_id": "u1"})
     assert list_out.get("tasks", []) == []
+
+
+@pytest.mark.asyncio
+async def test_tasks_update_wrong_user_returns_error(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr = await skill.run({"action": "create_task", "user_id": "alice", "title": "T"})
+        out = await skill.run(
+            {"action": "update_task", "user_id": "bob", "task_id": cr["task_id"], "title": "Hack"}
+        )
+    assert out.get("ok") is False
+
+
+@pytest.mark.asyncio
+async def test_tasks_list_with_status_filter(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "Open task"})
+        cr2 = await skill.run({"action": "create_task", "user_id": "u1", "title": "Done task"})
+        await skill.run(
+            {"action": "update_task", "user_id": "u1", "task_id": cr2["task_id"], "status": "done"}
+        )
+        out = await skill.run({"action": "list_tasks", "user_id": "u1", "status": "done"})
+    assert out.get("ok") is True
+    assert len(out.get("tasks", [])) == 1
+    assert out["tasks"][0]["status"] == "done"
 
 
 @pytest.mark.asyncio
@@ -205,6 +320,33 @@ async def test_tasks_update(skill, redis_mock):
         one = await skill.run({"action": "get_task", "user_id": "u1", "task_id": task_id})
     assert one["task"]["title"] == "New"
     assert one["task"]["status"] == "done"
+
+
+@pytest.mark.asyncio
+async def test_tasks_set_reminder_invalid_datetime_returns_error(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr = await skill.run({"action": "create_task", "user_id": "u1", "title": "T"})
+        task_id = cr["task_id"]
+        out = await skill.run(
+            {"action": "set_reminder", "user_id": "u1", "task_id": task_id, "reminder_at": "not-a-date"}
+        )
+    assert out.get("ok") is False
+    assert "reminder_at" in out.get("error", "") or "ISO" in out.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_tasks_add_link_missing_link_returns_error(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr = await skill.run({"action": "create_task", "user_id": "u1", "title": "T"})
+        out = await skill.run(
+            {"action": "add_link", "user_id": "u1", "task_id": cr["task_id"]}
+        )
+    assert out.get("ok") is False
+    assert "link" in out.get("error", "").lower() or "task_id" in out.get("error", "").lower()
 
 
 @pytest.mark.asyncio
@@ -233,6 +375,67 @@ async def test_tasks_add_link_and_document(skill, redis_mock):
         one = await skill.run({"action": "get_task", "user_id": "u1", "task_id": task_id})
     assert len(one["task"].get("links", [])) == 1
     assert len(one["task"].get("documents", [])) == 1
+
+
+@pytest.mark.asyncio
+async def test_tasks_add_document_no_task_id_returns_error(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        out = await skill.run(
+            {"action": "add_document", "user_id": "u1", "document": {"name": "d", "url": "http://d"}}
+        )
+    assert out.get("ok") is False
+    assert "task_id" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_tasks_add_document_no_document_returns_error(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr = await skill.run({"action": "create_task", "user_id": "u1", "title": "T"})
+        out = await skill.run(
+            {"action": "add_document", "user_id": "u1", "task_id": cr["task_id"]}
+        )
+    assert out.get("ok") is False
+    assert "document" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_tasks_add_link_wrong_user_returns_error(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr = await skill.run({"action": "create_task", "user_id": "alice", "title": "T"})
+        out = await skill.run(
+            {
+                "action": "add_link",
+                "user_id": "bob",
+                "task_id": cr["task_id"],
+                "link": {"url": "https://x.com", "name": "X"},
+            }
+        )
+    assert out.get("ok") is False
+    assert "доступ запрещён" in out.get("error", "") or "не найдена" in out.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_tasks_add_document_wrong_user_returns_error(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr = await skill.run({"action": "create_task", "user_id": "alice", "title": "T"})
+        out = await skill.run(
+            {
+                "action": "add_document",
+                "user_id": "bob",
+                "task_id": cr["task_id"],
+                "document": {"url": "https://d", "name": "D"},
+            }
+        )
+    assert out.get("ok") is False
+    assert "доступ запрещён" in out.get("error", "") or "не найдена" in out.get("error", "")
 
 
 @pytest.mark.asyncio
@@ -294,6 +497,42 @@ async def test_tasks_format_for_telegram_with_task_ids(skill, redis_mock):
     assert out.get("tasks_count") == 1
     assert "Удалить" in out["inline_keyboard"][0][0]["text"]
     assert out["inline_keyboard"][0][0]["callback_data"] == f"task:delete:{cr1['task_id']}"
+
+
+@pytest.mark.asyncio
+async def test_tasks_format_for_telegram_show_done_button(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        await skill.run({"action": "create_task", "user_id": "u1", "title": "T"})
+        out = await skill.run(
+            {
+                "action": "format_for_telegram",
+                "user_id": "u1",
+                "show_done_button": True,
+            }
+        )
+    assert out.get("ok") is True
+    assert "inline_keyboard" in out
+    assert out.get("tasks_count") >= 0
+
+
+@pytest.mark.asyncio
+async def test_tasks_set_reminder_wrong_user_returns_error(skill, redis_mock):
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        cr = await skill.run({"action": "create_task", "user_id": "alice", "title": "T"})
+        out = await skill.run(
+            {
+                "action": "set_reminder",
+                "user_id": "bob",
+                "task_id": cr["task_id"],
+                "reminder_at": "2025-12-31T12:00:00Z",
+            }
+        )
+    assert out.get("ok") is False
+    assert "доступ запрещён" in out.get("error", "") or "не найдена" in out.get("error", "")
 
 
 @pytest.mark.asyncio
@@ -364,6 +603,27 @@ def test_format_task_created_reply():
     assert "Срок:" not in _format_task_created_reply(t2)
 
 
+def test_task_matches_query():
+    assert _task_matches_query({"title": "A", "description": "B"}, "") is True
+    assert _task_matches_query({"title": "Hello", "description": "World"}, "hello") is True
+    assert _task_matches_query({"title": "X", "description": "Secret word"}, "word") is True
+    assert _task_matches_query({"title": "X", "description": "Y"}, "z") is False
+
+
+def test_human_date():
+    assert _human_date("2026-02-20") == "20.02"
+    assert _human_date(None) == ""
+    assert _human_date("") == ""
+    assert _human_date("2026-02-20T12:00:00") == "20.02"
+
+
+def test_ordinal_to_date():
+    from datetime import date
+
+    d = date(2026, 2, 20)
+    assert _ordinal_to_date(d.toordinal()) == "2026-02-20"
+
+
 def test_is_actual_task():
     from datetime import date
 
@@ -409,9 +669,17 @@ def test_normalize_task_params():
     )
 
 
+def test_date_to_ordinal():
+    assert _date_to_ordinal("2026-02-20") is not None
+    assert _date_to_ordinal(None) is None
+    assert _date_to_ordinal("") is None
+    assert _date_to_ordinal("bad-date") is None
+
+
 def test_parse_time_spent():
     assert _parse_time_spent(None) is None
     assert _parse_time_spent(30) == 30
+    assert _parse_time_spent(1.5) == 90
     assert _parse_time_spent("2h") == 120
     assert _parse_time_spent("1.5 часа") == 90
     assert _parse_time_spent("45 min") == 45
@@ -472,6 +740,24 @@ def test_get_due_reminders_sync_empty():
         client = MagicMock()
         client.zrangebyscore.return_value = []
         client.get.return_value = None
+        from_url.return_value = client
+        out = get_due_reminders_sync("redis://localhost/0")
+    assert out == []
+
+
+def test_get_due_reminders_sync_redis_raises_returns_empty():
+    with patch("redis.from_url", side_effect=ConnectionError("redis down")):
+        out = get_due_reminders_sync("redis://localhost/0")
+    assert out == []
+
+
+def test_get_due_reminders_sync_invalid_json_skips_task():
+    with patch("redis.from_url") as from_url:
+        client = MagicMock()
+        client.zrangebyscore.return_value = ["tid1"]
+        client.zremrangebyscore = MagicMock()
+        client.get.return_value = "{invalid"
+        client.close = MagicMock()
         from_url.return_value = client
         out = get_due_reminders_sync("redis://localhost/0")
     assert out == []

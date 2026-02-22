@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from assistant.skills.git_platform import (
@@ -224,6 +225,80 @@ async def test_search_github_repos_missing_query():
 
 
 @pytest.mark.asyncio
+async def test_create_merge_request_gitlab_non_200_returns_error():
+    """GitLab API returns non-200/201 -> ok False with error message."""
+    response = MagicMock()
+    response.status_code = 403
+    response.headers = {"content-type": "application/json"}
+    response.json = MagicMock(return_value={"message": "Forbidden"})
+    response.text = "Forbidden"
+    client = MagicMock()
+    client.post = AsyncMock(return_value=response)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=None)
+    with patch("assistant.skills.git_platform.httpx.AsyncClient", return_value=client):
+        out = await create_merge_request(
+            repo="https://gitlab.com/o/r",
+            source_branch="f",
+            target_branch="main",
+            title="T",
+            gitlab_token="gl",
+        )
+    assert out["ok"] is False
+    assert "403" in out.get("error", "") or "Forbidden" in out.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_create_merge_request_github_post_raises_returns_error():
+    """GitHub client.post raises -> ok False with error message."""
+    client = MagicMock()
+    client.post = AsyncMock(side_effect=httpx.ConnectError("network error"))
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=None)
+    with patch("assistant.skills.git_platform.httpx.AsyncClient", return_value=client):
+        out = await create_merge_request(
+            repo="https://github.com/o/r",
+            source_branch="f",
+            target_branch="main",
+            title="T",
+            github_token="gh",
+        )
+    assert out["ok"] is False
+    assert "network" in out.get("error", "").lower() or "error" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
+async def test_search_github_repos_non_200_returns_error():
+    """GitHub search API returns non-200 -> ok False."""
+    response = MagicMock()
+    response.status_code = 422
+    response.headers = {"content-type": "application/json"}
+    response.json = MagicMock(return_value={"message": "Validation Failed"})
+    response.text = "error"
+    client = MagicMock()
+    client.get = AsyncMock(return_value=response)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=None)
+    with patch("assistant.skills.git_platform.httpx.AsyncClient", return_value=client):
+        out = await search_github_repos("q", token="t")
+    assert out["ok"] is False
+    assert "422" in out.get("error", "") or "Validation" in out.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_search_github_repos_exception_returns_error():
+    """GitHub search client.get raises -> ok False with error message."""
+    client = MagicMock()
+    client.get = AsyncMock(side_effect=httpx.ConnectError("timeout"))
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=None)
+    with patch("assistant.skills.git_platform.httpx.AsyncClient", return_value=client):
+        out = await search_github_repos("q", token="t")
+    assert out["ok"] is False
+    assert "timeout" in out.get("error", "").lower() or "error" in out.get("error", "").lower()
+
+
+@pytest.mark.asyncio
 async def test_search_github_repos_missing_token():
     out = await search_github_repos("q", token=None)
     assert out["ok"] is False
@@ -255,6 +330,37 @@ async def test_search_gitlab_repos_success():
     assert len(out["items"]) == 1
     assert out["items"][0]["full_name"] == "g/r"
     assert "gitlab" in out["items"][0]["html_url"]
+
+
+@pytest.mark.asyncio
+async def test_search_gitlab_repos_non_200_returns_error():
+    """GitLab search API returns non-200 -> ok False."""
+    response = MagicMock()
+    response.status_code = 403
+    response.headers = {"content-type": "application/json"}
+    response.json = MagicMock(return_value={"error": "Forbidden"})
+    response.text = "Forbidden"
+    client = MagicMock()
+    client.get = AsyncMock(return_value=response)
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=None)
+    with patch("assistant.skills.git_platform.httpx.AsyncClient", return_value=client):
+        out = await search_gitlab_repos("q", token="t")
+    assert out["ok"] is False
+    assert "403" in out.get("error", "") or "Forbidden" in out.get("error", "")
+
+
+@pytest.mark.asyncio
+async def test_search_gitlab_repos_exception_returns_error():
+    """GitLab search client raises -> ok False with error message."""
+    client = MagicMock()
+    client.get = AsyncMock(side_effect=httpx.ConnectError("network error"))
+    client.__aenter__ = AsyncMock(return_value=client)
+    client.__aexit__ = AsyncMock(return_value=None)
+    with patch("assistant.skills.git_platform.httpx.AsyncClient", return_value=client):
+        out = await search_gitlab_repos("q", token="t")
+    assert out["ok"] is False
+    assert "network" in out.get("error", "").lower() or "error" in out.get("error", "").lower()
 
 
 @pytest.mark.asyncio

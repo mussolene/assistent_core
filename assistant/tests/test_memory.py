@@ -145,6 +145,24 @@ async def test_memory_manager_get_context_with_user_data():
     assert any("User data:" in str(m.get("content", "")) and "Alice" in str(m.get("content", "")) for m in ctx)
 
 
+def test_memory_manager_get_vector_medium_long():
+    """get_vector_medium and get_vector_long return vector memory for level."""
+    mgr = MemoryManager("redis://localhost:6379/0")
+    v_medium = mgr.get_vector_medium("u1")
+    v_long = mgr.get_vector_long("u1")
+    assert v_medium is not None
+    assert v_long is not None
+    assert v_medium is not mgr.get_vector_short("u1")
+
+
+def test_memory_manager_clear_vector_user_calls_clear_vector(tmp_path):
+    """clear_vector_user(user_id, level) delegates to clear_vector."""
+    mgr = MemoryManager("redis://localhost:6379/0", vector_persist_dir=tmp_path)
+    mgr._vector_cache[("u1", "medium")] = MagicMock()
+    mgr.clear_vector_user("u1", "medium")
+    assert mgr._vector_cache[("u1", "medium")].clear.called
+
+
 def test_memory_manager_clear_vector_user_id_level(tmp_path):
     """clear_vector(user_id, level) clears cache or removes file."""
     mgr = MemoryManager("redis://localhost:6379/0", vector_persist_dir=tmp_path)

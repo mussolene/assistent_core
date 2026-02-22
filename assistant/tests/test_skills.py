@@ -95,6 +95,18 @@ async def test_filesystem_list(workspace):
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_file_ref_list_uses_user_param():
+    """list action uses params 'user' when user_id is missing."""
+    with patch("assistant.skills.file_ref.list_file_refs", return_value=[]) as list_refs:
+        skill = FileRefSkill("redis://localhost:6379/99")
+        out = await skill.run({"action": "list", "user": "custom_user"})
+    assert out.get("ok") is True
+    list_refs.assert_called_once()
+    assert list_refs.call_args[0][1] == "custom_user"
+
+
+@pytest.mark.asyncio
 async def test_file_ref_list_empty():
     with patch("assistant.skills.file_ref.list_file_refs", return_value=[]):
         skill = FileRefSkill("redis://localhost:6379/99")
@@ -255,6 +267,7 @@ async def test_memory_control_clear_vector_and_reset_memory():
     memory.clear_vector = MagicMock()
     memory.reset_memory = AsyncMock()
     skill = MemoryControlSkill(memory)
+    assert skill.name == "memory_control"
     out = await skill.run({"action": "clear_vector", "level": "all", "user_id": "u1"})
     assert out["ok"] is True
     memory.clear_vector.assert_called_once_with(user_id="u1", level=None)

@@ -462,6 +462,53 @@ def test_orchestrator_task_to_context_includes_pending_tool_calls():
 
 
 @pytest.mark.asyncio
+async def test_orchestrator_process_task_tool_returns_formatted_inline_keyboard_publishes_and_returns():
+    """_process_task: tool agent returns formatted + inline_keyboard -> publish OutgoingReply with reply_markup and return."""
+    config = MagicMock()
+    config.orchestrator.max_iterations = 5
+    config.orchestrator.autonomous_mode = False
+    config.redis.url = "redis://localhost:6379/0"
+    bus = MagicMock()
+    bus.publish_outgoing = AsyncMock()
+    tasks = MagicMock()
+    get_returns = [
+        {"state": "assistant", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": []},
+        {"state": "tool", "stream": False, "chat_id": "c1", "user_id": "u1", "message_id": "m1", "text": "hi", "tool_results": [], "pending_tool_calls": [{"name": "x"}]},
+    ]
+    tasks.get = AsyncMock(side_effect=get_returns)
+    tasks.update = AsyncMock()
+    mock_registry = AgentRegistry()
+    assistant_agent = MagicMock()
+    assistant_agent.handle = AsyncMock(
+        return_value=AgentResult(success=True, output_text="", next_agent="tool", tool_calls=[{"name": "run_skill"}])
+    )
+    tool_agent = MagicMock()
+    tool_agent.handle = AsyncMock(
+        return_value=AgentResult(
+            success=True,
+            output_text="",
+            next_agent="assistant",
+            metadata={
+                "tool_results": [
+                    {"formatted": "Choose one:", "inline_keyboard": [[{"text": "A", "callback_data": "a"}]]}
+                ]
+            },
+        )
+    )
+    mock_registry.register("assistant", assistant_agent)
+    mock_registry.register("tool", tool_agent)
+    orch = Orchestrator(config=config, bus=bus, memory=None, gateway_factory=None)
+    orch._tasks = tasks
+    orch._agents = mock_registry
+    payload = _make_incoming_payload()
+    await orch._process_task("task_1", payload)
+    assert bus.publish_outgoing.call_count >= 1
+    last = bus.publish_outgoing.call_args[0][0]
+    assert last.text == "Choose one:"
+    assert getattr(last, "reply_markup", None) is not None and last.reply_markup.get("inline_keyboard")
+
+
+@pytest.mark.asyncio
 async def test_orchestrator_process_task_tool_calls_then_user_reply_returns():
     """_process_task: assistant returns tool_calls -> tool agent returns user_reply -> publish and return."""
     config = MagicMock()
