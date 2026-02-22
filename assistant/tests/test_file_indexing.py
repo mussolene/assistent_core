@@ -39,7 +39,7 @@ def test_extract_text_image_returns_placeholder():
 
 @pytest.mark.asyncio
 async def test_index_telegram_attachments_empty():
-    refs = await fi.index_telegram_attachments(
+    ref_ids, text = await fi.index_telegram_attachments(
         "redis://localhost:6379/0",
         None,
         "u1",
@@ -47,12 +47,13 @@ async def test_index_telegram_attachments_empty():
         [],
         "",
     )
-    assert refs == []
+    assert ref_ids == []
+    assert text == ""
 
 
 @pytest.mark.asyncio
 async def test_index_telegram_attachments_no_token():
-    refs = await fi.index_telegram_attachments(
+    ref_ids, text = await fi.index_telegram_attachments(
         "redis://localhost:6379/0",
         None,
         "u1",
@@ -60,4 +61,5 @@ async def test_index_telegram_attachments_no_token():
         [{"file_id": "x", "filename": "a.txt", "source": "telegram"}],
         "",
     )
-    assert refs == []
+    assert ref_ids == []
+    assert text == ""

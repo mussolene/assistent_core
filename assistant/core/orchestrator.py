@@ -26,10 +26,12 @@ class Orchestrator:
         config: "Config",
         bus: EventBus,
         memory: Any = None,
+        gateway_factory: Any = None,
     ) -> None:
         self._config = config
         self._bus = bus
         self._memory = memory
+        self._gateway_factory = gateway_factory
         self._tasks = TaskManager(config.redis.url)
         self._agents = AgentRegistry()
         self._running = False
@@ -63,31 +65,83 @@ class Orchestrator:
         asyncio.create_task(self._process_task(task_id, payload))
 
     async def _process_task(self, task_id: str, payload: IncomingMessage) -> None:
-        # Вложения: извлечь текст, положить в вектор, сохранить ссылки в Redis (файлы не храним)
+        # Вложения: сразу ответ «Пошёл читать файл», затем индексация и ответ о содержании
+        original_text = (payload.text or "").strip()
         if payload.attachments and self._memory:
             try:
                 from assistant.dashboard.config_store import get_config_from_redis_sync
                 from assistant.core.file_indexing import index_telegram_attachments
 
+                # 1. Сразу сообщить пользователю
+                await self._bus.publish_outgoing(
+                    OutgoingReply(
+                        task_id=task_id,
+                        chat_id=payload.chat_id,
+                        message_id=payload.message_id,
+                        text="Пошёл читать файл…",
+                        done=True,
+                        channel=payload.channel,
+                    )
+                )
                 redis_cfg = get_config_from_redis_sync(self._config.redis.url)
                 bot_token = (redis_cfg.get("TELEGRAM_BOT_TOKEN") or "").strip()
-                if bot_token:
-                    ref_ids = await index_telegram_attachments(
-                        self._config.redis.url,
-                        self._memory,
-                        payload.user_id,
-                        payload.chat_id,
-                        payload.attachments,
-                        bot_token,
+                if not bot_token:
+                    await self._bus.publish_outgoing(
+                        OutgoingReply(
+                            task_id=task_id,
+                            chat_id=payload.chat_id,
+                            message_id=payload.message_id,
+                            text="Не удалось прочитать файл: бот не настроен.",
+                            done=True,
+                            channel=payload.channel,
+                        )
                     )
-                    if ref_ids:
-                        if not payload.text.strip():
-                            payload.text = (
-                                "[Индексированы файлы в память. Можешь спросить по содержимому или попросить «отправь файл …».]"
-                            )
-                        await self._tasks.update(task_id, text=payload.text)
+                    return
+                ref_ids, extracted_text = await index_telegram_attachments(
+                    self._config.redis.url,
+                    self._memory,
+                    payload.user_id,
+                    payload.chat_id,
+                    payload.attachments,
+                    bot_token,
+                )
+                if ref_ids:
+                    if not original_text:
+                        payload.text = (
+                            "[Индексированы файлы в память. Можешь спросить по содержимому или попросить «отправь файл …».]"
+                        )
+                    else:
+                        payload.text = original_text
+                    await self._tasks.update(task_id, text=payload.text)
+                    # 2. Ответ о содержании: summary от модели или fallback
+                    summary_text = await self._file_summary_for_user(extracted_text, ref_ids)
+                    await self._bus.publish_outgoing(
+                        OutgoingReply(
+                            task_id=task_id,
+                            chat_id=payload.chat_id,
+                            message_id=payload.message_id,
+                            text=summary_text,
+                            done=True,
+                            channel=payload.channel,
+                        )
+                    )
+                    # Если пользователь не задал отдельный вопрос — на этом завершаем
+                    if not original_text:
+                        return
             except Exception as e:
                 logger.exception("File indexing: %s", e)
+                await self._bus.publish_outgoing(
+                    OutgoingReply(
+                        task_id=task_id,
+                        chat_id=payload.chat_id,
+                        message_id=payload.message_id,
+                        text="Не удалось прочитать файл. Попробуйте позже или задайте вопрос текстом.",
+                        done=True,
+                        channel=payload.channel,
+                    )
+                )
+                if not original_text:
+                    return
 
         max_iterations = self._config.orchestrator.max_iterations
         autonomous = self._config.orchestrator.autonomous_mode
@@ -210,6 +264,43 @@ class Orchestrator:
                         send_checklist=send_checklist,
                     )
                 )
+
+    async def _file_summary_for_user(self, extracted_text: str, ref_ids: list[str]) -> str:
+        """Сгенерировать краткий ответ пользователю о содержании файла (модель или fallback)."""
+        if not self._gateway_factory:
+            return "Файл проиндексирован. Можешь спросить что в нём."
+        # Только плейсхолдеры изображений или пусто — без извлечённого текста
+        no_readable = not extracted_text.strip() or (
+            "изображение" in extracted_text and len(extracted_text.strip()) < 120
+        )
+        if no_readable:
+            prompt = (
+                "Пользователь прислал файл (возможно изображение). "
+                "Напиши одно короткое предложение для ответа в чат: например что файл сохранён, "
+                "по изображениям описать не могу, или что можно спросить о документе. Без кавычек и лишнего."
+            )
+        else:
+            excerpt = extracted_text[:4000].strip()
+            if len(extracted_text) > 4000:
+                excerpt += "\n\n[...]"
+            prompt = (
+                "Кратко опиши содержимое документа для пользователя (2–4 предложения). "
+                "Только суть, без вводных фраз вроде «В документе…». Текст документа:\n\n"
+                + excerpt
+            )
+        try:
+            gateway = await self._gateway_factory()
+            out = await gateway.generate(
+                prompt,
+                system="Ты помогаешь кратко резюмировать содержимое файла для пользователя. Ответь только текстом для чата.",
+            )
+            summary = (out or "").strip() if isinstance(out, str) else ""
+            if summary and len(summary) > 2000:
+                summary = summary[:1997] + "..."
+            return summary or "Файл проиндексирован. Можешь спросить что в нём."
+        except Exception as e:
+            logger.warning("File summary generation: %s", e)
+            return "Файл проиндексирован. Можешь спросить что в нём."
 
     def _task_to_context(
         self,

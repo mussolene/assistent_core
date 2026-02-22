@@ -103,6 +103,10 @@ def _list_file_refs_sync(redis_url: str, user_id: str) -> list[str]:
     return list(refs) if refs else []
 
 
+# Максимум символов извлечённого текста для передачи в оркестратор (summary)
+EXTRACTED_TEXT_CAP = 6000
+
+
 async def index_telegram_attachments(
     redis_url: str,
     memory: Any,
@@ -110,16 +114,17 @@ async def index_telegram_attachments(
     chat_id: str,
     attachments: list[dict[str, Any]],
     bot_token: str,
-) -> list[str]:
+) -> tuple[list[str], str]:
     """
     Скачать вложения из Telegram, извлечь текст, положить чанки в векторную память,
     сохранить ссылки на файлы в Redis (file_id для последующей отправки по запросу).
-    Возвращает список file_ref_id.
+    Возвращает (список file_ref_id, извлечённый текст до EXTRACTED_TEXT_CAP символов для summary).
     """
     if not bot_token or not attachments:
-        return []
+        return [], ""
     base_url = f"https://api.telegram.org/bot{bot_token}"
     ref_ids: list[str] = []
+    extracted_parts: list[str] = []
     for att in attachments:
         if att.get("source") != "telegram":
             continue
@@ -148,6 +153,8 @@ async def index_telegram_attachments(
                 resp.raise_for_status()
                 tmp_path.write_bytes(resp.content)
                 text = _extract_text(tmp_path, mime_type, filename)
+                if text.strip():
+                    extracted_parts.append(f"[{filename}]\n{text}")
                 chunks = _chunk_text(text)
                 for i, chunk in enumerate(chunks):
                     await memory.add_to_vector(
@@ -181,7 +188,10 @@ async def index_telegram_attachments(
                         pass
         except Exception as e:
             logger.exception("Index attachment %s: %s", filename, e)
-    return ref_ids
+    combined = "\n\n".join(extracted_parts)
+    if len(combined) > EXTRACTED_TEXT_CAP:
+        combined = combined[: EXTRACTED_TEXT_CAP] + "\n\n[...]"
+    return ref_ids, combined
 
 
 def get_file_ref(redis_url: str, ref_id: str) -> dict[str, Any] | None:

@@ -149,7 +149,9 @@ async def run_core(config: Config) -> None:
     agent_registry = AgentRegistry()
     agent_registry.register("assistant", AssistantAgent(gateway_factory=get_gateway, memory=memory))
     agent_registry.register("tool", ToolAgent(skills, runner, memory))
-    orchestrator = Orchestrator(config=config, bus=bus, memory=memory)
+    orchestrator = Orchestrator(
+        config=config, bus=bus, memory=memory, gateway_factory=get_gateway
+    )
     orchestrator.set_agent_registry(agent_registry)
     await orchestrator.start()
     try:
