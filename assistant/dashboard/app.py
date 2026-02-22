@@ -110,14 +110,11 @@ INDEX_HTML = """
 </head>
 <body>
   <nav class="nav">
-    <a href="{{ url_for('index') }}" class="{{ 'active' if section == 'telegram' else '' }}">Telegram</a>
+    <a href="{{ url_for('index') }}" class="{{ 'active' if section == 'channels' else '' }}">Каналы</a>
     <a href="{{ url_for('model') }}" class="{{ 'active' if section == 'model' else '' }}">Модель</a>
-    <a href="{{ url_for('mcp') }}" class="{{ 'active' if section == 'mcp' else '' }}">MCP</a>
-    <a href="{{ url_for('monitor') }}" class="{{ 'active' if section == 'monitor' else '' }}">Мониторинг</a>
-    <a href="{{ url_for('repos_page') }}" class="{{ 'active' if section == 'repos' else '' }}">Репо</a>
-    <a href="{{ url_for('email_settings') }}" class="{{ 'active' if section == 'email' else '' }}">Email</a>
-    <a href="{{ url_for('memory_page') }}" class="{{ 'active' if section == 'memory' else '' }}">Память</a>
-    <a href="{{ url_for('mcp_agent') }}" class="{{ 'active' if section == 'mcp_agent' else '' }}">MCP (агент)</a>
+    <a href="{{ url_for('integrations_page') }}" class="{{ 'active' if section == 'integrations' else '' }}">Интеграции</a>
+    <a href="{{ url_for('data_page') }}" class="{{ 'active' if section == 'data' else '' }}">Данные</a>
+    <a href="{{ url_for('system_page') }}" class="{{ 'active' if section == 'system' else '' }}">Система</a>
     {% if current_user %}
     <span style="margin-left:auto;color:var(--muted);font-size:0.9rem">{{ current_user.display_name or current_user.login }} ({{ current_user.role }})</span>
     <a href="{{ url_for('logout') }}" style="margin-left:0.5rem">Выйти</a>
@@ -459,16 +456,20 @@ function genPairingCode() {
 </script>
 """
 
+_CHANNELS_HR = '\n<hr style="margin:1.5rem 0; border:0; border-top:1px solid var(--border)">\n'
+
 
 @app.route("/")
 def index():
+    """Каналы: Telegram + Email на одной странице (UX_UI_ROADMAP)."""
     config = load_config()
+    content = _TELEGRAM_BODY + _CHANNELS_HR + _EMAIL_BODY
     return render_template_string(
         INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
-            "{% block content %}{% endblock %}", _TELEGRAM_BODY
+            "{% block content %}{% endblock %}", content
         ),
         config=config,
-        section="telegram",
+        section="channels",
     )
 
 
@@ -695,6 +696,45 @@ _MEMORY_BODY = """
 """
 
 
+# ----- Данные: Qdrant (единый источник), ссылки на Репо и Память (UX_UI_ROADMAP) -----
+_DATA_BODY = """
+<h1>Данные</h1>
+<p class="sub">Векторная БД (Qdrant) для индексации документов и памяти разговоров. Репозитории и очистка памяти — ниже.</p>
+<form method="post" action="{{ url_for('save_data') }}">
+  <div class="card">
+    <label for="qdrant_url">Qdrant URL</label>
+    <input id="qdrant_url" name="qdrant_url" type="url" value="{{ config.get('QDRANT_URL', '') }}" placeholder="http://localhost:6333">
+    <p class="hint">Используется для индексации документов (index_document, index_repo) и памяти разговоров.</p>
+  </div>
+  <button type="submit" class="btn">Сохранить</button>
+</form>
+<hr style="margin:1.5rem 0; border:0; border-top:1px solid var(--border)">
+<p><a href="{{ url_for('repos_page') }}">Репозитории</a> — токены GitHub/GitLab, workspace, склонированные репо.</p>
+<p><a href="{{ url_for('memory_page') }}">Память разговоров</a> — очистка по user_id/chat_id.</p>
+"""
+
+
+@app.route("/data")
+def data_page():
+    config = load_config()
+    return render_template_string(
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
+            "{% block content %}{% endblock %}", _DATA_BODY
+        ),
+        config=config,
+        section="data",
+    )
+
+
+@app.route("/save-data", methods=["POST"])
+def save_data():
+    redis_url = get_redis_url()
+    qdrant_url = (request.form.get("qdrant_url") or "").strip()
+    set_config_in_redis_sync(redis_url, "QDRANT_URL", qdrant_url)
+    flash("Настройки данных сохранены.", "success")
+    return redirect(url_for("data_page"))
+
+
 @app.route("/memory")
 def memory_page():
     config = load_config()
@@ -785,7 +825,7 @@ def save_mcp():
                 args = None
         except json.JSONDecodeError:
             flash("Аргументы MCP: неверный JSON.", "error")
-            return redirect(url_for("mcp"))
+            return redirect(url_for("integrations_page"))
     if name and url:
         entry = {"name": name, "url": url}
         if args is not None:
@@ -793,7 +833,7 @@ def save_mcp():
         servers.append(entry)
         set_config_in_redis_sync(redis_url, MCP_SERVERS_KEY, servers)
         flash("MCP-сервер добавлен.", "success")
-    return redirect(url_for("mcp"))
+    return redirect(url_for("integrations_page"))
 
 
 @app.route("/remove-mcp", methods=["POST"])
@@ -809,7 +849,7 @@ def remove_mcp():
             flash("MCP-сервер удалён.", "success")
     except ValueError:
         pass
-    return redirect(url_for("mcp"))
+    return redirect(url_for("integrations_page"))
 
 
 # ----- MCP Agent (URL + secret для Cursor) -----
@@ -832,7 +872,7 @@ _MCP_AGENT_BODY = """
     <input id="mcp_agent_name" name="name" type="text" placeholder="Cursor" required>
     <label for="mcp_agent_chat_id" style="margin-top:0.75rem">Telegram Chat ID (личный чат = User ID)</label>
     <input id="mcp_agent_chat_id" name="chat_id" type="text" placeholder="123456789" required>
-    <p class="hint">Куда слать уведомления и запросы подтверждения.</p>
+    <p class="hint">Куда слать уведомления и запросы подтверждения. Если не задан — используется общий Chat ID из раздела Каналы → Telegram.</p>
     <button type="submit" class="btn" style="margin-top:0.75rem">Создать endpoint</button>
   </div>
 </form>
@@ -861,6 +901,32 @@ _MCP_AGENT_BODY = """
 
 def _mcp_agent_base_url():
     return request.host_url.rstrip("/") + "/"
+
+
+@app.route("/integrations")
+def integrations_page():
+    """Интеграции: MCP скиллы + MCP (агент) на одной странице (UX_UI_ROADMAP)."""
+    from assistant.dashboard.mcp_endpoints import list_endpoints
+
+    config = load_config()
+    new_secret = session.pop("mcp_new_secret", None) if "mcp_new_secret" in session else None
+    base_url = _mcp_agent_base_url()
+    part_mcp = render_template_string(_MCP_BODY, config=config)
+    part_agent = render_template_string(
+        _MCP_AGENT_BODY,
+        config=config,
+        mcp_endpoints=list_endpoints(),
+        new_secret=new_secret,
+        base_url=base_url,
+    )
+    content = part_mcp + _CHANNELS_HR + part_agent
+    return render_template_string(
+        INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
+            "{% block content %}{% endblock %}", content
+        ),
+        config=config,
+        section="integrations",
+    )
 
 
 @app.route("/mcp-agent")
@@ -892,12 +958,12 @@ def mcp_agent_create():
     chat_id = (request.form.get("chat_id") or "").strip()
     if not name or not chat_id:
         flash("Укажите имя и Chat ID.", "error")
-        return redirect(url_for("mcp_agent"))
+        return redirect(url_for("integrations_page"))
     endpoint_id, secret = create_endpoint(name, chat_id)
     base_url = _mcp_agent_base_url()
     session["mcp_new_secret"] = {"url": base_url + "mcp/v1/agent/" + endpoint_id, "secret": secret}
     flash("Endpoint создан. Скопируйте URL и секрет ниже.", "success")
-    return redirect(url_for("mcp_agent"))
+    return redirect(url_for("integrations_page"))
 
 
 @app.route("/mcp-agent/regenerate", methods=["POST"])
@@ -906,7 +972,7 @@ def mcp_agent_regenerate():
 
     endpoint_id = (request.form.get("endpoint_id") or "").strip()
     if not endpoint_id:
-        return redirect(url_for("mcp_agent"))
+        return redirect(url_for("integrations_page"))
     new_secret = regenerate_endpoint_secret(endpoint_id)
     if new_secret:
         session["mcp_new_secret"] = {
@@ -914,7 +980,7 @@ def mcp_agent_regenerate():
             "secret": new_secret,
         }
         flash("Секрет обновлён. Скопируйте новый секрет ниже.", "success")
-    return redirect(url_for("mcp_agent"))
+    return redirect(url_for("integrations_page"))
 
 
 @app.route("/mcp-agent/delete", methods=["POST"])
@@ -925,7 +991,7 @@ def mcp_agent_delete():
     if endpoint_id:
         delete_endpoint(endpoint_id)
         flash("Endpoint удалён.", "success")
-    return redirect(url_for("mcp_agent"))
+    return redirect(url_for("integrations_page"))
 
 
 def _mcp_api_auth(endpoint_id: str):
@@ -1299,11 +1365,7 @@ _REPOS_BODY = """
     <input id="git_workspace_dir" name="git_workspace_dir" type="text" value="{{ config.get('GIT_WORKSPACE_DIR', '') }}" placeholder="/workspace или /git_repos">
     <p class="hint">Пусто — используется общий workspace (/workspace). Для отдельного тома укажите путь (напр. /git_repos) и смонтируйте его в Docker.</p>
   </div>
-  <div class="card">
-    <label for="qdrant_url">Qdrant URL (индексация документов)</label>
-    <input id="qdrant_url" name="qdrant_url" type="url" value="{{ config.get('QDRANT_URL', '') }}" placeholder="http://localhost:6333">
-    <p class="hint">Для скилла index_document и пайплайна документ→Qdrant. Пусто — индексация в Qdrant отключена.</p>
-  </div>
+  <p class="hint">Qdrant URL настраивается в разделе <a href="{{ url_for('data_page') }}">Данные</a>.</p>
   <button type="submit" class="btn">Сохранить</button>
 </form>
 <hr style="margin:1.5rem 0; border:0; border-top:1px solid var(--border);">
@@ -1356,18 +1418,16 @@ def _get_workspace_dir() -> str:
 
 @app.route("/save-repos", methods=["POST"])
 def save_repos():
-    """Сохранить GITHUB_TOKEN, GITLAB_TOKEN, GIT_WORKSPACE_DIR в Redis. Токены обновляются только если поле не пустое."""
+    """Сохранить GITHUB_TOKEN, GITLAB_TOKEN, GIT_WORKSPACE_DIR в Redis. Qdrant — в разделе Данные."""
     redis_url = get_redis_url()
     github = (request.form.get("github_token") or "").strip()
     gitlab = (request.form.get("gitlab_token") or "").strip()
     git_workspace = (request.form.get("git_workspace_dir") or "").strip()
-    qdrant_url = (request.form.get("qdrant_url") or "").strip()
     if github:
         set_config_in_redis_sync(redis_url, "GITHUB_TOKEN", github)
     if gitlab:
         set_config_in_redis_sync(redis_url, "GITLAB_TOKEN", gitlab)
     set_config_in_redis_sync(redis_url, "GIT_WORKSPACE_DIR", git_workspace)
-    set_config_in_redis_sync(redis_url, "QDRANT_URL", qdrant_url)
     flash(
         "Настройки репозиториев сохранены. Перезапустите assistant-core для применения токенов и пути.",
         "success",
@@ -1398,18 +1458,25 @@ def repos_page():
     )
 
 
-@app.route("/monitor")
-def monitor():
+@app.route("/system")
+def system_page():
+    """Система: мониторинг (UX_UI_ROADMAP)."""
     config = load_config()
-    monitor = _monitor_data()
+    monitor_data = _monitor_data()
     return render_template_string(
         INDEX_HTML.replace("{{ layout_css }}", LAYOUT_CSS).replace(
             "{% block content %}{% endblock %}", _MONITOR_BODY
         ),
         config=config,
-        section="monitor",
-        monitor=monitor,
+        section="system",
+        monitor=monitor_data,
     )
+
+
+@app.route("/monitor")
+def monitor():
+    """Редирект для обратной совместимости: /monitor → /system."""
+    return redirect(url_for("system_page"))
 
 
 # Префиксы Redis для мониторинга (ключи по типам)

@@ -4,6 +4,16 @@
 
 ---
 
+## Выполнено (итерации)
+
+- **Фаза 1:** Обработчик /help со списком команд и кнопкой «Открыть настройки»; унификация /settings и /channels (один текст); приветствие по /start для неразрешённого пользователя с кнопками [Справка] [Настройки]; единый тон pairing («Привязка выполнена»). Тесты: `test_channels.py` (get_help_message_text, get_welcome_message_text, get_settings_message_text, PAIRING_SUCCESS_TEXT).
+- **Фаза 2:** Сообщение при rate limit с «Повторите через 1 мин»; при ошибке загрузки репо — inline-кнопка «Открыть настройки». Тест: RATE_LIMIT_MESSAGE.
+- **Фаза 3:** Навбар из 5 пунктов: Каналы (Telegram + Email на одной странице), Модель, Интеграции (MCP скиллы + MCP агент), Данные (Qdrant URL + ссылки на Репо и Память), Система (мониторинг). Qdrant URL только в разделе Данные; на странице Репо — подсказка «настраивается в Данные». Подсказка в MCP (агент) про общий Chat ID из Каналы → Telegram. Маршруты: /data, /save-data, /integrations, /system; /monitor → редирект на /system. Тесты: test_dashboard.py (index channels, data_page, save_data, integrations_page, system_page, monitor redirect).
+
+Фазы 4 (CSS/индикаторы загрузки) и 5 (регрессия по ACCEPTANCE.md) — по желанию.
+
+---
+
 ## 1. Принципы и практики (2024–2025)
 
 ### 1.1 Общие

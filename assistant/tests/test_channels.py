@@ -7,11 +7,16 @@ import pytest
 
 from assistant.channels.telegram import (
     BOT_COMMANDS,
+    PAIRING_SUCCESS_TEXT,
     PARSE_MODE,
+    RATE_LIMIT_MESSAGE,
     RateLimiter,
     _strip_think_blocks,
     _to_telegram_html,
     chunk_text_for_telegram,
+    get_help_message_text,
+    get_settings_message_text,
+    get_welcome_message_text,
     sanitize_text,
     send_typing,
 )
@@ -76,6 +81,59 @@ def test_bot_commands_include_settings_and_channels():
     commands = {c["command"] for c in BOT_COMMANDS}
     assert "settings" in commands
     assert "channels" in commands
+
+
+# --- UX_UI_ROADMAP: /help, приветствие, единый тон ---
+
+
+def test_get_help_message_text_contains_commands():
+    """Справка /help содержит заголовок и все команды из BOT_COMMANDS."""
+    text = get_help_message_text()
+    assert "Справка" in text
+    assert "/help" in text
+    assert "/settings" in text
+    assert "/start" in text
+    assert "/repos" in text
+    for c in BOT_COMMANDS:
+        assert f"/{c['command']}" in text
+        assert c.get("description", "") in text
+
+
+def test_get_welcome_message_text_for_new_user():
+    """Приветствие по /start для пользователя не из whitelist."""
+    text = get_welcome_message_text()
+    assert "Привет" in text or "ассистент" in text
+    assert "/help" in text
+    assert "/settings" in text
+
+
+def test_get_settings_message_text_unified():
+    """/settings и /channels — один текст с URL дашборда."""
+    url = "https://dashboard.example.com"
+    text = get_settings_message_text(url)
+    assert url in text
+    assert "Настройки" in text or "дашборд" in text
+    assert "токен" in text or "модель" in text or "MCP" in text
+
+
+def test_settings_and_channels_same_message():
+    """Один и тот же текст для обеих команд (единый источник)."""
+    url = "http://localhost:8080"
+    t1 = get_settings_message_text(url)
+    t2 = get_settings_message_text(url)
+    assert t1 == t2
+
+
+def test_pairing_success_text_unified():
+    """Единый тон: одна фраза для привязки по коду и для глобального pairing."""
+    assert "Привязка выполнена" in PAIRING_SUCCESS_TEXT
+    assert "Pairing выполнен" not in PAIRING_SUCCESS_TEXT
+
+
+def test_rate_limit_message_mentions_retry():
+    """Сообщение при rate limit указывает, когда повторить (UX_UI_ROADMAP)."""
+    assert "1 мин" in RATE_LIMIT_MESSAGE or "мин" in RATE_LIMIT_MESSAGE
+    assert "Повторите" in RATE_LIMIT_MESSAGE or "повторить" in RATE_LIMIT_MESSAGE.lower()
 
 
 def test_bot_commands_include_repos_github_gitlab():

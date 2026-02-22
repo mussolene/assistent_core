@@ -224,14 +224,14 @@ def test_save_mcp_valid(monkeypatch, client, auth_mock):
     monkeypatch.setattr("assistant.dashboard.app.load_config", lambda: {"MCP_SERVERS": []})
     r = client.post("/save-mcp", data={"mcp_name": "mock-mcp", "mcp_url": "http://localhost:3000"})
     assert r.status_code == 302
-    assert r.headers.get("Location", "").endswith("/mcp")
+    assert r.headers.get("Location", "").endswith("/integrations")
     assert len(set_calls) == 1
     assert set_calls[0][0] == MCP_SERVERS_KEY
     assert set_calls[0][1] == [{"name": "mock-mcp", "url": "http://localhost:3000"}]
 
 
 def test_save_mcp_invalid_json_flash(monkeypatch, client, auth_mock):
-    """save-mcp with invalid JSON in args flashes error and redirects to mcp."""
+    """save-mcp with invalid JSON in args flashes error and redirects to integrations."""
     monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
     monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
     monkeypatch.setattr("assistant.dashboard.app.load_config", lambda: {"MCP_SERVERS": []})
@@ -240,7 +240,7 @@ def test_save_mcp_invalid_json_flash(monkeypatch, client, auth_mock):
         data={"mcp_name": "x", "mcp_url": "http://localhost:3000", "mcp_args": "not json"},
     )
     assert r.status_code == 302
-    assert r.headers.get("Location", "").endswith("/mcp")
+    assert r.headers.get("Location", "").endswith("/integrations")
 
 
 def test_save_mcp_with_args(monkeypatch, client, auth_mock):
@@ -295,6 +295,74 @@ def test_api_pairing_code_returns_code_and_link(client, auth_mock, monkeypatch):
     assert j.get("ok") is True
     assert j.get("code") == "ABC123"
     assert j.get("expires_in_sec") == 600
+
+
+def test_index_channels_page_renders(client, auth_mock, monkeypatch):
+    """Главная (Каналы) отдаёт Telegram + Email (UX_UI_ROADMAP)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.get("/")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "Telegram" in body
+    assert "Email" in body
+    assert "Каналы" in body or "channels" in body.lower()
+
+
+def test_data_page_renders(client, auth_mock, monkeypatch):
+    """Страница Данные: Qdrant URL, ссылки на Репо и Память."""
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.get("/data")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "Данные" in body or "Qdrant" in body
+    assert "qdrant_url" in body or "Qdrant" in body
+    assert "/repos" in body or "Репозитории" in body
+    assert "/memory" in body or "Память" in body
+
+
+def test_save_data_redirects(client, auth_mock, redis_url, monkeypatch):
+    """save-data сохраняет QDRANT_URL и редиректит на /data."""
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: redis_url)
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.post("/save-data", data={"qdrant_url": "http://qdrant:6333"})
+    assert r.status_code == 302
+    assert r.headers.get("Location", "").endswith("/data")
+    data = get_config_from_redis_sync(redis_url)
+    assert data.get("QDRANT_URL") == "http://qdrant:6333"
+
+
+def test_integrations_page_renders(client, auth_mock, monkeypatch):
+    """Страница Интеграции: MCP скиллы и MCP (агент)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    monkeypatch.setattr(
+        "assistant.dashboard.mcp_endpoints.list_endpoints",
+        lambda: [],
+    )
+    r = client.get("/integrations")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "MCP" in body
+    assert "mcp_name" in body or "mcp_url" in body
+
+
+def test_system_page_renders(client, auth_mock, monkeypatch):
+    """Страница Система (мониторинг)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    monkeypatch.setattr(
+        "assistant.dashboard.app._monitor_data",
+        lambda: {"redis": {}, "tasks": {}, "services": {}, "keys_by_prefix": {}},
+    )
+    r = client.get("/system")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "Мониторинг" in body or "redis" in body.lower()
+
+
+def test_monitor_redirects_to_system(client, auth_mock):
+    """/monitor редиректит на /system (обратная совместимость)."""
+    r = client.get("/monitor")
+    assert r.status_code == 302
+    assert r.headers.get("Location", "").endswith("/system")
 
 
 def test_email_page_renders(client, auth_mock, monkeypatch):

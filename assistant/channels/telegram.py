@@ -108,6 +108,38 @@ BOT_COMMANDS = [
     {"command": "dev", "description": "Обратная связь для агента (MCP)"},
 ]
 
+# UX: единый тон сообщений (docs/UX_UI_ROADMAP.md)
+PAIRING_SUCCESS_TEXT = "Привязка выполнена. Ваш ID добавлен в разрешённые."
+RATE_LIMIT_MESSAGE = (
+    "Превышен лимит запросов. Повторите через 1 мин."
+)
+
+
+def get_help_message_text() -> str:
+    """Текст справки /help: список команд и краткое описание (для тестов и отправки)."""
+    lines = ["<b>Справка</b>", ""]
+    for c in BOT_COMMANDS:
+        cmd = c.get("command", "")
+        desc = c.get("description", "")
+        lines.append(f"/{cmd} — {desc}")
+    return "\n".join(lines)
+
+
+def get_welcome_message_text() -> str:
+    """Приветствие для /start без кода, когда пользователь ещё не в whitelist (UX_UI_ROADMAP)."""
+    return (
+        "Привет! Я персональный ассистент. Можете написать вопрос или задачу — я постараюсь помочь. "
+        "Команды: /help — справка, /settings — настройки и дашборд."
+    )
+
+
+def get_settings_message_text(dashboard_url: str) -> str:
+    """Текст для /settings и /channels (единый ответ)."""
+    return (
+        f"Настройки и дашборд: {dashboard_url}\n"
+        "Там можно задать токен бота, разрешённые ID, модель, MCP и т.д."
+    )
+
 
 def get_config() -> dict:
     from assistant.config import get_config
@@ -912,6 +944,31 @@ async def run_telegram_adapter() -> None:
                                 )
                             else:
                                 await _answer_callback(base_url, cq["id"], "Нет активного запроса.")
+                        elif callback_data == "cmd:help":
+                            dashboard_url = (
+                                os.getenv("DASHBOARD_URL", "http://localhost:8080").rstrip("/")
+                            )
+                            help_text = get_help_message_text()
+                            reply_markup = {
+                                "inline_keyboard": [
+                                    [{"text": "Открыть настройки", "url": dashboard_url}]
+                                ]
+                            }
+                            try:
+                                async with httpx.AsyncClient() as client:
+                                    await client.post(
+                                        f"{base_url}/sendMessage",
+                                        json={
+                                            "chat_id": chat_id,
+                                            "text": help_text,
+                                            "parse_mode": PARSE_MODE,
+                                            "reply_markup": reply_markup,
+                                        },
+                                        timeout=5.0,
+                                    )
+                            except Exception as e:
+                                logger.debug("sendMessage cmd:help: %s", e)
+                            await _answer_callback(base_url, cq["id"], "Справка")
                         elif callback_data.startswith(REPOS_CALLBACK_PREFIX):
                             # repos:kind:page (page 0-based). Итерация 9.2
                             parts = callback_data.split(":", 2)
@@ -1106,7 +1163,7 @@ async def run_telegram_adapter() -> None:
                                         f"{base_url}/sendMessage",
                                         json={
                                             "chat_id": chat_id,
-                                            "text": "Привязка выполнена. Ваш ID добавлен в разрешённые.",
+                                            "text": PAIRING_SUCCESS_TEXT,
                                             "parse_mode": PARSE_MODE,
                                         },
                                         timeout=5.0,
@@ -1129,11 +1186,40 @@ async def run_telegram_adapter() -> None:
                                     f"{base_url}/sendMessage",
                                     json={
                                         "chat_id": chat_id,
-                                        "text": "Pairing выполнен. Ваш ID добавлен в разрешённые.",
+                                        "text": PAIRING_SUCCESS_TEXT,
                                         "parse_mode": PARSE_MODE,
                                     },
                                     timeout=5.0,
                                 )
+                            continue
+                        # /start без кода и без глобального pairing: приветствие для неразрешённого пользователя
+                        if allowed and uid_int not in allowed:
+                            dashboard_url = (
+                                os.getenv("DASHBOARD_URL", "http://localhost:8080").rstrip("/")
+                            )
+                            welcome_text = _escape_html(get_welcome_message_text())
+                            reply_markup = {
+                                "inline_keyboard": [
+                                    [
+                                        {"text": "Справка", "callback_data": "cmd:help"},
+                                        {"text": "Настройки", "url": dashboard_url},
+                                    ]
+                                ]
+                            }
+                            try:
+                                async with httpx.AsyncClient() as client:
+                                    await client.post(
+                                        f"{base_url}/sendMessage",
+                                        json={
+                                            "chat_id": chat_id,
+                                            "text": welcome_text,
+                                            "parse_mode": PARSE_MODE,
+                                            "reply_markup": reply_markup,
+                                        },
+                                        timeout=5.0,
+                                    )
+                            except Exception as e:
+                                logger.debug("sendMessage welcome: %s", e)
                             continue
                     if allowed and uid_int not in allowed:
                         logger.debug("user not in whitelist: %s", user_id)
@@ -1144,19 +1230,44 @@ async def run_telegram_adapter() -> None:
                                 f"{base_url}/sendMessage",
                                 json={
                                     "chat_id": chat_id,
-                                    "text": "Rate limit exceeded. Try again later.",
+                                    "text": RATE_LIMIT_MESSAGE,
                                     "parse_mode": PARSE_MODE,
                                 },
                                 timeout=5.0,
                             )
                         continue
-                    # /settings, /channels — ссылка на дашборд (настройки и каналы)
+                    # /help — справка по командам (UX_UI_ROADMAP)
+                    if text == "/help":
+                        dashboard_url = (
+                            os.getenv("DASHBOARD_URL", "http://localhost:8080").rstrip("/")
+                        )
+                        help_text = get_help_message_text()
+                        reply_markup = {
+                            "inline_keyboard": [
+                                [{"text": "Открыть настройки", "url": dashboard_url}]
+                            ]
+                        }
+                        try:
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": help_text,
+                                        "parse_mode": PARSE_MODE,
+                                        "reply_markup": reply_markup,
+                                    },
+                                    timeout=5.0,
+                                )
+                        except Exception as e:
+                            logger.debug("sendMessage help: %s", e)
+                        continue
+                    # /settings, /channels — один ответ (ссылка на дашборд)
                     if text in ("/settings", "/channels"):
-                        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:8080")
-                        reply = (
-                            "Настройки и каналы: {}\n"
-                            "Там можно задать токен бота, разрешённые ID, модель, MCP и т.д."
-                        ).format(dashboard_url)
+                        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:8080").rstrip(
+                            "/"
+                        )
+                        reply = get_settings_message_text(dashboard_url)
                         try:
                             async with httpx.AsyncClient() as client:
                                 await client.post(
@@ -1233,6 +1344,16 @@ async def run_telegram_adapter() -> None:
                             reply = _escape_html(
                                 "Не удалось загрузить список. Проверьте настройки в дашборде."
                             )
+                            reply_markup = {
+                                "inline_keyboard": [
+                                    [
+                                        {
+                                            "text": "Открыть настройки",
+                                            "url": dashboard_url,
+                                        }
+                                    ]
+                                ]
+                            }
                             try:
                                 async with httpx.AsyncClient() as client:
                                     await client.post(
@@ -1241,6 +1362,7 @@ async def run_telegram_adapter() -> None:
                                             "chat_id": chat_id,
                                             "text": reply,
                                             "parse_mode": PARSE_MODE,
+                                            "reply_markup": reply_markup,
                                         },
                                         timeout=5.0,
                                     )
