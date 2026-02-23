@@ -353,6 +353,24 @@ def format_repos_reply_text(label: str, page: int, total: Optional[int] = None) 
     return f"Репозитории ({label}): страница {page + 1}."
 
 
+def _repos_setup_hint(kind: str, dashboard_url: str) -> str:
+    """Текст-подсказка: как настроить доступ к GitHub/GitLab или репо (для отправки пользователю)."""
+    if kind == "github":
+        return (
+            f"Для команды /github настройте доступ: в дашборде откройте Репозитории и укажите "
+            f"GITHUB_TOKEN (Personal Access Token). Ссылка: {dashboard_url}/repos"
+        )
+    if kind == "gitlab":
+        return (
+            f"Для команды /gitlab настройте доступ: в дашборде откройте Репозитории и укажите "
+            f"GITLAB_TOKEN (Personal Access Token). Ссылка: {dashboard_url}/repos"
+        )
+    return (
+        f"Для списка репо укажите GIT_WORKSPACE_DIR в дашборде (Репозитории) или добавьте "
+        f"GITHUB_TOKEN / GITLAB_TOKEN. Ссылка: {dashboard_url}/repos"
+    )
+
+
 async def _get_repos_list_cloned(redis_url: str) -> list[dict]:
     """Список склонированных репо (workspace из Redis)."""
     try:
@@ -1494,8 +1512,7 @@ async def run_telegram_adapter() -> None:
                                     out = await _get_repos_list_gitlab(redis_url, page=1)
                                 if not out.get("ok"):
                                     reply = _escape_html(
-                                        out.get("error")
-                                        or "Не удалось загрузить список. Настройте токен в дашборде."
+                                        _repos_setup_hint(kind, dashboard_url)
                                     )
                                     items = []
                                     page = 0
@@ -1510,8 +1527,9 @@ async def run_telegram_adapter() -> None:
                             keyboard = _build_repos_inline_keyboard(
                                 kind, items, page, has_next, dashboard_url
                             )
+                            fallback_sent = False
                             async with httpx.AsyncClient() as client:
-                                await client.post(
+                                r = await client.post(
                                     f"{base_url}/sendMessage",
                                     json={
                                         "chat_id": chat_id,
@@ -1521,30 +1539,60 @@ async def run_telegram_adapter() -> None:
                                     },
                                     timeout=10.0,
                                 )
+                                if r.status_code != 200:
+                                    logger.warning(
+                                        "sendMessage repos %s: %s",
+                                        r.status_code,
+                                        r.text[:500] if r.text else "",
+                                    )
+                                    hint = _repos_setup_hint(kind, dashboard_url)
+                                    r2 = await client.post(
+                                        f"{base_url}/sendMessage",
+                                        json={
+                                            "chat_id": chat_id,
+                                            "text": hint,
+                                            "reply_markup": {
+                                                "inline_keyboard": [
+                                                    [
+                                                        {
+                                                            "text": "Открыть дашборд → Репозитории",
+                                                            "url": f"{dashboard_url}/repos",
+                                                        }
+                                                    ]
+                                                ]
+                                            },
+                                        },
+                                        timeout=5.0,
+                                    )
+                                    if r2.status_code != 200:
+                                        logger.warning(
+                                            "sendMessage repos fallback %s: %s",
+                                            r2.status_code,
+                                            r2.text[:300] if r2.text else "",
+                                        )
+                                    fallback_sent = True
+                            if fallback_sent:
+                                continue
                         except Exception as e:
-                            logger.debug("sendMessage repos list: %s", e)
-                            reply = _escape_html(
-                                "Не удалось загрузить список. Проверьте настройки в дашборде."
-                            )
-                            reply_markup = {
-                                "inline_keyboard": [
-                                    [
-                                        {
-                                            "text": "Открыть настройки",
-                                            "url": dashboard_url,
-                                        }
-                                    ]
-                                ]
-                            }
+                            logger.warning("sendMessage repos list: %s", e)
                             try:
+                                hint = _repos_setup_hint(kind, dashboard_url)
                                 async with httpx.AsyncClient() as client:
                                     await client.post(
                                         f"{base_url}/sendMessage",
                                         json={
                                             "chat_id": chat_id,
-                                            "text": reply,
-                                            "parse_mode": PARSE_MODE,
-                                            "reply_markup": reply_markup,
+                                            "text": hint,
+                                            "reply_markup": {
+                                                "inline_keyboard": [
+                                                    [
+                                                        {
+                                                            "text": "Открыть дашборд → Репозитории",
+                                                            "url": f"{dashboard_url.rstrip('/')}/repos",
+                                                        }
+                                                    ]
+                                                ]
+                                            },
                                         },
                                         timeout=5.0,
                                     )
