@@ -18,7 +18,6 @@ from assistant.dashboard.config_store import (
     get_config_from_redis_sync,
     get_status_from_redis,
     list_telegram_pending_sync,
-    list_telegram_secrets_sync,
     reject_telegram_user_sync,
     set_config_in_redis_sync,
     set_restart_requested,
@@ -166,8 +165,6 @@ def _login_as(client, redis_url, login: str, password: str, role: str = "owner")
 
 def test_users_page_owner_200(client, redis_url, monkeypatch):
     """GET /users для owner возвращает 200 и страницу «Пользователи» (ROADMAP §1)."""
-    from assistant.dashboard.config_store import get_redis_url
-
     monkeypatch.setattr("assistant.dashboard.config_store.get_redis_url", lambda: redis_url)
     _login_as(client, redis_url, "owner1", "pass1")
     r = client.get("/users")
@@ -180,7 +177,6 @@ def test_users_page_owner_200(client, redis_url, monkeypatch):
 def test_users_page_viewer_403(client, redis_url, monkeypatch):
     """GET /users для viewer возвращает 403."""
     from assistant.dashboard.auth import SESSION_COOKIE_NAME, create_session, create_user
-    from assistant.dashboard.config_store import get_redis_url
 
     try:
         import redis
@@ -225,7 +221,6 @@ def test_change_password_page_200_when_logged_in(client, auth_mock, monkeypatch)
 def test_add_user_owner_creates_and_redirects(client, redis_url, monkeypatch):
     """POST /add-user от owner создаёт пользователя и редирект на /users (ROADMAP §1)."""
     from assistant.dashboard.auth import list_users
-    from assistant.dashboard.config_store import get_redis_url
 
     monkeypatch.setattr("assistant.dashboard.config_store.get_redis_url", lambda: redis_url)
     _login_as(client, redis_url, "owner1", "pass1")

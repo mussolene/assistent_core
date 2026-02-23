@@ -380,7 +380,7 @@ def list_telegram_secrets_sync(redis_url: str) -> list[dict[str, Any]]:
             ttl = client.ttl(k)
             raw = client.get(k)
             try:
-                data = json.loads(raw) if raw else {}
+                _ = json.loads(raw) if raw else {}
                 out.append(
                     {
                         "secret_masked": key[:2] + "****" + key[-2:] if len(key) >= 4 else "****",
