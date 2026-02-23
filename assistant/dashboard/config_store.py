@@ -16,6 +16,13 @@ PAIRING_CODE_PREFIX = "assistant:pairing:"
 PAIRING_CODE_TTL = 600  # 10 min
 TELEGRAM_ADMIN_IDS_KEY = "TELEGRAM_ADMIN_IDS"
 RESTART_REQUESTED_KEY = "assistant:action:restart_requested"
+# Ожидание одобрения и секретные ключи привязки (user request)
+TELEGRAM_PENDING_PREFIX = "assistant:telegram:pending:"
+TELEGRAM_PENDING_IDS_KEY = "assistant:telegram:pending_ids"
+TELEGRAM_SECRET_PREFIX = "assistant:telegram:secret:"
+TELEGRAM_SECRET_TTL = 86400 * 7  # 7 дней
+TELEGRAM_PENDING_TTL = 86400 * 7  # 7 дней хранения заявки
+TELEGRAM_SECRET_LENGTH = 8  # циферно-буквенный ключ ~8 символов
 
 
 def get_redis_url() -> str:
@@ -218,3 +225,172 @@ async def set_restart_requested(redis_url: str, user_id: int) -> None:
     except Exception as e:
         logger.exception("Could not set restart requested: %s", e)
         raise
+
+
+# ----- Telegram: ожидание одобрения и секретные ключи привязки -----
+
+
+def add_telegram_pending_sync(
+    redis_url: str,
+    user_id: int,
+    *,
+    username: str = "",
+    first_name: str = "",
+    last_name: str = "",
+) -> None:
+    """Добавить пользователя в список ожидающих одобрения (нажал /start без кода/ключа)."""
+    try:
+        import time
+
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        key = TELEGRAM_PENDING_PREFIX + str(user_id)
+        payload = json.dumps(
+            {
+                "user_id": user_id,
+                "username": (username or "").strip(),
+                "first_name": (first_name or "").strip(),
+                "last_name": (last_name or "").strip(),
+                "at": time.time(),
+            }
+        )
+        client.setex(key, TELEGRAM_PENDING_TTL, payload)
+        client.sadd(TELEGRAM_PENDING_IDS_KEY, str(user_id))
+        client.close()
+    except Exception as e:
+        logger.exception("add_telegram_pending_sync: %s", e)
+        raise
+
+
+def list_telegram_pending_sync(redis_url: str) -> list[dict[str, Any]]:
+    """Список пользователей, ожидающих одобрения (с именами)."""
+    try:
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        ids = list(client.smembers(TELEGRAM_PENDING_IDS_KEY) or [])
+        out = []
+        for uid in ids:
+            raw = client.get(TELEGRAM_PENDING_PREFIX + uid)
+            if raw:
+                try:
+                    out.append(json.loads(raw))
+                except json.JSONDecodeError:
+                    pass
+            else:
+                client.srem(TELEGRAM_PENDING_IDS_KEY, uid)
+        client.close()
+        out.sort(key=lambda x: (x.get("at") or 0), reverse=True)
+        return out
+    except Exception as e:
+        logger.warning("list_telegram_pending_sync: %s", e)
+        return []
+
+
+def approve_telegram_user_sync(redis_url: str, user_id: int) -> None:
+    """Одобрить пользователя: добавить в разрешённые и убрать из pending."""
+    cfg = get_config_from_redis_sync(redis_url)
+    current = cfg.get("TELEGRAM_ALLOWED_USER_IDS") or []
+    if not isinstance(current, list):
+        current = [int(x.strip()) for x in str(current).split(",") if x.strip()]
+    uid_int = int(user_id)
+    if uid_int not in current:
+        current = list(current) + [uid_int]
+        set_config_in_redis_sync(redis_url, "TELEGRAM_ALLOWED_USER_IDS", current)
+    try:
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        client.delete(TELEGRAM_PENDING_PREFIX + str(user_id))
+        client.srem(TELEGRAM_PENDING_IDS_KEY, str(user_id))
+        client.close()
+    except Exception as e:
+        logger.warning("approve_telegram_user_sync cleanup: %s", e)
+
+
+def reject_telegram_user_sync(redis_url: str, user_id: int) -> None:
+    """Отклонить заявку: убрать из pending."""
+    try:
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        client.delete(TELEGRAM_PENDING_PREFIX + str(user_id))
+        client.srem(TELEGRAM_PENDING_IDS_KEY, str(user_id))
+        client.close()
+    except Exception as e:
+        logger.warning("reject_telegram_user_sync: %s", e)
+
+
+def create_telegram_secret_sync(
+    redis_url: str, ttl_sec: int | None = None
+) -> tuple[str, int]:
+    """Сгенерировать секретный ключ привязки (~8 символов). Возвращает (ключ, ttl_sec)."""
+    import secrets
+    import string
+
+    alphabet = string.ascii_uppercase + string.ascii_lowercase + string.digits
+    key = "".join(secrets.choice(alphabet) for _ in range(TELEGRAM_SECRET_LENGTH))
+    ttl = ttl_sec if ttl_sec is not None else TELEGRAM_SECRET_TTL
+    try:
+        import time
+
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        rkey = TELEGRAM_SECRET_PREFIX + key
+        payload = json.dumps({"created_at": time.time(), "expires_at": time.time() + ttl})
+        client.setex(rkey, ttl, payload)
+        client.close()
+        return key, ttl
+    except Exception as e:
+        logger.exception("create_telegram_secret_sync: %s", e)
+        raise
+
+
+def consume_telegram_secret_sync(redis_url: str, secret: str) -> bool:
+    """Проверить и «съесть» секретный ключ. True если ключ был валиден."""
+    if not secret or len(secret) > 24:
+        return False
+    secret = secret.strip()
+    try:
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        rkey = TELEGRAM_SECRET_PREFIX + secret
+        if client.delete(rkey):
+            client.close()
+            return True
+        client.close()
+        return False
+    except Exception:
+        return False
+
+
+def list_telegram_secrets_sync(redis_url: str) -> list[dict[str, Any]]:
+    """Список активных секретных ключей (маскированные, время жизни). Для дашборда."""
+    try:
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        keys = client.keys(TELEGRAM_SECRET_PREFIX + "*")
+        out = []
+        for k in keys or []:
+            key = k[len(TELEGRAM_SECRET_PREFIX) :]
+            ttl = client.ttl(k)
+            raw = client.get(k)
+            try:
+                data = json.loads(raw) if raw else {}
+                out.append(
+                    {
+                        "secret_masked": key[:2] + "****" + key[-2:] if len(key) >= 4 else "****",
+                        "expires_in_sec": max(0, ttl),
+                    }
+                )
+            except json.JSONDecodeError:
+                out.append({"secret_masked": "****", "expires_in_sec": max(0, ttl)})
+        client.close()
+        return out
+    except Exception as e:
+        logger.warning("list_telegram_secrets_sync: %s", e)
+        return []

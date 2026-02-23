@@ -1181,38 +1181,90 @@ async def run_telegram_adapter() -> None:
                             + ", ".join(a.get("filename") or "файл" for a in attachments)
                             + "]"
                         )
-                    # Pairing: /start CODE or /pair CODE (one-time code from dashboard)
+                    # Pairing: /start CODE or /pair CODE (one-time code or secret key from dashboard)
+                    start_arg = ""
                     if text.startswith("/start ") or text.startswith("/pair "):
-                        code = (
+                        start_arg = (
                             text.split(maxsplit=1)[1].strip()
                             if len(text.split(maxsplit=1)) > 1
                             else ""
                         )
-                        if code:
-                            from assistant.dashboard.config_store import (
-                                add_telegram_allowed_user,
-                                consume_pairing_code,
-                            )
+                    if start_arg:
+                        from assistant.dashboard.config_store import (
+                            add_telegram_allowed_user,
+                            consume_pairing_code,
+                            consume_telegram_secret_sync,
+                        )
 
-                            if consume_pairing_code(redis_url, code):
-                                await add_telegram_allowed_user(redis_url, uid_int)
-                                allowed.add(uid_int)
-                                async with httpx.AsyncClient() as client:
-                                    await client.post(
-                                        f"{base_url}/sendMessage",
-                                        json={
-                                            "chat_id": chat_id,
-                                            "text": PAIRING_SUCCESS_TEXT,
-                                            "parse_mode": PARSE_MODE,
-                                        },
-                                        timeout=5.0,
-                                    )
-                                continue
+                        loop = asyncio.get_event_loop()
+                        if consume_pairing_code(redis_url, start_arg):
+                            await add_telegram_allowed_user(redis_url, uid_int)
+                            allowed.add(uid_int)
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": PAIRING_SUCCESS_TEXT,
+                                        "parse_mode": PARSE_MODE,
+                                    },
+                                    timeout=5.0,
+                                )
+                            continue
+                        # Попробовать секретный ключ привязки
+                        loop = asyncio.get_event_loop()
+                        secret_ok = await loop.run_in_executor(
+                            None, consume_telegram_secret_sync, redis_url, start_arg
+                        )
+                        if secret_ok:
+                            await add_telegram_allowed_user(redis_url, uid_int)
+                            allowed.add(uid_int)
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": PAIRING_SUCCESS_TEXT,
+                                        "parse_mode": PARSE_MODE,
+                                    },
+                                    timeout=5.0,
+                                )
+                            continue
+                        # Код/ключ не подошёл — добавить в pending и подсказать
+                        from assistant.dashboard.config_store import add_telegram_pending_sync
+
+                        fr = msg.get("from") or {}
+                        await loop.run_in_executor(
+                            None,
+                            lambda: add_telegram_pending_sync(
+                                redis_url,
+                                uid_int,
+                                username=fr.get("username") or "",
+                                first_name=fr.get("first_name") or "",
+                                last_name=fr.get("last_name") or "",
+                            ),
+                        )
+                        pending_text = _escape_html(
+                            "Заявка зарегистрирована. Администратор одобрит доступ в дашборде, "
+                            "либо используйте секретный ключ: /start ВАШ_КЛЮЧ"
+                        )
+                        async with httpx.AsyncClient() as client:
+                            await client.post(
+                                f"{base_url}/sendMessage",
+                                json={
+                                    "chat_id": chat_id,
+                                    "text": pending_text,
+                                    "parse_mode": PARSE_MODE,
+                                },
+                                timeout=5.0,
+                            )
+                        continue
                     # Pairing: /start or /pair when global pairing mode is on
                     if text in ("/start", "/pair"):
                         from assistant.dashboard.config_store import (
                             PAIRING_MODE_KEY,
                             add_telegram_allowed_user,
+                            add_telegram_pending_sync,
                             get_config_from_redis,
                         )
 
@@ -1231,18 +1283,30 @@ async def run_telegram_adapter() -> None:
                                     timeout=5.0,
                                 )
                             continue
-                        # /start без кода и без глобального pairing: приветствие для неразрешённого пользователя
+                        # /start без кода и без глобального pairing: добавить в pending, показать инструкцию
                         if allowed and uid_int not in allowed:
+                            loop = asyncio.get_event_loop()
+                            fr = msg.get("from") or {}
+                            await loop.run_in_executor(
+                                None,
+                                lambda: add_telegram_pending_sync(
+                                    redis_url,
+                                    uid_int,
+                                    username=fr.get("username") or "",
+                                    first_name=fr.get("first_name") or "",
+                                    last_name=fr.get("last_name") or "",
+                                ),
+                            )
                             dashboard_url = (
                                 os.getenv("DASHBOARD_URL", "http://localhost:8080").rstrip("/")
                             )
-                            welcome_text = _escape_html(get_welcome_message_text())
+                            pending_msg = _escape_html(
+                                "Вы подали заявку на доступ. Администратор одобрит вас в дашборде, "
+                                "либо введите секретный ключ: /start ВАШ_КЛЮЧ"
+                            )
                             reply_markup = {
                                 "inline_keyboard": [
-                                    [
-                                        {"text": "Справка", "callback_data": "cmd:help"},
-                                        {"text": "Настройки", "url": dashboard_url},
-                                    ]
+                                    [{"text": "Открыть дашборд", "url": dashboard_url}],
                                 ]
                             }
                             try:
@@ -1251,14 +1315,14 @@ async def run_telegram_adapter() -> None:
                                         f"{base_url}/sendMessage",
                                         json={
                                             "chat_id": chat_id,
-                                            "text": welcome_text,
+                                            "text": pending_msg,
                                             "parse_mode": PARSE_MODE,
                                             "reply_markup": reply_markup,
                                         },
                                         timeout=5.0,
                                     )
                             except Exception as e:
-                                logger.debug("sendMessage welcome: %s", e)
+                                logger.debug("sendMessage pending: %s", e)
                             continue
                     if allowed and uid_int not in allowed:
                         logger.debug("user not in whitelist: %s", user_id)

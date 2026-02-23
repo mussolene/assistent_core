@@ -9,10 +9,17 @@ from assistant.dashboard.config_store import (
     RESTART_REQUESTED_KEY,
     TELEGRAM_ADMIN_IDS_KEY,
     add_telegram_allowed_user,
+    add_telegram_pending_sync,
+    approve_telegram_user_sync,
     consume_pairing_code,
+    consume_telegram_secret_sync,
     create_pairing_code,
+    create_telegram_secret_sync,
     get_config_from_redis_sync,
     get_status_from_redis,
+    list_telegram_pending_sync,
+    list_telegram_secrets_sync,
+    reject_telegram_user_sync,
     set_config_in_redis_sync,
     set_restart_requested,
 )
@@ -403,6 +410,43 @@ def test_create_and_consume_pairing_code(redis_url):
     assert r.get(PAIRING_CODE_PREFIX + code) is None
     assert consume_pairing_code(redis_url, code) is False
     r.close()
+
+
+def test_telegram_pending_and_approve(redis_url):
+    """Ожидание одобрения: add → list → approve → пользователь в разрешённых."""
+    add_telegram_pending_sync(
+        redis_url, 999001, username="alice", first_name="Alice", last_name="U"
+    )
+    pending = list_telegram_pending_sync(redis_url)
+    assert len(pending) >= 1
+    one = next((p for p in pending if p.get("user_id") == 999001), None)
+    assert one is not None
+    assert one.get("username") == "alice"
+    assert one.get("first_name") == "Alice"
+    approve_telegram_user_sync(redis_url, 999001)
+    pending2 = list_telegram_pending_sync(redis_url)
+    assert not any(p.get("user_id") == 999001 for p in pending2)
+    data = get_config_from_redis_sync(redis_url)
+    assert 999001 in (data.get("TELEGRAM_ALLOWED_USER_IDS") or [])
+
+
+def test_telegram_pending_reject(redis_url):
+    """Отклонить заявку — убрать из pending."""
+    add_telegram_pending_sync(redis_url, 999002, first_name="Bob")
+    reject_telegram_user_sync(redis_url, 999002)
+    pending = list_telegram_pending_sync(redis_url)
+    assert not any(p.get("user_id") == 999002 for p in pending)
+
+
+def test_telegram_secret_create_and_consume(redis_url):
+    """Секретный ключ: создать, проверить наличие, потребить (одноразовый)."""
+    key, ttl = create_telegram_secret_sync(redis_url)
+    assert len(key) == 8
+    assert key.isalnum()
+    assert ttl > 0
+    assert consume_telegram_secret_sync(redis_url, key) is True
+    assert consume_telegram_secret_sync(redis_url, key) is False
+    assert consume_telegram_secret_sync(redis_url, "wrongkey") is False
 
 
 def test_config_store_telegram_admin_ids_roundtrip(redis_url):

@@ -53,9 +53,14 @@ from assistant.dashboard.config_store import (
     PAIRING_MODE_KEY,
     REDIS_PREFIX,
     TELEGRAM_ADMIN_IDS_KEY,
+    approve_telegram_user_sync,
     create_pairing_code,
+    create_telegram_secret_sync,
     get_config_from_redis_sync,
     get_redis_url,
+    list_telegram_pending_sync,
+    list_telegram_secrets_sync,
+    reject_telegram_user_sync,
     set_config_in_redis_sync,
 )
 
@@ -366,9 +371,22 @@ def setup():
 
 
 # ----- Telegram body (no extends) -----
+_TELEGRAM_INSTRUCTIONS = """
+<details class="card" style="margin-bottom:1rem">
+  <summary class="details-summary">Инструкция: привязка пользователей</summary>
+  <ol style="margin:0.5rem 0; padding-left:1.2rem;">
+    <li>Пользователь нажимает <b>Start</b> в боте или отправляет команду /start.</li>
+    <li>В блоке «Ожидают одобрения» ниже появятся заявки с именами (User ID, имя, username).</li>
+    <li>Одобрите или отклоните заявку кнопками.</li>
+    <li>Либо сгенерируйте <b>секретный ключ</b> и передайте пользователю — он вводит в боте: <code>/start ВАШ_КЛЮЧ</code>. Ключ действует 7 дней.</li>
+  </ol>
+  <p class="hint">Комбинация: можно отправить пользователю сообщение с кнопкой Start и текстом «Выполните привязку: введите в боте /start ВАШ_КЛЮЧ» после генерации ключа.</p>
+</details>
+"""
 _TELEGRAM_BODY = """
 <h1>Telegram</h1>
-<p class="sub">Токен бота и pairing. Разрешённые ID можно задать вручную или через pairing.</p>
+<p class="sub">Токен бота и pairing. Разрешённые ID можно задать вручную, через одобрение заявок или секретный ключ.</p>
+""" + _TELEGRAM_INSTRUCTIONS + """
 <form method="post" action="/save-telegram" id="form-telegram">
   <div class="card">
     <label for="token">Bot Token</label>
@@ -409,6 +427,22 @@ _TELEGRAM_BODY = """
       <p class="hint">Код: <strong id="pairing-code"></strong> (действует <span id="pairing-expires"></span> с)</p>
       <p class="hint">Ссылка: <a id="pairing-link" href="#" target="_blank" rel="noopener"></a></p>
     </div>
+  </div>
+  <div class="card">
+    <label>Ожидают одобрения</label>
+    <p class="hint">Пользователи, нажавшие /start в боте. Одобрите или отклоните.</p>
+    <div id="telegram-pending-list"></div>
+    <button type="button" class="btn btn-secondary" onclick="refreshTelegramPending()" style="margin-top:0.5rem">Обновить</button>
+  </div>
+  <div class="card">
+    <label>Секретные ключи привязки</label>
+    <p class="hint">Передайте ключ пользователю — он вводит в боте: /start КЛЮЧ. Ключ одноразовый, действует 7 дней.</p>
+    <button type="button" class="btn btn-secondary" onclick="genTelegramSecret()">Сгенерировать ключ</button>
+    <span id="telegram-secret-result" style="margin-left:0.5rem;font-size:0.9rem"></span>
+    <div id="telegram-secret-block" style="margin-top:0.75rem;display:none">
+      <p class="hint">Ключ: <strong id="telegram-secret-key"></strong> — скопируйте и передайте пользователю.</p>
+    </div>
+    <div id="telegram-secrets-list" style="margin-top:0.75rem"></div>
   </div>
   <button type="submit" class="btn" id="btn-save-telegram">Сохранить</button>
 </form>
@@ -460,6 +494,70 @@ function genPairingCode() {
     })
     .catch(function(e) { result.textContent = 'Ошибка: ' + e.message; });
 }
+function refreshTelegramPending() {
+  var el = document.getElementById('telegram-pending-list');
+  if (!el) return;
+  el.innerHTML = '…';
+  fetch('/api/telegram-pending')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.ok) { el.innerHTML = '<p class="hint">Ошибка: ' + (d.error || '') + '</p>'; return; }
+      var pending = d.pending || [];
+      if (pending.length === 0) { el.innerHTML = '<p class="hint">Нет заявок.</p>'; return; }
+      var html = '<table class="monitor-table" style="width:100%; border-collapse:collapse;"><thead><tr style="text-align:left"><th style="padding:0.4rem">User ID</th><th style="padding:0.4rem">Имя</th><th style="padding:0.4rem">username</th><th></th></tr></thead><tbody>';
+      pending.forEach(function(p) {
+        var name = [p.first_name, p.last_name].filter(Boolean).join(' ') || '—';
+        var uname = p.username ? '@' + p.username : '—';
+        html += '<tr><td style="padding:0.4rem">' + p.user_id + '</td><td style="padding:0.4rem">' + name + '</td><td style="padding:0.4rem">' + uname + '</td><td style="padding:0.4rem"><button type="button" class="btn btn-secondary" onclick="approveTelegramUser(' + p.user_id + ')">Одобрить</button> <button type="button" class="btn btn-secondary" onclick="rejectTelegramUser(' + p.user_id + ')">Отклонить</button></td></tr>';
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    })
+    .catch(function(e) { el.innerHTML = '<p class="hint">Ошибка: ' + e.message + '</p>'; });
+}
+function approveTelegramUser(uid) {
+  fetch('/api/telegram-approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: uid }) })
+    .then(function(r) { return r.json(); })
+    .then(function(d) { if (window.showToast) window.showToast(d.ok ? 'Одобрено.' : (d.error || 'Ошибка'), d.ok ? 'success' : 'error'); if (d.ok) refreshTelegramPending(); })
+    .catch(function(e) { if (window.showToast) window.showToast(e.message || 'Ошибка', 'error'); });
+}
+function rejectTelegramUser(uid) {
+  fetch('/api/telegram-reject', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ user_id: uid }) })
+    .then(function(r) { return r.json(); })
+    .then(function(d) { if (window.showToast) window.showToast(d.ok ? 'Отклонено.' : (d.error || 'Ошибка'), d.ok ? 'success' : 'error'); if (d.ok) refreshTelegramPending(); })
+    .catch(function(e) { if (window.showToast) window.showToast(e.message || 'Ошибка', 'error'); });
+}
+function genTelegramSecret() {
+  var result = document.getElementById('telegram-secret-result');
+  var block = document.getElementById('telegram-secret-block');
+  if (result) result.textContent = '…';
+  if (block) block.style.display = 'none';
+  fetch('/api/telegram-secret', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.ok) { if (result) result.textContent = 'Ошибка: ' + (d.error || ''); return; }
+      document.getElementById('telegram-secret-key').textContent = d.secret;
+      if (block) block.style.display = 'block';
+      if (result) result.textContent = 'Готово';
+      if (window.showToast) window.showToast('Ключ создан. Передайте пользователю.', 'success');
+      refreshTelegramSecrets();
+    })
+    .catch(function(e) { if (result) result.textContent = 'Ошибка: ' + e.message; });
+}
+function refreshTelegramSecrets() {
+  var el = document.getElementById('telegram-secrets-list');
+  if (!el) return;
+  fetch('/api/telegram-secrets')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.ok) { el.innerHTML = ''; return; }
+      var list = d.secrets || [];
+      if (list.length === 0) { el.innerHTML = '<p class="hint">Нет активных ключей.</p>'; return; }
+      el.innerHTML = '<p class="hint">Активные ключи: ' + list.map(function(s) { return s.secret_masked + ' (через ' + s.expires_in_sec + ' с)'; }).join(', ') + '</p>';
+    })
+    .catch(function() { el.innerHTML = ''; });
+}
+document.addEventListener('DOMContentLoaded', function() { refreshTelegramPending(); refreshTelegramSecrets(); });
 </script>
 """
 
@@ -1916,6 +2014,69 @@ def api_pairing_code():
         except Exception:
             pass
     return jsonify({"ok": True, "code": code, "link": link, "expires_in_sec": expires})
+
+
+@app.route("/api/telegram-pending", methods=["GET"])
+def api_telegram_pending():
+    """Список пользователей Telegram, ожидающих одобрения (нажали /start)."""
+    redis_url = get_redis_url()
+    try:
+        pending = list_telegram_pending_sync(redis_url)
+        return jsonify({"ok": True, "pending": pending})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/telegram-approve", methods=["POST"])
+def api_telegram_approve():
+    """Одобрить пользователя: добавить в разрешённые, убрать из pending."""
+    redis_url = get_redis_url()
+    data = request.get_json(silent=True) or {}
+    user_id = request.form.get("user_id") or data.get("user_id")
+    if not user_id:
+        return jsonify({"ok": False, "error": "user_id required"}), 400
+    try:
+        approve_telegram_user_sync(redis_url, int(user_id))
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/telegram-reject", methods=["POST"])
+def api_telegram_reject():
+    """Отклонить заявку пользователя."""
+    redis_url = get_redis_url()
+    data = request.get_json(silent=True) or {}
+    user_id = request.form.get("user_id") or data.get("user_id")
+    if not user_id:
+        return jsonify({"ok": False, "error": "user_id required"}), 400
+    try:
+        reject_telegram_user_sync(redis_url, int(user_id))
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/telegram-secret", methods=["POST"])
+def api_telegram_secret():
+    """Сгенерировать секретный ключ привязки. Возвращает ключ (показать один раз)."""
+    redis_url = get_redis_url()
+    try:
+        key, ttl = create_telegram_secret_sync(redis_url)
+        return jsonify({"ok": True, "secret": key, "expires_in_sec": ttl})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/telegram-secrets", methods=["GET"])
+def api_telegram_secrets():
+    """Список активных секретных ключей (маскированные)."""
+    redis_url = get_redis_url()
+    try:
+        secrets = list_telegram_secrets_sync(redis_url)
+        return jsonify({"ok": True, "secrets": secrets})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/api/cloned-repos", methods=["GET"])
