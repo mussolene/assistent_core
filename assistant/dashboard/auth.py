@@ -86,6 +86,21 @@ def get_user(redis_client: Any, login: str) -> dict[str, Any] | None:
         return None
 
 
+def list_users(redis_client: Any) -> list[dict[str, Any]]:
+    """List all users (login, role, display_name). For owner-only UI."""
+    logins = redis_client.smembers(USERS_SET_KEY)
+    out: list[dict[str, Any]] = []
+    for login in sorted(logins or []):
+        u = get_user(redis_client, login)
+        if u:
+            out.append({
+                "login": login,
+                "role": u.get("role", "viewer"),
+                "display_name": u.get("display_name", login),
+            })
+    return out
+
+
 def verify_user(redis_client: Any, login: str, password: str) -> dict[str, Any] | None:
     """Verify login/password. Returns user dict (with role) or None."""
     data = get_user(redis_client, login)

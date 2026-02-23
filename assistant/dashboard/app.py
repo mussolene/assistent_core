@@ -42,6 +42,8 @@ from assistant.dashboard.auth import (
     delete_session,
     get_current_user,
     get_redis,
+    list_users,
+    require_role,
     setup_done,
     verify_user,
 )
@@ -84,6 +86,9 @@ INDEX_HTML = """
     <a href="{{ url_for('integrations_page') }}" class="{{ 'active' if section == 'integrations' else '' }}">Интеграции</a>
     <a href="{{ url_for('data_page') }}" class="{{ 'active' if section == 'data' else '' }}">Данные</a>
     <a href="{{ url_for('system_page') }}" class="{{ 'active' if section == 'system' else '' }}">Система</a>
+    {% if current_user and current_user.role == 'owner' %}
+    <a href="{{ url_for('users_page') }}" class="{{ 'active' if section == 'users' else '' }}">Пользователи</a>
+    {% endif %}
     {% if current_user %}
     <span style="margin-left:auto;color:var(--muted);font-size:0.9rem">{{ current_user.display_name or current_user.login }} ({{ current_user.role }})</span>
     <a href="{{ url_for('logout') }}" style="margin-left:0.5rem">Выйти</a>
@@ -1373,6 +1378,45 @@ def mcp_api_events(endpoint_id):
     )
 
 
+# ----- Users (owner only) -----
+_USERS_BODY = """
+<h1>Пользователи</h1>
+<p class="sub">Управление учётными записями Dashboard. Доступно только владельцу (owner).</p>
+<div class="card">
+  <table class="monitor-table" style="width:100%; max-width:500px; border-collapse:collapse;">
+    <thead><tr style="text-align:left; border-bottom:1px solid var(--border);">
+      <th style="padding:0.5rem;">Логин</th>
+      <th style="padding:0.5rem;">Роль</th>
+      <th style="padding:0.5rem;">Отображаемое имя</th>
+    </tr></thead>
+    <tbody>
+    {% for u in users %}
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:0.5rem;">{{ u.login }}</td>
+      <td style="padding:0.5rem;">{{ u.role }}</td>
+      <td style="padding:0.5rem;">{{ u.display_name or u.login }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<form method="post" action="{{ url_for('add_user') }}" id="form-add-user" style="margin-top:1rem;">
+  <div class="card">
+    <label for="new-login">Логин</label>
+    <input type="text" id="new-login" name="login" required minlength="1" maxlength="64" placeholder="логин">
+    <label for="new-password">Пароль</label>
+    <input type="password" id="new-password" name="password" required minlength="1" placeholder="пароль">
+    <label for="new-role">Роль</label>
+    <select id="new-role" name="role">
+      <option value="viewer">viewer</option>
+      <option value="operator">operator</option>
+      <option value="owner">owner</option>
+    </select>
+  </div>
+  <button type="submit" class="btn">Добавить пользователя</button>
+</form>
+"""
+
 # ----- Monitor -----
 _MONITOR_BODY = """
 <h1>Мониторинг</h1>
@@ -1524,6 +1568,42 @@ def repos_page():
         workspace_dir=workspace_dir or None,
         repos=repos,
     )
+
+
+@app.route("/users")
+@require_role("owner")
+def users_page():
+    """Пользователи: список и добавление (только owner). ROADMAP §1."""
+    r = get_redis()
+    users = list_users(r)
+    config = load_config()
+    return render_template_string(
+        INDEX_HTML.replace("{% block content %}{% endblock %}", _USERS_BODY),
+        config=config,
+        section="users",
+        users=users,
+    )
+
+
+@app.route("/add-user", methods=["POST"])
+@require_role("owner")
+def add_user():
+    """Добавить пользователя (только owner)."""
+    login_name = (request.form.get("login") or "").strip()
+    password = request.form.get("password") or ""
+    role = (request.form.get("role") or "viewer").strip().lower()
+    if role not in ("owner", "operator", "viewer"):
+        role = "viewer"
+    if not login_name or not password:
+        flash("Укажите логин и пароль.", "error")
+        return redirect(url_for("users_page"))
+    r = get_redis()
+    try:
+        create_user(r, login_name, password, role=role)
+        flash(f"Пользователь «{login_name}» создан.", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("users_page"))
 
 
 @app.route("/system")

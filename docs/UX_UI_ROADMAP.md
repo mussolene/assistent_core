@@ -14,6 +14,7 @@
 - **П.5 улучшение списков:** Репо: подпись «Страница N из K» при известном total (склонированные). Функция `format_repos_reply_text(label, page, total)`; тесты в test_channels.py.
 - **4.3 аккордеон «Дополнительно»:** На странице Модель блок Fallback, облачный fallback, LM Studio native и API ключ вынесены в `<details class="card">` с заголовком «Дополнительно»; стили в layout.css (`.details-summary`). Тест: test_model_page_has_accordion.
 - **ROADMAP 3.4 справка по ролям:** В /help блок «Для админов» с /restart; в BOT_COMMANDS у команды restart поле `admin_only: True`. Тест: test_get_help_message_text_has_admin_section.
+- **ROADMAP §1 управление пользователями:** Страница «Пользователи» (/users) для владельца: список пользователей, форма добавления (логин, пароль, роль). POST /add-user (только owner). В навбаре ссылка «Пользователи» только при role=owner. Тесты: test_list_users, test_users_page_owner_200, test_users_page_viewer_403, test_add_user_owner_creates_and_redirects.
 
 ---
 

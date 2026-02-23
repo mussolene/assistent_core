@@ -133,6 +133,93 @@ def test_api_health_no_auth(client):
     assert j == {"ok": True}
 
 
+def _login_as(client, redis_url, login: str, password: str, role: str = "owner"):
+    """Create user and session in Redis, set session cookie on client. Uses auth helpers."""
+    from assistant.dashboard.auth import (
+        SESSION_COOKIE_NAME,
+        create_session,
+        create_user,
+    )
+
+    try:
+        import redis
+
+        r = redis.from_url(redis_url, decode_responses=True)
+        r.ping()
+    except Exception:
+        pytest.skip("Redis not available")
+    try:
+        create_user(r, login, password, role=role)
+    except ValueError:
+        pass
+    sid = create_session(r, login)
+    r.close()
+    client.set_cookie("localhost", SESSION_COOKIE_NAME, sid)
+
+
+def test_users_page_owner_200(client, redis_url, monkeypatch):
+    """GET /users для owner возвращает 200 и страницу «Пользователи» (ROADMAP §1)."""
+    from assistant.dashboard.config_store import get_redis_url
+
+    monkeypatch.setattr("assistant.dashboard.config_store.get_redis_url", lambda: redis_url)
+    _login_as(client, redis_url, "owner1", "pass1")
+    r = client.get("/users")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "Пользователи" in body
+    assert "owner1" in body
+
+
+def test_users_page_viewer_403(client, redis_url, monkeypatch):
+    """GET /users для viewer возвращает 403."""
+    from assistant.dashboard.auth import SESSION_COOKIE_NAME, create_session, create_user
+    from assistant.dashboard.config_store import get_redis_url
+
+    try:
+        import redis
+
+        rd = redis.from_url(redis_url, decode_responses=True)
+        rd.ping()
+    except Exception:
+        pytest.skip("Redis not available")
+    monkeypatch.setattr("assistant.dashboard.config_store.get_redis_url", lambda: redis_url)
+    try:
+        create_user(rd, "viewer1", "pass1", role="viewer")
+    except ValueError:
+        pass
+    sid = create_session(rd, "viewer1")
+    rd.close()
+    client.set_cookie("localhost", SESSION_COOKIE_NAME, sid)
+    r = client.get("/users")
+    assert r.status_code == 403
+
+
+def test_add_user_owner_creates_and_redirects(client, redis_url, monkeypatch):
+    """POST /add-user от owner создаёт пользователя и редирект на /users (ROADMAP §1)."""
+    from assistant.dashboard.auth import list_users
+    from assistant.dashboard.config_store import get_redis_url
+
+    monkeypatch.setattr("assistant.dashboard.config_store.get_redis_url", lambda: redis_url)
+    _login_as(client, redis_url, "owner1", "pass1")
+    r = client.post(
+        "/add-user",
+        data={"login": "newop", "password": "secret123", "role": "operator"},
+    )
+    assert r.status_code == 302
+    assert "/users" in (r.headers.get("Location") or "")
+    # Check user was created
+    try:
+        import redis
+
+        rd = redis.from_url(redis_url, decode_responses=True)
+        users = list_users(rd)
+        rd.close()
+        logins = [u["login"] for u in users]
+        assert "newop" in logins
+    except Exception:
+        pass
+
+
 def test_api_monitor(client, auth_mock):
     """Dashboard API monitor returns redis, services, tasks, keys_by_prefix."""
     r = client.get("/api/monitor")

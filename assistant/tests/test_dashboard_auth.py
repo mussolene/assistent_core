@@ -18,6 +18,7 @@ from assistant.dashboard.auth import (
     get_current_user,
     get_session,
     get_user,
+    list_users,
     setup_done,
     verify_password,
     verify_user,
@@ -90,6 +91,34 @@ def test_create_user_and_get_user(redis_url):
     finally:
         client.delete(USER_PREFIX + "auth_test_user")
         client.srem(USERS_SET_KEY, "auth_test_user")
+        client.close()
+
+
+def test_list_users(redis_url):
+    """list_users returns sorted list of login, role, display_name (no secrets)."""
+    try:
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        client.ping()
+    except Exception:
+        pytest.skip("Redis not available")
+    for key in list(client.scan_iter(USER_PREFIX + "*")):
+        client.delete(key)
+    client.delete(USERS_SET_KEY)
+    try:
+        create_user(client, "lu_a", "p", role="viewer")
+        create_user(client, "lu_b", "p", role="owner")
+        users = list_users(client)
+        assert len(users) == 2
+        assert users[0]["login"] == "lu_a" and users[0]["role"] == "viewer"
+        assert users[1]["login"] == "lu_b" and users[1]["role"] == "owner"
+        for u in users:
+            assert "password_hash" not in u and "salt" not in u
+    finally:
+        for key in list(client.scan_iter(USER_PREFIX + "*")):
+            client.delete(key)
+        client.delete(USERS_SET_KEY)
         client.close()
 
 
