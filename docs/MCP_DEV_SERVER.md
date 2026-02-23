@@ -25,6 +25,20 @@
 | GET | `/mcp/v1/agent/<id>/replies` | Забрать и очистить очередь обратной связи (сообщения из `/dev ...`). Ответ: `{"ok": true, "replies": ["...", ...]}`. |
 | GET | `/mcp/v1/agent/<id>/events` | **SSE** (Server-Sent Events). Долгое соединение: события `confirmation` (результат подтверждения) и `feedback` (новое сообщение от пользователя). Данные в формате JSON в поле `data`. |
 
+## Инструменты MCP (JSON-RPC tools/list и tools/call)
+
+При подключении через JSON-RPC (POST `/mcp/v1/agent/<id>` с методом `tools/list`) доступны инструменты:
+
+| Инструмент | Описание | Аргументы |
+|------------|----------|-----------|
+| **notify** | Отправить сообщение в Telegram | `message` (строка) |
+| **ask_confirmation** | Запросить подтверждение (кнопки Подтвердить/Отклонить) | `message`, опционально `timeout_sec` (по умолчанию 120) |
+| **get_user_feedback** | Забрать сообщения пользователя (из `/dev ...`) | — |
+| **create_task** | Создать задачу пользователя (user_id = chat_id endpoint'а). Можно передать `title` или `text`/`phrase` (например «завтра купить молоко» — парсер подставит срок). | `title`, или `text`, или `phrase` |
+| **list_tasks** | Список задач пользователя | — |
+
+Пример вызова через JSON-RPC: `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"create_task","arguments":{"text":"завтра купить молоко"}}}`.
+
 ## SSE
 
 Подключитесь к `GET /mcp/v1/agent/<id>/events` с заголовком `Authorization: Bearer <секрет>`. События:

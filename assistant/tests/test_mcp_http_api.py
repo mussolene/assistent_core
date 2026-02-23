@@ -1,6 +1,6 @@
 """Tests for MCP HTTP API: notify, question, confirmation, replies, events, JSON-RPC base."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -66,7 +66,7 @@ def test_mcp_base_post_initialize(client, mcp_auth):
 
 
 def test_mcp_base_post_tools_list(client, mcp_auth):
-    """POST /mcp/v1/agent/<id> tools/list возвращает notify, ask_confirmation, get_user_feedback."""
+    """POST /mcp/v1/agent/<id> tools/list возвращает notify, ask_confirmation, get_user_feedback, create_task, list_tasks."""
     r = client.post(
         "/mcp/v1/agent/abc123",
         headers={"Authorization": "Bearer secret123", "Content-Type": "application/json"},
@@ -79,6 +79,8 @@ def test_mcp_base_post_tools_list(client, mcp_auth):
     assert "notify" in names
     assert "ask_confirmation" in names
     assert "get_user_feedback" in names
+    assert "create_task" in names
+    assert "list_tasks" in names
 
 
 def test_mcp_base_post_tools_call_notify(client, mcp_auth):
@@ -157,3 +159,58 @@ def test_mcp_confirmation_endpoint_ok(client, mcp_auth):
     assert j.get("ok") is True
     assert j.get("pending") is True
     send_conf.assert_called_once_with("test_chat_123", "Deploy?")
+
+
+def test_mcp_tools_call_create_task(client, mcp_auth):
+    """POST tools/call create_task вызывает TaskSkill и возвращает результат."""
+    with patch("assistant.skills.tasks.TaskSkill") as MockSkill:
+        instance = MockSkill.return_value
+        instance.run = AsyncMock(
+            return_value={"ok": True, "task_id": "t1", "user_reply": "Задача создана."}
+        )
+        r = client.post(
+            "/mcp/v1/agent/abc123",
+            headers={"Authorization": "Bearer secret123", "Content-Type": "application/json"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "create_task", "arguments": {"title": "Купить молоко"}},
+            },
+        )
+    assert r.status_code == 200
+    j = r.get_json()
+    text = (j.get("result", {}).get("content", [{}])[0].get("text") or "")
+    assert "ok" in text and "task_id" in text
+    instance.run.assert_called_once()
+    call_args = instance.run.call_args[0][0]
+    assert call_args.get("action") == "create_task"
+    assert call_args.get("user_id") == "test_chat_123"
+    assert call_args.get("title") == "Купить молоко"
+
+
+def test_mcp_tools_call_list_tasks(client, mcp_auth):
+    """POST tools/call list_tasks возвращает список задач."""
+    with patch("assistant.skills.tasks.TaskSkill") as MockSkill:
+        instance = MockSkill.return_value
+        instance.run = AsyncMock(
+            return_value={"ok": True, "tasks": [{"id": "1", "title": "Task 1"}], "tasks_count": 1}
+        )
+        r = client.post(
+            "/mcp/v1/agent/abc123",
+            headers={"Authorization": "Bearer secret123", "Content-Type": "application/json"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "list_tasks", "arguments": {}},
+            },
+        )
+    assert r.status_code == 200
+    j = r.get_json()
+    text = (j.get("result", {}).get("content", [{}])[0].get("text") or "")
+    assert "ok" in text
+    instance.run.assert_called_once()
+    call_args = instance.run.call_args[0][0]
+    assert call_args.get("action") == "list_tasks"
+    assert call_args.get("user_id") == "test_chat_123"

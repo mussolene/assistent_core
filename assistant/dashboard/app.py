@@ -1335,6 +1335,41 @@ def _mcp_tools_call(chat_id: str, endpoint_id: str, name: str, arguments: dict) 
         feedback = pop_dev_feedback(chat_id)
         return {"content": [{"type": "text", "text": json.dumps(feedback)}]}
 
+    if name == "create_task":
+        title = (arguments.get("title") or "").strip()
+        text = (arguments.get("text") or arguments.get("phrase") or "").strip()
+        if not title and not text:
+            return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": "Укажите title или text/phrase."})}]}
+        user_id = str(chat_id)
+        try:
+            from assistant.skills.tasks import TaskSkill
+
+            skill = TaskSkill()
+            params = {"action": "create_task", "user_id": user_id}
+            if title:
+                params["title"] = title
+            if text:
+                params["text"] = text
+            result = asyncio.run(skill.run(params))
+            return {"content": [{"type": "text", "text": json.dumps(result)}]}
+        except Exception as e:
+            logger.exception("MCP create_task: %s", e)
+            return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": str(e)})}]}
+
+    if name == "list_tasks":
+        user_id = str(chat_id)
+        try:
+            from assistant.skills.tasks import TaskSkill
+
+            skill = TaskSkill()
+            result = asyncio.run(
+                skill.run({"action": "list_tasks", "user_id": user_id})
+            )
+            return {"content": [{"type": "text", "text": json.dumps(result)}]}
+        except Exception as e:
+            logger.exception("MCP list_tasks: %s", e)
+            return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": str(e)})}]}
+
     return {"content": [{"type": "text", "text": f"Неизвестный инструмент: {name}"}]}
 
 
@@ -1360,6 +1395,23 @@ MCP_TOOLS_SPEC = [
     {
         "name": "get_user_feedback",
         "description": "Забрать сообщения от пользователя (/dev в Telegram).",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "create_task",
+        "description": "Создать задачу пользователя. Укажите title или text/phrase (например «завтра купить молоко» — парсер подставит срок).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "text": {"type": "string"},
+                "phrase": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "list_tasks",
+        "description": "Список задач пользователя (по chat_id endpoint'а).",
         "inputSchema": {"type": "object", "properties": {}},
     },
 ]
