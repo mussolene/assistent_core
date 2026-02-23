@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2025-02-22
+
+### Added
+
+- **MCP create_task и list_tasks:** инструменты MCP для создания задачи (title или text/phrase с парсером) и получения списка задач; user_id = chat_id endpoint'а ([ROADMAP_0.2.2](docs/ROADMAP_0.2.2.md)).
+- **Документация MCP:** в [MCP_DEV_SERVER.md](docs/MCP_DEV_SERVER.md) — таблица всех инструментов (notify, ask_confirmation, get_user_feedback, create_task, list_tasks) и пример JSON-RPC вызова.
+
+### Changed
+
+- Версия пакета и MCP serverInfo: 0.2.2.
+
 ## [0.2.1] - 2025-02-22
 
 ### Added
