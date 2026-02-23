@@ -39,6 +39,7 @@ async def run_core(config: Config) -> None:
     from assistant.skills.file_ref import FileRefSkill
     from assistant.skills.filesystem import FilesystemSkill
     from assistant.skills.git import GitSkill
+    from assistant.skills.integrations_skill import IntegrationsSkill
     from assistant.skills.index_repo_skill import IndexRepoSkill
     from assistant.skills.mcp_adapter import McpAdapterSkill
     from assistant.skills.memory_control import MemoryControlSkill
@@ -153,6 +154,7 @@ async def run_core(config: Config) -> None:
     skills.register(IndexRepoSkill(redis_url=config.redis.url))
     skills.register(SearchReposSkill(redis_url=config.redis.url))
     skills.register(McpAdapterSkill())
+    skills.register(IntegrationsSkill())
     runner = SandboxRunner()
     agent_registry = AgentRegistry()
     agent_registry.register("assistant", AssistantAgent(gateway_factory=get_gateway, memory=memory))

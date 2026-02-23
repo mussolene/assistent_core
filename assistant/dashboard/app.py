@@ -1103,6 +1103,31 @@ def remove_mcp():
     return redirect(url_for("integrations_page"))
 
 
+# ----- To-Do и календарь (Фаза 2) -----
+_INTEGRATIONS_EXTERNAL_BODY = """
+<h1>To-Do и календарь</h1>
+<p class="sub">Microsoft To-Do и Google Calendar: привязка через OAuth, создание задач и событий из ассистента.</p>
+<div class="card">
+  <h3 style="margin-top:0">Microsoft To-Do</h3>
+  <p><strong>Статус:</strong> {{ 'Подключено' if todo_configured else 'Не подключено' }}</p>
+  {% if not todo_configured %}
+  <p class="hint">Задайте в .env: <code>MS_TODO_CLIENT_ID</code> и <code>MS_TODO_CLIENT_SECRET</code> (приложение Azure AD с разрешением Tasks.ReadWrite). Redirect URI: <code>{{ base_url }}integrations/todo/callback</code></p>
+  {% if todo_oauth_url %}
+  <a href="{{ todo_oauth_url }}" class="btn" style="margin-top:0.5rem">Подключить To-Do (OAuth)</a>
+  {% else %}
+  <p class="hint">После настройки MS_TODO_CLIENT_ID появится кнопка «Подключить To-Do».</p>
+  {% endif %}
+  {% else %}
+  <p class="hint">Ассистент может создавать задачи в To-Do (скилл <code>integrations</code>, действие <code>sync_to_todo</code>).</p>
+  {% endif %}
+</div>
+<div class="card">
+  <h3 style="margin-top:0">Google Calendar</h3>
+  <p><strong>Статус:</strong> Не подключено</p>
+  <p class="hint">Интеграция запланирована в следующих релизах. OAuth и создание событий — в разработке.</p>
+</div>
+"""
+
 # ----- MCP Agent (URL + secret для Cursor) -----
 _MCP_AGENT_BODY = """
 <h1>MCP (агент)</h1>
@@ -1156,13 +1181,23 @@ def _mcp_agent_base_url():
 
 @app.route("/integrations")
 def integrations_page():
-    """Интеграции: MCP скиллы + MCP (агент) на одной странице (UX_UI_ROADMAP)."""
+    """Интеграции: MCP скиллы + To-Do/Calendar + MCP (агент) на одной странице."""
     from assistant.dashboard.mcp_endpoints import list_endpoints
+    from assistant.integrations.todo import get_oauth_url, todo_is_configured
 
     config = load_config()
     new_secret = session.pop("mcp_new_secret", None) if "mcp_new_secret" in session else None
     base_url = _mcp_agent_base_url()
+    redirect_uri = base_url + "integrations/todo/callback"
+    todo_oauth_url = get_oauth_url(redirect_uri)
+    todo_configured = todo_is_configured()
     part_mcp = render_template_string(_MCP_BODY, config=config)
+    part_external = render_template_string(
+        _INTEGRATIONS_EXTERNAL_BODY,
+        base_url=base_url,
+        todo_configured=todo_configured,
+        todo_oauth_url=todo_oauth_url,
+    )
     part_agent = render_template_string(
         _MCP_AGENT_BODY,
         config=config,
@@ -1170,12 +1205,27 @@ def integrations_page():
         new_secret=new_secret,
         base_url=base_url,
     )
-    content = part_mcp + _CHANNELS_HR + part_agent
+    content = part_mcp + _CHANNELS_HR + part_external + _CHANNELS_HR + part_agent
     return render_template_string(
         INDEX_HTML.replace("{% block content %}{% endblock %}", content),
         config=config,
         section="integrations",
     )
+
+
+@app.route("/integrations/todo/callback")
+def integrations_todo_callback():
+    """OAuth callback от Microsoft: обмен code на токены и редирект на /integrations."""
+    from assistant.integrations.todo import exchange_code_for_tokens
+
+    code = request.args.get("code")
+    base_url = _mcp_agent_base_url()
+    redirect_uri = base_url + "integrations/todo/callback"
+    if code and exchange_code_for_tokens(code, redirect_uri):
+        flash("Microsoft To-Do успешно подключен.", "success")
+    elif code:
+        flash("Не удалось получить токены To-Do. Проверьте MS_TODO_CLIENT_SECRET и redirect URI в Azure.", "error")
+    return redirect(url_for("integrations_page"))
 
 
 @app.route("/mcp-agent")
