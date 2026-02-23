@@ -10,7 +10,7 @@
 [![Docker](https://img.shields.io/badge/docker-ready-2496ed?logo=docker&logoColor=white)](https://www.docker.com/)
 [![Documentation](https://img.shields.io/badge/docs-index-8ca1af.svg)](docs/README.md)
 
-[![Version](https://img.shields.io/badge/version-0.1.0-informational)](https://github.com/mussolene/assistent_core)
+[![Version](https://img.shields.io/badge/version-0.2.1-informational)](https://github.com/mussolene/assistent_core)
 [![Code size](https://img.shields.io/github/languages/code-size/mussolene/assistent_core)](https://github.com/mussolene/assistent_core)
 [![Last commit](https://img.shields.io/github/last-commit/mussolene/assistent_core)](https://github.com/mussolene/assistent_core/commits/main)
 

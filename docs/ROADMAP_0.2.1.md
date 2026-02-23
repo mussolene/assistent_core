@@ -85,10 +85,10 @@
 
 | # | Задача | Статус | Файлы / примечания |
 |---|--------|--------|---------------------|
-| 1 | Bump версии до 0.2.1 в pyproject.toml, assistant/__init__.py, dashboard app/mcp_server (serverInfo) | ⬜ | После выполнения этапов 0.2.1.1–0.2.1.4 |
-| 2 | CHANGELOG: секция [0.2.1] с перечислением изменений | ⬜ | minimal profile, уведомления docs/diagnostics, CORE_PRODUCT, полуформализация задач |
-| 3 | Шаблон .github/releases/v0.2.1.md для будущего GitHub Release | ⬜ | По аналогии с v0.1.0.md |
-| 4 | Тег v0.2.1 и создание Release на GitHub (по желанию после push) | ⬜ | Локально: git tag v0.2.1; push --tags |
+| 1 | Bump версии до 0.2.1 в pyproject.toml, assistant/__init__.py, dashboard app/mcp_server (serverInfo) | ✅ | После выполнения этапов 0.2.1.1–0.2.1.4 |
+| 2 | CHANGELOG: секция [0.2.1] с перечислением изменений | ✅ | minimal profile, уведомления docs/diagnostics, CORE_PRODUCT, полуформализация задач |
+| 3 | Шаблон .github/releases/v0.2.1.md для будущего GitHub Release | ✅ | По аналогии с v0.1.0.md |
+| 4 | Тег v0.2.1 и создание Release на GitHub (по желанию после push) | — | Локально: git tag v0.2.1; push --tags |
 
 **Критерий приёмки:** после мержа ветки версия в коде 0.2.1; CHANGELOG и шаблон релиза готовы.
 

@@ -163,7 +163,7 @@ def run_stdio() -> None:
                 {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "assistant-dev-mcp", "version": "0.1.0"},
+                    "serverInfo": {"name": "assistant-dev-mcp", "version": "0.2.1"},
                 }
             )
             continue

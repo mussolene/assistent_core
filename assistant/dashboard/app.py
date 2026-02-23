@@ -1412,7 +1412,7 @@ def mcp_api_base_post(endpoint_id):
             {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {"tools": {}},
-                "serverInfo": {"name": "assistant-mcp", "version": "0.1.0"},
+                "serverInfo": {"name": "assistant-mcp", "version": "0.2.1"},
             }
         )
     if method == "notified" and params.get("method") == "initialized":
