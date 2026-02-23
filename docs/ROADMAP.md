@@ -4,7 +4,7 @@
 
 **Аналитика и фокус продукта (2025):** см. [docs/ANALYTICS_AND_ROADMAP_2025.md](ANALYTICS_AND_ROADMAP_2025.md) — оценка текущего состояния, тренды, минимизация зависимостей, память/контекст независимо от модели, полуформализация задач, интеграции To-Do и Google Calendar, MCP как исполнитель, приоритетная дорожная карта.
 
-**Версия 0.2.1 (минимализация, ядро):** план реализации — [docs/ROADMAP_0.2.1.md](ROADMAP_0.2.1.md). Определение ядра и опциональных модулей — [docs/CORE_PRODUCT.md](CORE_PRODUCT.md). Текущая реализация остаётся под 0.1.x; шаблон GitHub Release для v0.1.0 — [.github/releases/v0.1.0.md](../.github/releases/v0.1.0.md).
+**Версия 0.2.1 (минимализация, ядро):** план реализации — [docs/ROADMAP_0.2.1.md](ROADMAP_0.2.1.md). Определение ядра и опциональных модулей — [docs/CORE_PRODUCT.md](CORE_PRODUCT.md). Шаблоны релизов: [.github/releases/](.github/releases/). **Версия 0.2.2 (MCP-исполнитель):** план — [docs/ROADMAP_0.2.2.md](ROADMAP_0.2.2.md).
 
 ---
 
