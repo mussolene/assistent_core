@@ -204,7 +204,8 @@ def parse_task_phrase(phrase: str) -> dict[str, Any]:
     # «высокий приоритет X» / «низкий приоритет X»
     m = re.match(r"^(высокий|низкий|средний)\s+приоритет\s+(.+)$", text, re.IGNORECASE)
     if m:
-        out["description"] = f"Приоритет: {m.group(1).lower()}."
+        pr = m.group(1).lower()
+        out["priority"] = {"высокий": "high", "низкий": "low", "средний": "medium"}.get(pr, "medium")
         out["title"] = m.group(2).strip()
         return out
 
@@ -241,6 +242,20 @@ def parse_task_phrase(phrase: str) -> dict[str, Any]:
     # Иначе вся фраза — title
     out["title"] = text
     return out
+
+
+def _normalize_priority(value: Any) -> str | None:
+    """Нормализует приоритет: high, medium, low или None. Принимает EN/RU."""
+    if value is None or value == "":
+        return None
+    v = str(value).strip().lower()
+    if v in ("high", "высокий"):
+        return "high"
+    if v in ("low", "низкий"):
+        return "low"
+    if v in ("medium", "средний", "mid"):
+        return "medium"
+    return None
 
 
 def _parse_time_spent(value: Any) -> int | None:
@@ -288,8 +303,12 @@ def format_task_details(task: dict[str, Any]) -> str:
     start = _human_date(task.get("start_date"))
     end = _human_date(task.get("end_date"))
     status = task.get("status") or "open"
+    priority = task.get("priority")
+    priority_label = {"high": "высокий", "medium": "средний", "low": "низкий"}.get(priority) if priority else None
     workload = (task.get("workload") or task.get("estimate") or "").strip()
     lines = [f"**{title}**", f"Статус: {status}. Создана: {created}."]
+    if priority_label:
+        lines.append(f"Приоритет: {priority_label}.")
     if start or end:
         lines.append(f"Срок: {start or '—'} – {end or '—'}.")
     if workload:
@@ -544,6 +563,9 @@ class TaskSkill(BaseSkill):
                 if parsed.get("description") and not params.get("description"):
                     params = dict(params)
                     params["description"] = (params.get("description") or "").strip() or parsed["description"]
+                if parsed.get("priority") and not params.get("priority"):
+                    params = dict(params)
+                    params["priority"] = parsed["priority"]
             if not title:
                 return {"ok": False, "error": "title обязателен"}
         task_id = str(uuid.uuid4())
@@ -569,6 +591,7 @@ class TaskSkill(BaseSkill):
             parent = await _load_task(client, parent_id)
             if not parent or not _check_owner(parent, user_id):
                 return {"ok": False, "error": "Родительская задача не найдена или доступ запрещён"}
+        priority = _normalize_priority(params.get("priority"))
         task = {
             "id": task_id,
             "user_id": user_id,
@@ -580,6 +603,7 @@ class TaskSkill(BaseSkill):
             "links": list(params.get("links") or []),
             "reminder_at": None,
             "status": (params.get("status") or "open").strip() or "open",
+            "priority": priority,
             "workload": (params.get("workload") or params.get("estimate") or "").strip() or None,
             "time_spent_minutes": _parse_time_spent(
                 params.get("time_spent") or params.get("time_spent_minutes")
@@ -632,6 +656,8 @@ class TaskSkill(BaseSkill):
         if "time_spent" in params or "time_spent_minutes" in params:
             mins = _parse_time_spent(params.get("time_spent") or params.get("time_spent_minutes"))
             task["time_spent_minutes"] = mins
+        if "priority" in params:
+            task["priority"] = _normalize_priority(params.get("priority"))
         task["updated_at"] = _now_iso()
         await _save_task(client, task)
         cascade = params.get("cascade", True)

@@ -834,7 +834,15 @@ def test_parse_task_phrase():
 
     p = parse_task_phrase("высокий приоритет позвонить маме")
     assert p.get("title") == "позвонить маме"
-    assert "приоритет" in (p.get("description") or "").lower()
+    assert p.get("priority") == "high"
+
+    p = parse_task_phrase("низкий приоритет рутина")
+    assert p.get("title") == "рутина"
+    assert p.get("priority") == "low"
+
+    p = parse_task_phrase("средний приоритет задача")
+    assert p.get("title") == "задача"
+    assert p.get("priority") == "medium"
 
     p = parse_task_phrase("просто задача")
     assert p.get("title") == "просто задача"
@@ -859,6 +867,22 @@ async def test_tasks_create_from_phrase(skill, redis_mock):
     task = out.get("task") or {}
     assert task.get("title") == "купить молоко"
     assert task.get("end_date") == (date.today() + timedelta(days=1)).isoformat()
+
+
+async def test_tasks_create_from_phrase_with_priority(skill, redis_mock):
+    """Создание задачи из фразы «высокий приоритет X» — в задаче сохраняется priority."""
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        out = await skill.run({
+            "action": "create_task",
+            "user_id": "u1",
+            "text": "высокий приоритет срочный баг",
+        })
+    assert out.get("ok") is True
+    task = out.get("task") or {}
+    assert task.get("title") == "срочный баг"
+    assert task.get("priority") == "high"
 
 
 def test_date_to_ordinal():

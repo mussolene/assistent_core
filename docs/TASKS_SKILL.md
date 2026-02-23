@@ -15,9 +15,9 @@
 
 | action | Параметры | Описание |
 |--------|-----------|----------|
-| `create_task` | title, description?, start_date?, end_date?, status?, parent_id?, … | Создать задачу. parent_id — создать подзадачу к задаче (родитель должна быть своя). |
+| `create_task` | title, description?, start_date?, end_date?, priority?, status?, parent_id?, text?/phrase? | Создать задачу. text/phrase — полуформализация (парсер). parent_id — подзадача. |
 | `delete_task` | task_id | Удалить задачу (только свою). |
-| `update_task` | task_id, title?, start_date?, end_date?, status?, workload?, time_spent?, time_spent_minutes?, cascade?=true | Обновить задачу. При смене дат остальные задачи, попадающие в новый интервал, сдвигаются (cascade). |
+| `update_task` | task_id, title?, start_date?, end_date?, priority?, status?, workload?, time_spent?, time_spent_minutes?, cascade?=true | Обновить задачу. При смене дат — cascade. |
 | `list_tasks` | status? | Список своих задач. Возвращает также **formatted** — готовый текст с заголовками, датами (дд.мм), оценкой загрузки и затраченным временем. |
 | `get_task` | task_id | Одна задача (только своя). |
 | `add_document` | task_id, document (url, name) | Добавить документ к задаче. |
@@ -47,7 +47,7 @@
 | «через N дней X» | через 3 дня сдать проект | end_date=через 3 дня, title=сдать проект |
 | «X к ДД.ММ» | отчёт к 15.03 | end_date=15.03, title=отчёт |
 | «X на понедельник» | звонок на понедельник | end_date=след. понедельник, title=звонок |
-| «высокий приоритет X» | высокий приоритет срочный баг | description=Приоритет: высокий., title=срочный баг |
+| «высокий/низкий/средний приоритет X» | высокий приоритет срочный баг | priority=high, title=срочный баг |
 
 Если шаблон не сработал, вся фраза попадает в **title**. Парсер используется и при создании задачи из диалога (агент передаёт phrase/text), и при вызове MCP create_task с параметром text или phrase.
 
@@ -57,6 +57,7 @@
 
 - `id`, `user_id`, `title`, `description`, `parent_id` (опционально — id родительской задачи для подзадач)
 - `start_date`, `end_date` (ISO YYYY-MM-DD)
+- `priority` — опционально: `high`, `medium`, `low` (из парсера фразы «высокий приоритет X» или через create_task/update_task)
 - `workload`, `estimate` — оценка загрузки (строка, например «2ч», «полдня»)
 - `time_spent_minutes` — затраченное время в минутах (можно задать через update_task с time_spent: «2h», «30 min»)
 - `documents`, `links`, `reminder_at`, `status`, `created_at`, `updated_at`
