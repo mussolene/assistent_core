@@ -196,6 +196,56 @@ async def test_tasks_create_and_list(skill, redis_mock):
 
 
 @pytest.mark.asyncio
+async def test_tasks_create_with_document_ids_and_conversation_id(skill, redis_mock):
+    """Связи документ — задача — разговор: create_task и update_task с document_ids, conversation_id."""
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        out = await skill.run(
+            {
+                "action": "create_task",
+                "user_id": "u1",
+                "title": "Задача с связями",
+                "document_ids": ["doc-1", "doc-2"],
+                "conversation_id": "conv-abc",
+            }
+        )
+    assert out.get("ok") is True
+    assert out["task"].get("document_ids") == ["doc-1", "doc-2"]
+    assert out["task"].get("conversation_id") == "conv-abc"
+    task_id = out["task_id"]
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        get_out = await skill.run({"action": "get_task", "user_id": "u1", "task_id": task_id})
+    assert get_out.get("ok") is True
+    assert get_out["task"].get("document_ids") == ["doc-1", "doc-2"]
+    assert get_out["task"].get("conversation_id") == "conv-abc"
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        upd = await skill.run(
+            {
+                "action": "update_task",
+                "user_id": "u1",
+                "task_id": task_id,
+                "document_ids": ["doc-3"],
+                "conversation_id": "conv-xyz",
+            }
+        )
+    assert upd.get("ok") is True
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        get2 = await skill.run({"action": "get_task", "user_id": "u1", "task_id": task_id})
+    assert get2["task"].get("document_ids") == ["doc-3"]
+    assert get2["task"].get("conversation_id") == "conv-xyz"
+    details = format_task_details(get2["task"])
+    assert "doc-3" in details
+    assert "conv-xyz" in details
+
+
+@pytest.mark.asyncio
 async def test_tasks_isolated_by_user(skill, redis_mock):
     with patch(
         "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock

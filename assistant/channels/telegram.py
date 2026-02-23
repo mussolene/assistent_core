@@ -96,6 +96,23 @@ async def _download_telegram_attachment(
         return None
 
 
+def _fallback_text_for_attachments(attachments: list[dict]) -> str:
+    """Текст для сообщения без text: один голос — «Голосовое сообщение», иначе «Файл: …» (Фаза 5)."""
+    if not attachments:
+        return ""
+    if (
+        len(attachments) == 1
+        and (attachments[0].get("mime_type") or "").startswith("audio/")
+    ):
+        dur = attachments[0].get("duration_sec")
+        return (
+            f"[Голосовое сообщение: {dur} сек]"
+            if dur is not None
+            else "[Голосовое сообщение]"
+        )
+    return "[Файл: " + ", ".join(a.get("filename") or "файл" for a in attachments) + "]"
+
+
 # Команда с admin_only=True доступна только пользователям из TELEGRAM_ADMIN_IDS (ROADMAP 3.4)
 BOT_COMMANDS = [
     {"command": "start", "description": "Начать / pairing"},
@@ -1194,6 +1211,18 @@ async def run_telegram_adapter() -> None:
                                 "source": "telegram",
                             }
                         )
+                    # Фаза 5: голосовые сообщения — приём, сохранение файла, передача в оркестратор (STT — отдельно)
+                    if msg.get("voice"):
+                        voice = msg["voice"]
+                        attachments.append(
+                            {
+                                "file_id": voice["file_id"],
+                                "filename": "voice.ogg",
+                                "mime_type": voice.get("mime_type") or "audio/ogg",
+                                "source": "telegram",
+                                "duration_sec": voice.get("duration"),
+                            }
+                        )
                     # Итерация 3.1: скачать вложения в песочницу/временное хранилище, добавить path в событие
                     if attachments and token:
                         downloads_root = _get_telegram_downloads_dir()
@@ -1223,11 +1252,7 @@ async def run_telegram_adapter() -> None:
                                         except Exception:
                                             pass
                     if attachments and not text:
-                        text = (
-                            "[Файл: "
-                            + ", ".join(a.get("filename") or "файл" for a in attachments)
-                            + "]"
-                        )
+                        text = _fallback_text_for_attachments(attachments)
                     # Pairing: /start CODE or /pair CODE (one-time code or secret key from dashboard)
                     start_arg = ""
                     if text.startswith("/start ") or text.startswith("/pair "):

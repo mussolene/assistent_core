@@ -13,6 +13,7 @@ from assistant.channels.telegram import (
     REPOS_CALLBACK_PREFIX,
     RateLimiter,
     _build_repos_inline_keyboard,
+    _fallback_text_for_attachments,
     _is_telegram_acceptable_url,
     _repos_setup_hint,
     _strip_think_blocks,
@@ -81,6 +82,20 @@ def test_strip_think_blocks_unclosed_think():
 def test_strip_think_blocks_only_think():
     text = "<think>\nok\n</think>"
     assert _strip_think_blocks(text) == ""
+
+
+def test_fallback_text_for_attachments_voice():
+    """Фаза 5: голосовое сообщение без текста — подпись с длительностью."""
+    assert _fallback_text_for_attachments([]) == ""
+    att_voice = [
+        {"filename": "voice.ogg", "mime_type": "audio/ogg", "duration_sec": 5},
+    ]
+    assert _fallback_text_for_attachments(att_voice) == "[Голосовое сообщение: 5 сек]"
+    att_voice_no_dur = [{"filename": "voice.ogg", "mime_type": "audio/ogg"}]
+    assert _fallback_text_for_attachments(att_voice_no_dur) == "[Голосовое сообщение]"
+    att_doc = [{"filename": "doc.pdf", "mime_type": "application/pdf"}]
+    assert _fallback_text_for_attachments(att_doc) == "[Файл: doc.pdf]"
+    assert _fallback_text_for_attachments(att_voice + att_doc) == "[Файл: voice.ogg, doc.pdf]"
 
 
 def test_bot_commands_include_settings_and_channels():

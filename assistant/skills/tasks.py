@@ -128,6 +128,8 @@ PARAM_ALIASES = {
     "fromdate": "from_date",
     "todate": "to_date",
     "parentid": "parent_id",
+    "documentids": "document_ids",
+    "conversationid": "conversation_id",
 }
 
 
@@ -333,6 +335,14 @@ def format_task_details(task: dict[str, Any]) -> str:
             name = ln.get("name") or ln.get("url") or "—"
             url = ln.get("url", "")
             lines.append(f"  • {name}" + (f" — {url}" if url else ""))
+    doc_ids = task.get("document_ids") or []
+    if doc_ids:
+        lines.append("")
+        lines.append("Связанные документы (id): " + ", ".join(str(x) for x in doc_ids[:20]))
+    conv_id = task.get("conversation_id")
+    if conv_id:
+        lines.append("")
+        lines.append(f"Разговор: {conv_id}")
     return "\n".join(lines)
 
 
@@ -405,7 +415,9 @@ def format_tasks_for_telegram(
         status = t.get("status") or "open"
         lines.append(f"{i + 1}. **{title}**{created_str} [{status}]")
         tid = t.get("id", "")
-        btn_label = f"{i + 1}. {title[:30]}{created_str}"
+        # UX: компактная подпись кнопки на мобильном (UX_UI_ROADMAP §5)
+        title_btn = (t.get("title") or "Без названия").replace("\n", " ")[:25]
+        btn_label = f"{i + 1}. {title_btn}{created_str}"
         if action != "view":
             action_label = {
                 "delete": "Удалить",
@@ -414,7 +426,7 @@ def format_tasks_for_telegram(
                 "add_link": "Ссылка",
                 "done": "✓",
             }.get(action, action)
-            btn_label = f"{action_label}: {title[:28]}"
+            btn_label = f"{action_label}: {title_btn}"
         row = [{"text": btn_label, "callback_data": f"task:{action}:{tid}"}]
         if show_done_button and status == "open":
             row.append({"text": "✓ Выполнена", "callback_data": f"task:done:{tid}"})
@@ -592,6 +604,8 @@ class TaskSkill(BaseSkill):
             if not parent or not _check_owner(parent, user_id):
                 return {"ok": False, "error": "Родительская задача не найдена или доступ запрещён"}
         priority = _normalize_priority(params.get("priority"))
+        document_ids = list(params.get("document_ids") or [])
+        conversation_id = (params.get("conversation_id") or "").strip() or None
         task = {
             "id": task_id,
             "user_id": user_id,
@@ -601,6 +615,8 @@ class TaskSkill(BaseSkill):
             "end_date": end_date,
             "documents": list(params.get("documents") or []),
             "links": list(params.get("links") or []),
+            "document_ids": document_ids,
+            "conversation_id": conversation_id,
             "reminder_at": None,
             "status": (params.get("status") or "open").strip() or "open",
             "priority": priority,
@@ -658,6 +674,10 @@ class TaskSkill(BaseSkill):
             task["time_spent_minutes"] = mins
         if "priority" in params:
             task["priority"] = _normalize_priority(params.get("priority"))
+        if "document_ids" in params:
+            task["document_ids"] = list(params.get("document_ids") or [])
+        if "conversation_id" in params:
+            task["conversation_id"] = (params.get("conversation_id") or "").strip() or None
         task["updated_at"] = _now_iso()
         await _save_task(client, task)
         cascade = params.get("cascade", True)

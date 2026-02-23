@@ -15,9 +15,9 @@
 
 | action | Параметры | Описание |
 |--------|-----------|----------|
-| `create_task` | title, description?, start_date?, end_date?, priority?, status?, parent_id?, text?/phrase? | Создать задачу. text/phrase — полуформализация (парсер). parent_id — подзадача. |
+| `create_task` | title, description?, start_date?, end_date?, priority?, status?, parent_id?, document_ids?, conversation_id?, text?/phrase? | Создать задачу. text/phrase — полуформализация (парсер). parent_id — подзадача. document_ids, conversation_id — связи с документом/разговором. |
 | `delete_task` | task_id | Удалить задачу (только свою). |
-| `update_task` | task_id, title?, start_date?, end_date?, priority?, status?, workload?, time_spent?, time_spent_minutes?, cascade?=true | Обновить задачу. При смене дат — cascade. |
+| `update_task` | task_id, title?, start_date?, end_date?, priority?, status?, workload?, time_spent?, time_spent_minutes?, document_ids?, conversation_id?, cascade?=true | Обновить задачу. При смене дат — cascade. |
 | `list_tasks` | status? | Список своих задач. Возвращает также **formatted** — готовый текст с заголовками, датами (дд.мм), оценкой загрузки и затраченным временем. |
 | `get_task` | task_id | Одна задача (только своя). |
 | `add_document` | task_id, document (url, name) | Добавить документ к задаче. |
@@ -61,6 +61,8 @@
 - `workload`, `estimate` — оценка загрузки (строка, например «2ч», «полдня»)
 - `time_spent_minutes` — затраченное время в минутах (можно задать через update_task с time_spent: «2h», «30 min»)
 - `documents`, `links`, `reminder_at`, `status`, `created_at`, `updated_at`
+- `document_ids` — опционально: список идентификаторов документов (связь с индексированными документами / векторной памятью)
+- `conversation_id` — опционально: идентификатор разговора, с которым связана задача (связь документ — задача — разговор)
 
 ---
 
