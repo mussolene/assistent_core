@@ -818,10 +818,19 @@ def test_normalize_task_params():
 
 def test_parse_task_phrase():
     """Полуформализация короткой фразы в title, end_date, description."""
+    from datetime import date, timedelta
+
+    p = parse_task_phrase("сегодня позвонить маме")
+    assert p.get("title") == "позвонить маме"
+    assert p.get("end_date") == date.today().isoformat()
+
     p = parse_task_phrase("завтра купить молоко")
     assert p.get("title") == "купить молоко"
-    from datetime import date, timedelta
     assert p.get("end_date") == (date.today() + timedelta(days=1)).isoformat()
+
+    p = parse_task_phrase("через 3 дня сдать проект")
+    assert p.get("title") == "сдать проект"
+    assert p.get("end_date") == (date.today() + timedelta(days=3)).isoformat()
 
     p = parse_task_phrase("высокий приоритет позвонить маме")
     assert p.get("title") == "позвонить маме"

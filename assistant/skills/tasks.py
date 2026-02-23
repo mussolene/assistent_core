@@ -172,6 +172,13 @@ def parse_task_phrase(phrase: str) -> dict[str, Any]:
     out: dict[str, Any] = {}
     today = date.today()
 
+    # «сегодня X» -> due=сегодня, title=X
+    m = re.match(r"^сегодня\s+(.+)$", text, re.IGNORECASE)
+    if m:
+        out["end_date"] = today.isoformat()
+        out["title"] = m.group(1).strip()
+        return out
+
     # «завтра купить молоко» -> due=завтра, title=купить молоко
     m = re.match(r"^завтра\s+(.+)$", text, re.IGNORECASE)
     if m:
@@ -184,6 +191,15 @@ def parse_task_phrase(phrase: str) -> dict[str, Any]:
         out["end_date"] = (today + timedelta(days=2)).isoformat()
         out["title"] = m.group(1).strip()
         return out
+
+    # «через N дней X» / «через 3 дня X»
+    m = re.match(r"^через\s+(\d+)\s+(?:день|дня|дней)\s+(.+)$", text, re.IGNORECASE)
+    if m:
+        n = int(m.group(1))
+        if 0 <= n <= 365:
+            out["end_date"] = (today + timedelta(days=n)).isoformat()
+            out["title"] = m.group(2).strip()
+            return out
 
     # «высокий приоритет X» / «низкий приоритет X»
     m = re.match(r"^(высокий|низкий|средний)\s+приоритет\s+(.+)$", text, re.IGNORECASE)
