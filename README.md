@@ -189,7 +189,7 @@ pytest assistant/tests -v --cov=assistant --cov-report=html --cov-fail-under=90
 
 ### Документация
 
-Полный индекс — [docs/README.md](docs/README.md). Отдельные темы: [RAG и Qdrant](docs/RAG_QDRANT.md), [каналы и фронтенд](docs/CHANNELS_AND_FRONTEND.md), [авторизация дашборда](docs/DASHBOARD_AUTH.md), [канал Telegram](docs/TELEGRAM_CHANNEL.md), [выбор стека фронта/бэкенда](docs/FRONTEND_STACK.md) / [BACKEND_STACK](docs/BACKEND_STACK.md).
+Полный индекс — [docs/README.md](docs/README.md). Отдельные темы: [RAG и Qdrant](docs/RAG_QDRANT.md), [каналы и фронтенд](docs/CHANNELS_AND_FRONTEND.md), [авторизация дашборда](docs/DASHBOARD_AUTH.md), [канал Telegram](docs/TELEGRAM_CHANNEL.md), [выбор стека фронта/бэкенда](docs/FRONTEND_STACK.md) / [BACKEND_STACK](docs/BACKEND_STACK.md). Релизы: шаблоны описаний в [.github/releases/](.github/releases/); план версии 0.2.1 (минимализация) — [docs/ROADMAP_0.2.1.md](docs/ROADMAP_0.2.1.md).
 
 ## Лицензия
 
