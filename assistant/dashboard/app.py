@@ -632,7 +632,7 @@ def save_model():
 _EMAIL_BODY = """
 <h1>Email</h1>
 <p class="sub">Настройки канала отправки писем (для скилла send_email и ответов по каналу Email).</p>
-<form method="post" action="/save-email">
+<form method="post" action="/save-email" id="form-email">
   <div class="card">
     <div class="row">
       <input type="checkbox" id="email_enabled" name="email_enabled" value="1" {{ 'checked' if config.get('EMAIL_ENABLED') == 'true' else '' }}>
@@ -668,8 +668,27 @@ _EMAIL_BODY = """
     <label for="email_sendgrid_key">SendGrid API Key (если провайдер sendgrid)</label>
     <input id="email_sendgrid_key" name="email_sendgrid_key" type="password" value="{{ config.get('EMAIL_SENDGRID_API_KEY', '') }}" autocomplete="off">
   </div>
-  <button type="submit" class="btn">Сохранить</button>
+  <button type="submit" class="btn" id="btn-save-email">Сохранить</button>
 </form>
+<script>
+(function() {
+  var form = document.getElementById('form-email');
+  if (form && window.apiPostForm && window.showToast) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('btn-save-email');
+      if (btn) btn.disabled = true;
+      window.apiPostForm('/save-email', form)
+        .then(function(d) {
+          if (d.success) { window.showToast('Сохранено.', 'success'); }
+          else { window.showToast(d.error || 'Ошибка', 'error'); }
+        })
+        .catch(function(err) { window.showToast(err.message || 'Ошибка', 'error'); })
+        .finally(function() { if (btn) btn.disabled = false; });
+    });
+  }
+})();
+</script>
 """
 
 
@@ -710,6 +729,8 @@ def save_email():
     set_config_in_redis_sync(
         redis_url, "EMAIL_SENDGRID_API_KEY", (request.form.get("email_sendgrid_key") or "").strip()
     )
+    if _wants_json():
+        return jsonify({"success": True})
     flash("Настройки Email сохранены.", "success")
     return redirect(url_for("email_settings"))
 
@@ -738,14 +759,33 @@ _MEMORY_BODY = """
 _DATA_BODY = """
 <h1>Данные</h1>
 <p class="sub">Векторная БД (Qdrant) для индексации документов и памяти разговоров. Репозитории и очистка памяти — ниже.</p>
-<form method="post" action="{{ url_for('save_data') }}">
+<form method="post" action="{{ url_for('save_data') }}" id="form-data">
   <div class="card">
     <label for="qdrant_url">Qdrant URL</label>
     <input id="qdrant_url" name="qdrant_url" type="url" value="{{ config.get('QDRANT_URL', '') }}" placeholder="http://localhost:6333">
     <p class="hint">Используется для индексации документов (index_document, index_repo) и памяти разговоров.</p>
   </div>
-  <button type="submit" class="btn">Сохранить</button>
+  <button type="submit" class="btn" id="btn-save-data">Сохранить</button>
 </form>
+<script>
+(function() {
+  var form = document.getElementById('form-data');
+  if (form && window.apiPostForm && window.showToast) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('btn-save-data');
+      if (btn) btn.disabled = true;
+      window.apiPostForm('/save-data', form)
+        .then(function(d) {
+          if (d.success) { window.showToast('Сохранено.', 'success'); }
+          else { window.showToast(d.error || 'Ошибка', 'error'); }
+        })
+        .catch(function(err) { window.showToast(err.message || 'Ошибка', 'error'); })
+        .finally(function() { if (btn) btn.disabled = false; });
+    });
+  }
+})();
+</script>
 <hr style="margin:1.5rem 0; border:0; border-top:1px solid var(--border)">
 <p><a href="{{ url_for('repos_page') }}">Репозитории</a> — токены GitHub/GitLab, workspace, склонированные репо.</p>
 <p><a href="{{ url_for('memory_page') }}">Память разговоров</a> — очистка по user_id/chat_id.</p>
@@ -767,6 +807,8 @@ def save_data():
     redis_url = get_redis_url()
     qdrant_url = (request.form.get("qdrant_url") or "").strip()
     set_config_in_redis_sync(redis_url, "QDRANT_URL", qdrant_url)
+    if _wants_json():
+        return jsonify({"success": True})
     flash("Настройки данных сохранены.", "success")
     return redirect(url_for("data_page"))
 

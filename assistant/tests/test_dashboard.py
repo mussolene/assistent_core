@@ -460,6 +460,36 @@ def test_model_page_has_fetch_form(client, auth_mock, monkeypatch):
     assert "btn-save-model" in body
 
 
+def test_save_email_returns_json_when_xhr(client, auth_mock, monkeypatch):
+    """save-email при XHR возвращает JSON success (ROADMAP 3.2)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
+    monkeypatch.setattr("assistant.dashboard.app.set_config_in_redis_sync", lambda url, key, val: None)
+    r = client.post(
+        "/save-email",
+        data={"email_from": "bot@test.local", "email_provider": "smtp"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j is not None
+    assert j.get("success") is True
+
+
+def test_save_data_returns_json_when_xhr(client, auth_mock, monkeypatch):
+    """save-data при XHR возвращает JSON success (ROADMAP 3.2)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
+    monkeypatch.setattr("assistant.dashboard.app.set_config_in_redis_sync", lambda url, key, val: None)
+    r = client.post(
+        "/save-data",
+        data={"qdrant_url": "http://qdrant:6333"},
+        headers={"Accept": "application/json"},
+    )
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j is not None
+    assert j.get("success") is True
+
+
 def test_data_page_renders(client, auth_mock, monkeypatch):
     """Страница Данные: Qdrant URL, ссылки на Репо и Память."""
     monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
