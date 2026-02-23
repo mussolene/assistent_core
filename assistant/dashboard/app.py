@@ -418,6 +418,7 @@ _TELEGRAM_BODY = """
     <input id="dev_chat_id" name="telegram_dev_chat_id" type="text" value="{{ config.get('TELEGRAM_DEV_CHAT_ID', '') }}" placeholder="123456789">
     <p class="hint">Куда слать сообщения от MCP-сервера (notify, ask_confirmation). Для личных чатов = User ID. Пусто — первый из разрешённых.</p>
     <p class="hint" style="margin-top:0.25rem">Текущий Chat ID для уведомлений MCP: <strong id="effective-dev-chat">{{ config.get('TELEGRAM_DEV_CHAT_ID', '') or 'не задано (используется первый из разрешённых)' }}</strong></p>
+    <p class="hint" style="margin-top:0.25rem">Если уведомления не приходят: убедитесь, что telegram-adapter запущен (в логах: «Subscribed to assistant:outgoing_reply»), Redis доступен для MCP и дашборда. Подробнее — README, раздел «Уведомления MCP».</p>
   </div>
   <div class="card">
     <label>Быстрая привязка</label>

@@ -19,6 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Установка без extras (pip install .) — минимальный профиль: ядро + telegram + tasks + memory, без vector/files/archives/ocr.
 minimal = []
 vector = [
     "sentence-transformers>=2.2.0",

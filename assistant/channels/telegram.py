@@ -952,6 +952,18 @@ async def run_telegram_adapter() -> None:
     bus.subscribe_outgoing(on_outgoing)
     bus.subscribe_stream(on_stream)
     logger.info("Subscribed to assistant:outgoing_reply and stream for Telegram")
+    try:
+        from assistant.core.notify import get_dev_chat_id
+
+        cid = get_dev_chat_id()
+        if cid:
+            logger.info("MCP notifications target chat_id=%s", cid)
+        else:
+            logger.warning(
+                "MCP notifications: Chat ID not set. Set TELEGRAM_DEV_CHAT_ID in dashboard (Channels → Telegram) or add a user to allowed list."
+            )
+    except Exception as e:
+        logger.debug("Could not resolve MCP dev chat id at startup: %s", e)
 
     async def poll() -> None:
         offset = 0
