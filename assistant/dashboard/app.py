@@ -1421,6 +1421,48 @@ def _mcp_tools_call(chat_id: str, endpoint_id: str, name: str, arguments: dict) 
             logger.exception("MCP list_tasks: %s", e)
             return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": str(e)})}]}
 
+    if name == "sync_task_to_todo":
+        title = (arguments.get("title") or arguments.get("text") or "").strip()
+        list_id = (arguments.get("list_id") or "").strip() or None
+        if not title:
+            return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": "Укажите title или text."})}]}
+        try:
+            from assistant.skills.integrations_skill import IntegrationsSkill
+
+            skill = IntegrationsSkill()
+            result = asyncio.run(
+                skill.run({"action": "sync_to_todo", "title": title, "list_id": list_id})
+            )
+            return {"content": [{"type": "text", "text": json.dumps(result)}]}
+        except Exception as e:
+            logger.exception("MCP sync_task_to_todo: %s", e)
+            return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": str(e)})}]}
+
+    if name == "add_calendar_event":
+        title = (arguments.get("title") or "").strip()
+        start_iso = (arguments.get("start_iso") or arguments.get("start") or "").strip() or None
+        end_iso = (arguments.get("end_iso") or arguments.get("end") or "").strip() or None
+        description = (arguments.get("description") or "").strip() or None
+        if not title:
+            return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": "Укажите title события."})}]}
+        try:
+            from assistant.skills.integrations_skill import IntegrationsSkill
+
+            skill = IntegrationsSkill()
+            result = asyncio.run(
+                skill.run({
+                    "action": "add_calendar_event",
+                    "title": title,
+                    "start_iso": start_iso,
+                    "end_iso": end_iso,
+                    "description": description,
+                })
+            )
+            return {"content": [{"type": "text", "text": json.dumps(result)}]}
+        except Exception as e:
+            logger.exception("MCP add_calendar_event: %s", e)
+            return {"content": [{"type": "text", "text": json.dumps({"ok": False, "error": str(e)})}]}
+
     return {"content": [{"type": "text", "text": f"Неизвестный инструмент: {name}"}]}
 
 
@@ -1464,6 +1506,32 @@ MCP_TOOLS_SPEC = [
         "name": "list_tasks",
         "description": "Список задач пользователя (по chat_id endpoint'а).",
         "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "sync_task_to_todo",
+        "description": "Создать задачу в Microsoft To-Do (если интеграция настроена в дашборде).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "text": {"type": "string"},
+                "list_id": {"type": "string"},
+            },
+        },
+    },
+    {
+        "name": "add_calendar_event",
+        "description": "Добавить событие в Google Calendar (при наличии интеграции). Пока заглушка — возвращает подсказку по настройке.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "start_iso": {"type": "string"},
+                "end_iso": {"type": "string"},
+                "description": {"type": "string"},
+            },
+            "required": ["title"],
+        },
     },
 ]
 

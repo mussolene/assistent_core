@@ -66,7 +66,7 @@ def test_mcp_base_post_initialize(client, mcp_auth):
 
 
 def test_mcp_base_post_tools_list(client, mcp_auth):
-    """POST /mcp/v1/agent/<id> tools/list возвращает notify, ask_confirmation, get_user_feedback, create_task, list_tasks."""
+    """POST /mcp/v1/agent/<id> tools/list возвращает notify, ask_confirmation, get_user_feedback, create_task, list_tasks, sync_task_to_todo, add_calendar_event."""
     r = client.post(
         "/mcp/v1/agent/abc123",
         headers={"Authorization": "Bearer secret123", "Content-Type": "application/json"},
@@ -81,6 +81,8 @@ def test_mcp_base_post_tools_list(client, mcp_auth):
     assert "get_user_feedback" in names
     assert "create_task" in names
     assert "list_tasks" in names
+    assert "sync_task_to_todo" in names
+    assert "add_calendar_event" in names
 
 
 def test_mcp_base_post_tools_call_notify(client, mcp_auth):
@@ -214,3 +216,57 @@ def test_mcp_tools_call_list_tasks(client, mcp_auth):
     call_args = instance.run.call_args[0][0]
     assert call_args.get("action") == "list_tasks"
     assert call_args.get("user_id") == "test_chat_123"
+
+
+def test_mcp_tools_call_sync_task_to_todo(client, mcp_auth):
+    """POST tools/call sync_task_to_todo вызывает IntegrationsSkill sync_to_todo."""
+    with patch("assistant.skills.integrations_skill.IntegrationsSkill") as MockSkill:
+        instance = MockSkill.return_value
+        instance.run = AsyncMock(
+            return_value={"ok": True, "title": "Task in To-Do", "user_reply": "Добавлено в To-Do."}
+        )
+        r = client.post(
+            "/mcp/v1/agent/abc123",
+            headers={"Authorization": "Bearer secret123", "Content-Type": "application/json"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "sync_task_to_todo", "arguments": {"title": "Купить молоко"}},
+            },
+        )
+    assert r.status_code == 200
+    j = r.get_json()
+    text = (j.get("result", {}).get("content", [{}])[0].get("text") or "")
+    assert "ok" in text
+    instance.run.assert_called_once()
+    call_args = instance.run.call_args[0][0]
+    assert call_args.get("action") == "sync_to_todo"
+    assert call_args.get("title") == "Купить молоко"
+
+
+def test_mcp_tools_call_add_calendar_event(client, mcp_auth):
+    """POST tools/call add_calendar_event вызывает IntegrationsSkill add_calendar_event (заглушка)."""
+    with patch("assistant.skills.integrations_skill.IntegrationsSkill") as MockSkill:
+        instance = MockSkill.return_value
+        instance.run = AsyncMock(
+            return_value={"ok": False, "error": "Google Calendar пока не подключен."}
+        )
+        r = client.post(
+            "/mcp/v1/agent/abc123",
+            headers={"Authorization": "Bearer secret123", "Content-Type": "application/json"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "add_calendar_event", "arguments": {"title": "Встреча завтра"}},
+            },
+        )
+    assert r.status_code == 200
+    j = r.get_json()
+    text = (j.get("result", {}).get("content", [{}])[0].get("text") or "")
+    assert "ok" in text or "error" in text
+    instance.run.assert_called_once()
+    call_args = instance.run.call_args[0][0]
+    assert call_args.get("action") == "add_calendar_event"
+    assert call_args.get("title") == "Встреча завтра"
