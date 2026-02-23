@@ -1551,7 +1551,7 @@ MCP_TOOLS_SPEC = [
     },
     {
         "name": "add_calendar_event",
-        "description": "Добавить событие в Google Calendar (при наличии интеграции). Пока заглушка — возвращает подсказку по настройке.",
+        "description": "Добавить событие в Google Calendar (при подключении в дашборде → Интеграции). Параметры: title, start_iso, end_iso, description.",
         "inputSchema": {
             "type": "object",
             "properties": {

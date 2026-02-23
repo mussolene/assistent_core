@@ -36,7 +36,7 @@ def test_create_task_in_todo_not_configured():
 
 
 def test_calendar_is_configured():
-    """Google Calendar пока не реализован."""
+    """Без GOOGLE_CALENDAR_CLIENT_ID и токенов интеграция не настроена."""
     assert calendar_is_configured() is False
 
 

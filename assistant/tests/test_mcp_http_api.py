@@ -246,7 +246,7 @@ def test_mcp_tools_call_sync_task_to_todo(client, mcp_auth):
 
 
 def test_mcp_tools_call_add_calendar_event(client, mcp_auth):
-    """POST tools/call add_calendar_event вызывает IntegrationsSkill add_calendar_event (заглушка)."""
+    """POST tools/call add_calendar_event вызывает IntegrationsSkill add_calendar_event."""
     with patch("assistant.skills.integrations_skill.IntegrationsSkill") as MockSkill:
         instance = MockSkill.return_value
         instance.run = AsyncMock(
