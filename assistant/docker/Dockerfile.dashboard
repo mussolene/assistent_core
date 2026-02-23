@@ -10,10 +10,11 @@ COPY docker/requirements-dashboard.txt /app/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r /app/requirements.txt
 
-# 2) Copy dashboard + core (MCP tools/call использует assistant.core.notify)
+# 2) Copy dashboard + core (MCP tools/call) + integrations (страница /integrations)
 COPY assistant/__init__.py /app/assistant/__init__.py
 COPY assistant/core /app/assistant/core
 COPY assistant/dashboard /app/assistant/dashboard
+COPY assistant/integrations /app/assistant/integrations
 COPY assistant/security/__init__.py /app/assistant/security/__init__.py
 COPY assistant/security/audit.py /app/assistant/security/audit.py
 
