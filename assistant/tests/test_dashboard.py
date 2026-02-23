@@ -337,7 +337,7 @@ def test_api_list_models_openai(monkeypatch, client, auth_mock):
     monkeypatch.setattr("assistant.dashboard.app._fetch_models_openai", fake_openai)
     r = client.post(
         "/api/list-models",
-        json={"openai_base_url": "http://host:11434/v1", "openai_api_key": "ollama"},
+        json={"openai_base_url": "http://host:1234/v1", "openai_api_key": "lm-studio"},
     )
     assert r.status_code == 200
     j = r.get_json()
@@ -368,7 +368,7 @@ def test_save_model_redirect(monkeypatch, client, auth_mock):
     r = client.post(
         "/save-model",
         data={
-            "openai_base_url": "http://localhost:11434/v1",
+            "openai_base_url": "http://localhost:1234/v1",
             "model_name": "llama",
             "model_fallback_name": "",
             "cloud_fallback_enabled": "",
@@ -607,7 +607,7 @@ def test_save_model_returns_json_when_xhr(client, auth_mock, monkeypatch):
     )
     r = client.post(
         "/save-model",
-        data={"openai_base_url": "http://localhost:11434/v1", "model_name": "llama3.2"},
+        data={"openai_base_url": "http://localhost:1234/v1", "model_name": "llama3.2"},
         headers={"X-Requested-With": "XMLHttpRequest"},
     )
     assert r.status_code == 200

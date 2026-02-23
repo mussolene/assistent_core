@@ -34,8 +34,8 @@ class ModelGateway:
         self._fallback_name = fallback_name
         self._cloud_fallback_enabled = cloud_fallback_enabled
         self._reasoning_suffix = reasoning_suffix
-        self._openai_base_url = openai_base_url or "http://localhost:11434/v1"
-        self._openai_api_key = openai_api_key or "ollama"
+        self._openai_base_url = openai_base_url or "http://localhost:1234/v1"
+        self._openai_api_key = openai_api_key or "lm-studio"
         self._use_lm_studio_native = use_lm_studio_native
         self._local = LocalModelGateway(
             base_url=self._openai_base_url,

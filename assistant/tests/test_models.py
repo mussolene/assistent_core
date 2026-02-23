@@ -103,7 +103,7 @@ async def test_gateway_cloud_fallback_on_local_failure():
             mock_cloud.generate = AsyncMock(return_value="Cloud reply")
             mock_cloud_cls.return_value = mock_cloud
             gw = ModelGateway(
-                openai_base_url="http://localhost:11434/v1",
+                openai_base_url="http://localhost:1234/v1",
                 model_name="local",
                 cloud_fallback_enabled=True,
                 openai_api_key="sk-fake",

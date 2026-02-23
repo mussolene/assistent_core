@@ -4,7 +4,7 @@ Production-ready modular AI assistant with Telegram, pluggable skills, local/clo
 
 ## System Overview
 
-- **Local-first**: Ollama or OpenAI-compatible local API by default; cloud fallback optional.
+- **Local-first**: LM Studio or OpenAI-compatible local API by default; cloud fallback optional.
 - **Layered architecture**: Channel → Event Bus (Redis) → Orchestrator → Agents → Skills → Model Gateway.
 - **Stateless agents**: AssistantAgent and ToolAgent; all state in Redis.
 - **Skills**: Sandboxed filesystem, whitelisted shell, git, vector RAG, **tasks** (personal tasks with dates, documents, links, reminders; user-scoped in Redis), MCP adapter (stub).
@@ -25,7 +25,7 @@ Redis (Event Bus + task state)
 Orchestrator (state machine, no LLM in lifecycle)
         |
         v
-Agent Registry --> AssistantAgent --> Model Gateway (Ollama / OpenAI)
+Agent Registry --> AssistantAgent --> Model Gateway (LM Studio / OpenAI)
         |
         v
         ToolAgent --> Skill Registry --> filesystem, shell, git, vector_rag, tasks, mcp
@@ -37,7 +37,7 @@ Agent Registry --> AssistantAgent --> Model Gateway (Ollama / OpenAI)
 - Python 3.11+ (for local run)
 - Redis (included in Compose)
 - Telegram Bot Token (from [@BotFather](https://t.me/BotFather)) — задаётся через Web Dashboard, не требуется при запуске.
-- Local model: [Ollama](https://ollama.ai) (or any OpenAI-compatible API)
+- Local model: [LM Studio](https://lmstudio.ai) (or Ollama / any OpenAI-compatible API)
 
 ## Installation
 
@@ -45,7 +45,7 @@ Agent Registry --> AssistantAgent --> Model Gateway (Ollama / OpenAI)
 
 2. Optional: create `.env` for overrides (Redis URL, OpenAI base URL). Токен бота задаётся через Web Dashboard.
 
-3. Install a local model (e.g. Ollama):
+3. Install a local model (e.g. LM Studio):
    ```bash
    ollama pull llama3.2
    ```
@@ -68,7 +68,7 @@ This starts:
 
 **Setup:** open http://localhost:8080, set bot token and optionally enable Pairing (then send /start to the bot), set model URL and name, save. Restart telegram-adapter after token change, assistant-core after model change.
 
-Ensure Ollama (or your OpenAI-compatible server) is running on the host; set `OPENAI_BASE_URL` in `.env` if needed (e.g. `http://host.docker.internal:11434/v1`).
+Ensure LM Studio (or your OpenAI-compatible server) is running on the host; set `OPENAI_BASE_URL` in `.env` if needed (default `http://host.docker.internal:1234/v1`).
 
 ## Running locally (without Docker)
 
@@ -89,15 +89,15 @@ Ensure Ollama (or your OpenAI-compatible server) is running on the host; set `OP
    TELEGRAM_BOT_TOKEN=your_token REDIS_URL=redis://localhost:6379/0 python -m assistant.channels.telegram
    ```
 
-5. Run Ollama (or your LLM API) and open your bot in Telegram.
+5. Run LM Studio (or your LLM API) and open your bot in Telegram.
 
 ## Model configuration
 
 Edit `assistant/config/default.yaml` or use environment variables:
 
 - **Local (default)**:
-  - `OPENAI_BASE_URL`: e.g. `http://localhost:11434/v1`
-  - `OPENAI_API_KEY`: `ollama` (or any placeholder for Ollama)
+  - `OPENAI_BASE_URL`: e.g. `http://localhost:1234/v1`
+  - `OPENAI_API_KEY`: `lm-studio` (or any placeholder for local API)
   - `model.name`: e.g. `llama3.2`
 
 - **Cloud fallback** (off by default):

@@ -100,7 +100,7 @@ async def run_core(config: Config) -> None:
         openai_api_key = (
             (redis_cfg.get("OPENAI_API_KEY") or "").strip()
             or config.model.openai_api_key
-            or "ollama"
+            or "lm-studio"
         )
         use_lm_studio_native = (redis_cfg.get("LM_STUDIO_NATIVE") or "").lower() in (
             "true",

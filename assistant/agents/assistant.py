@@ -48,8 +48,8 @@ def _format_model_error_for_user(exc: Exception) -> str:
         return "Сервер модели временно недоступен (ошибка 5xx). Попробуйте позже."
     if "connection" in err or "connect" in err or "refused" in err:
         return (
-            "Модель недоступна. Убедитесь, что Ollama запущена на хосте и в .env задан "
-            "OPENAI_BASE_URL (например http://host.docker.internal:11434/v1 для Docker)."
+            "Модель недоступна. Убедитесь, что LM Studio (или другой OpenAI-совместимый сервер) запущен на хосте и в .env задан "
+            "OPENAI_BASE_URL (например http://host.docker.internal:1234/v1 для Docker)."
         )
     if "400" in err or "bad request" in err:
         return (

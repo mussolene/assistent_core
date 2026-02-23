@@ -42,7 +42,7 @@ def test_format_model_error_html_404_5xx():
 
 def test_format_model_error_connection_refused():
     msg = _format_model_error_for_user(Exception("Connection refused"))
-    assert "недоступна" in msg or "Ollama" in msg or "OPENAI_BASE_URL" in msg
+    assert "недоступна" in msg or "LM Studio" in msg or "OPENAI_BASE_URL" in msg
 
 
 def test_format_model_error_400_bad_request():
@@ -225,7 +225,7 @@ async def test_assistant_agent_handle_model_error_with_stream_cb():
     ctx = _ctx(metadata={"stream_callback": stream_cb})
     result = await agent.handle(ctx)
     assert result.success is True
-    assert "недоступна" in result.output_text or "Ollama" in result.output_text
+    assert "недоступна" in result.output_text or "LM Studio" in result.output_text
     stream_cb.assert_any_call("", done=True)
 
 

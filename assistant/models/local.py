@@ -1,4 +1,4 @@
-"""Local model: Ollama or OpenAI-compatible (e.g. llama.cpp) via OpenAI client."""
+"""Local model: LM Studio / OpenAI-compatible API (Ollama, llama.cpp и др.) через OpenAI client."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class LocalModelGateway:
-    """Ollama / OpenAI-compatible local API. Streaming and reasoning model selection."""
+    """LM Studio и любой OpenAI-совместимый локальный API. Streaming и выбор reasoning-модели."""
 
     def __init__(
         self,
-        base_url: str = "http://localhost:11434/v1",
-        api_key: str = "ollama",
+        base_url: str = "http://localhost:1234/v1",
+        api_key: str = "lm-studio",
         model_name: str = "llama3.2",
         reasoning_suffix: str = ":reasoning",
     ) -> None:

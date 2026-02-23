@@ -622,17 +622,17 @@ def save_telegram():
 # ----- Model -----
 _MODEL_BODY = """
 <h1>Модель</h1>
-<p class="sub">Подключение к API (Ollama / OpenAI-совместимый). URL и ключ — затем загрузка списка моделей и выбор. Настройки применяются в дашборде и в Telegram.</p>
+<p class="sub">Подключение к API (LM Studio / любой OpenAI-совместимый). URL и ключ — затем загрузка списка моделей и выбор. Настройки применяются в дашборде и в Telegram.</p>
 <form method="post" action="/save-model" id="form-model">
   <div class="card">
     <label for="base_url">URL API</label>
-    <input id="base_url" name="openai_base_url" type="url" value="{{ config.get('OPENAI_BASE_URL', '') }}" placeholder="http://host.docker.internal:11434/v1">
-    <p class="hint">Для Docker: host.docker.internal:11434. Локально: localhost:11434. Ollama: …/v1, LM Studio: часто …:1234/v1.</p>
+    <input id="base_url" name="openai_base_url" type="url" value="{{ config.get('OPENAI_BASE_URL', '') }}" placeholder="http://host.docker.internal:1234/v1">
+    <p class="hint">По умолчанию LM Studio: localhost:1234/v1. Docker: host.docker.internal:1234/v1. Ollama: …:11434/v1.</p>
   </div>
   <div class="card">
     <label for="api_key">API ключ</label>
-    <input id="api_key" name="openai_api_key" type="password" value="{{ config.get('OPENAI_API_KEY', '') }}" placeholder="ollama или sk-..." autocomplete="off">
-    <p class="hint">Для Ollama можно оставить «ollama» или пустым.</p>
+    <input id="api_key" name="openai_api_key" type="password" value="{{ config.get('OPENAI_API_KEY', '') }}" placeholder="lm-studio или sk-..." autocomplete="off">
+    <p class="hint">Для LM Studio и Ollama можно оставить «lm-studio» или пустым.</p>
   </div>
   <div class="card">
     <label for="model_select">Модель</label>
@@ -2005,7 +2005,7 @@ def _monitor_services(redis_url: str) -> dict:
         cfg = get_config_from_redis_sync(redis_url)
         base_url = (cfg.get("OPENAI_BASE_URL") or "").strip().rstrip(
             "/"
-        ) or "http://localhost:11434"
+        ) or "http://localhost:1234"
         if not base_url.endswith("/v1"):
             base_url = base_url + "/v1"
         use_lm = (cfg.get("LM_STUDIO_NATIVE") or "").lower() in ("true", "1", "yes")
@@ -2088,7 +2088,7 @@ def _model_check_hint(err_text: str) -> str:
 
 def _normalize_base_url(base_url: str, for_lm_studio_native: bool) -> str:
     """OpenAI-compat base URL must end with /v1. LM Studio native uses root (no /v1)."""
-    u = (base_url or "").strip().rstrip("/") or "http://localhost:11434"
+    u = (base_url or "").strip().rstrip("/") or "http://localhost:1234"
     if for_lm_studio_native:
         return u[:-3] if u.endswith("/v1") else u
     if not u.endswith("/v1"):
@@ -2145,12 +2145,12 @@ def api_list_models():
     """Return list of model ids/names for given API URL and key. Uses OpenAI /models then Ollama /api/tags."""
     if request.is_json:
         body = request.get_json() or {}
-        base_url = (body.get("openai_base_url") or "").strip() or "http://localhost:11434/v1"
-        api_key = (body.get("openai_api_key") or "").strip() or "ollama"
+        base_url = (body.get("openai_base_url") or "").strip() or "http://localhost:1234/v1"
+        api_key = (body.get("openai_api_key") or "").strip() or "lm-studio"
         lm_native = (body.get("lm_studio_native") or "").lower() in ("true", "1", "yes")
     else:
-        base_url = (request.form.get("openai_base_url") or "").strip() or "http://localhost:11434/v1"
-        api_key = (request.form.get("openai_api_key") or "").strip() or "ollama"
+        base_url = (request.form.get("openai_base_url") or "").strip() or "http://localhost:1234/v1"
+        api_key = (request.form.get("openai_api_key") or "").strip() or "lm-studio"
         lm_native = (request.form.get("lm_studio_native") or "").lower() in ("true", "1", "yes")
 
     normalized = _normalize_base_url(base_url, for_lm_studio_native=lm_native)
@@ -2171,9 +2171,9 @@ def api_list_models():
 def api_test_model():
     redis_url = get_redis_url()
     cfg = get_config_from_redis_sync(redis_url)
-    base_url = (cfg.get("OPENAI_BASE_URL") or "").strip() or "http://localhost:11434/v1"
+    base_url = (cfg.get("OPENAI_BASE_URL") or "").strip() or "http://localhost:1234/v1"
     model_name = (cfg.get("MODEL_NAME") or "").strip() or "llama3.2"
-    api_key = (cfg.get("OPENAI_API_KEY") or "").strip() or "ollama"
+    api_key = (cfg.get("OPENAI_API_KEY") or "").strip() or "lm-studio"
     use_lm_studio_native = (cfg.get("LM_STUDIO_NATIVE") or "").lower() in ("true", "1", "yes")
 
     async def _check():

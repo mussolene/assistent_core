@@ -129,7 +129,7 @@ Skill registry динамический.
 
 Поддержка:
 
-* Local (Ollama / llama.cpp)
+* Local (LM Studio / Ollama / llama.cpp)
 * OpenAI-compatible
 * fallback
 * streaming
@@ -464,7 +464,7 @@ assistant/
 
 Support:
 
-- Local models (Ollama or llama.cpp via OpenAI-compatible API)
+- Local models (LM Studio, Ollama, llama.cpp via OpenAI-compatible API)
 - OpenAI-compatible cloud fallback
 - Streaming responses
 - Reasoning mode (flag-controlled)

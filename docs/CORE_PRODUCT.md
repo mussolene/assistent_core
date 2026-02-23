@@ -11,7 +11,7 @@
 | Компонент | Назначение |
 |-----------|------------|
 | **Redis** | Очередь событий (Event Bus), конфиг из дашборда, short-term/summary память, задачи. |
-| **assistant-core** | Оркестратор, агенты (Assistant, Tool), скиллы (filesystem, shell, git, tasks, memory_control, file_ref и др.), модель (Ollama/OpenAI-совместимый API). |
+| **assistant-core** | Оркестратор, агенты (Assistant, Tool), скиллы (filesystem, shell, git, tasks, memory_control, file_ref и др.), модель (LM Studio / OpenAI-совместимый API). |
 | **telegram-adapter** | Long polling, приём сообщений, отправка ответов и стриминг, подписка на `assistant:outgoing_reply`. |
 | **Память (ядро)** | Short-term (последние N сообщений), summary (сжатие), task memory (задачи). Без векторной памяти ядро работает. |
 | **Модель** | Один провайдер (локальный или облачный); настройка через дашборд (URL, API key, имя модели). |

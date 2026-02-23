@@ -36,7 +36,7 @@
 
 ## Возможности
 
-- **Локальные модели по умолчанию** — Ollama или любой OpenAI-совместимый API
+- **Локальные модели по умолчанию** — LM Studio или любой OpenAI-совместимый API
 - **Опциональное облако** — fallback на OpenAI-совместимый API при отключённой по умолчанию отправке в облако
 - **Слоистая архитектура** — Channel → Event Bus (Redis) → Orchestrator → Agents → Skills → Model Gateway
 - **Stateless-агенты** — AssistantAgent и ToolAgent, всё состояние в Redis
@@ -71,7 +71,7 @@
 | Язык | Python 3.11+ |
 | Очереди / состояние | Redis |
 | Канал | Telegram (long polling) |
-| Модели | Ollama / OpenAI-совместимый API |
+| Модели | LM Studio / OpenAI-совместимый API |
 | Dashboard | Flask |
 | Оркестрация | asyncio, Event Bus (pub/sub) |
 | Линтер | Ruff |
@@ -82,7 +82,7 @@
 ### Требования
 
 - [Docker](https://docs.docker.com/get-docker/) и [Docker Compose](https://docs.docker.com/compose/install/)
-- [Ollama](https://ollama.ai) (или другой OpenAI-совместимый сервер) — опционально на хосте
+- [LM Studio](https://lmstudio.ai) (или Ollama / другой OpenAI-совместимый сервер) — опционально на хосте
 - Токен бота Telegram ([@BotFather](https://t.me/BotFather)) — задаётся через Dashboard
 
 ### Запуск
@@ -102,7 +102,7 @@ docker compose up --build
    - **Секретный ключ:** в дашборде нажмите «Сгенерировать ключ» в блоке «Секретные ключи привязки» → передайте ключ пользователю → он вводит в боте: `/start ВАШ_КЛЮЧ`. Ключ одноразовый, действует 7 дней.
    Подробная инструкция — в раскрывающемся блоке «Инструкция: привязка пользователей» на странице Telegram в дашборде.
 4. В разделе Модель укажите URL API и имя модели, нажмите «Проверить подключение» и «Сохранить». Настройки модели применяются автоматически, перезапуск не нужен.
-5. Запустите Ollama (или LM Studio) на хосте; при необходимости задайте в `.env` переменную `OPENAI_BASE_URL` (для Docker на Mac/Windows часто `http://host.docker.internal:11434/v1`). Если бот отвечает «Модель недоступна» — проверьте доступность URL из контейнера.
+5. Запустите LM Studio (или Ollama / другой API) на хосте; при необходимости задайте в `.env` переменную `OPENAI_BASE_URL` (по умолчанию `http://host.docker.internal:1234/v1` для Docker). Если бот отвечает «Модель недоступна» — проверьте доступность URL из контейнера.
 
 **Кэш при пересборке:** при `DOCKER_BUILDKIT=1` образы кэшируют слой установки зависимостей (`docker/requirements.txt`). После изменения только кода пересборка почти не скачивает пакеты. Файл `.dockerignore` уменьшает контекст сборки (исключены venv, .git, тесты и т.д.).
 
@@ -142,7 +142,7 @@ Redis (Event Bus + состояние задач)
 Orchestrator (state machine, без LLM в жизненном цикле)
         │
         ▼
-Agent Registry ──► AssistantAgent ──► Model Gateway (Ollama / OpenAI)
+Agent Registry ──► AssistantAgent ──► Model Gateway (LM Studio / OpenAI)
         │
         ▼
         ToolAgent ──► Skill Registry ──► filesystem, shell, git, vector_rag, tasks, mcp
