@@ -1,0 +1,106 @@
+# Создание GitHub Release при пуше тега v*.
+# Тело релиза: шаблон .github/releases/vX.Y.Z.md + блок «Изменения» из коммитов (Conventional Commits).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set variables
+        id: vars
+        run: |
+          TAG="${{ github.ref_name }}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          # Предыдущий тег (по семверу)
+          PREV=$(git tag -l 'v*' --sort=-v:refname | grep -v "^${TAG}$" | head -1 || true)
+          echo "prev=$PREV" >> $GITHUB_OUTPUT
+
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          PREV="${{ steps.vars.outputs.prev }}"
+          RANGE="${PREV}..${TAG}"
+          if [ -z "$PREV" ]; then
+            RANGE="$TAG"
+          fi
+          ALL_COMMITS=$(git log "$RANGE" --no-merges --pretty=format:"%s|||%h")
+          # Группировка по типу Conventional Commit
+          CHANGELOG="## Изменения по коммитам"$'\n\n'
+          for type in feat fix docs chore refactor test style perf; do
+            case $type in
+            feat)   title="### Added" ;;
+            fix)    title="### Fixed" ;;
+            docs)   title="### Documentation" ;;
+            chore)  title="### Chore" ;;
+            refactor) title="### Refactor" ;;
+            test)   title="### Tests" ;;
+            style)  title="### Style" ;;
+            perf)   title="### Performance" ;;
+            *)      title="### $type" ;;
+            esac
+            LINES=$(echo "$ALL_COMMITS" | grep -E "^${type}(\([^)]*\))?!?:\s*" | while IFS= read -r line; do
+              subj="${line%|||*}"
+              hash="${line##*|||}"
+              # убрать префикс type(scope): или type:
+              rest=$(echo "$subj" | sed -E "s/^${type}(\([^)]*\))?!?:[[:space:]]*//")
+              echo "- ${rest} (${hash})"
+            done)
+            if [ -n "$LINES" ]; then
+              CHANGELOG="${CHANGELOG}${title}"$'\n\n'"${LINES}"$'\n\n'
+            fi
+          done
+          # Остальные коммиты (не conventional)
+          OTHER=$(echo "$ALL_COMMITS" | grep -v -E "^(feat|fix|docs|chore|refactor|test|style|perf)(\([^)]*\))?!?:\s*" | while IFS= read -r line; do
+            subj="${line%|||*}"
+            hash="${line##*|||}"
+            echo "- ${subj} (${hash})"
+          done)
+          if [ -n "$OTHER" ]; then
+            CHANGELOG="${CHANGELOG}### Other"$'\n\n'"${OTHER}"$'\n\n'
+          fi
+          CHANGELOG_FILE="${RUNNER_TEMP}/changelog.md"
+          printf '%s' "$CHANGELOG" > "$CHANGELOG_FILE"
+          echo "changelog_file=$CHANGELOG_FILE" >> $GITHUB_OUTPUT
+
+      - name: Build release body
+        id: body
+        run: |
+          TAG="${{ steps.vars.outputs.tag }}"
+          TEMPLATE=".github/releases/${TAG}.md"
+          BODY_FILE="${RUNNER_TEMP}/release_body.md"
+          CHANGELOG_FILE="${{ steps.changelog.outputs.changelog_file }}"
+          if [ -f "$TEMPLATE" ]; then
+            cat "$TEMPLATE" > "$BODY_FILE"
+          else
+            echo "# Assistant Core ${TAG}" > "$BODY_FILE"
+            echo "" >> "$BODY_FILE"
+            echo "Release ${TAG}." >> "$BODY_FILE"
+          fi
+          echo "" >> "$BODY_FILE"
+          cat "$CHANGELOG_FILE" >> "$BODY_FILE"
+          echo "body_file=$BODY_FILE" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Assistant Core ${{ steps.vars.outputs.tag }}
+          body_path: ${{ steps.body.outputs.body_file }}
+          draft: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
