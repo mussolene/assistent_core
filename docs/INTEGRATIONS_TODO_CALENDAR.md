@@ -2,6 +2,8 @@
 
 Краткое описание интеграций с внешними сервисами задач и календарём. Дорожная карта: [ANALYTICS_AND_ROADMAP_2026.md](ANALYTICS_AND_ROADMAP_2026.md), Фаза 2.
 
+**Callback URL:** на странице дашборда **Интеграции** в блоке «Callback URL для OAuth» отображаются актуальные адреса для To-Do и Calendar (по текущему хосту); их можно скопировать и вставить в Azure AD и Google Cloud Console.
+
 ---
 
 ## Microsoft To-Do
@@ -9,7 +11,7 @@
 ### Настройка
 
 1. Зарегистрировать приложение в [Azure Portal](https://portal.azure.com/) (App registrations): получить **Application (client) ID** и **Client secret**.
-2. В настройках приложения указать **Redirect URI** (тип "Web"): `https://ваш-дашборд/integrations/todo/callback` (для локальной разработки: `http://localhost:8080/integrations/todo/callback`).
+2. В настройках приложения указать **Redirect URI** (тип "Web"): скопировать URL из дашборда → Интеграции → «Callback URL для OAuth» (Microsoft To-Do) или использовать `https://ваш-дашборд/integrations/todo/callback` (локально: `http://localhost:8080/integrations/todo/callback`).
 3. В API permissions добавить делегированное разрешение **Microsoft Graph** → **Tasks.ReadWrite**.
 4. В `.env` задать:
    - `MS_TODO_CLIENT_ID` — Application (client) ID
@@ -31,7 +33,7 @@
 ### Настройка
 
 1. В [Google Cloud Console](https://console.cloud.google.com/) создать проект (или выбрать существующий), включить **Google Calendar API**.
-2. В разделе «Учётные данные» создать **OAuth 2.0 Client ID** (тип приложения: «Веб-приложение»). Указать **Authorized redirect URIs**: `https://ваш-дашборд/integrations/calendar/callback` (для локальной разработки: `http://localhost:8080/integrations/calendar/callback`).
+2. В разделе «Учётные данные» создать **OAuth 2.0 Client ID** (тип приложения: «Веб-приложение»). Указать **Authorized redirect URIs**: скопировать URL из дашборда → Интеграции → «Callback URL для OAuth» (Google Calendar) или использовать `https://ваш-дашборд/integrations/calendar/callback` (локально: `http://localhost:8080/integrations/calendar/callback`).
 3. В `.env` задать:
    - `GOOGLE_CALENDAR_CLIENT_ID` — Client ID
    - `GOOGLE_CALENDAR_CLIENT_SECRET` — Client secret
