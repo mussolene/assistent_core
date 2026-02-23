@@ -131,6 +131,10 @@ class Config(BaseSettings):
         if cloud:
             yaml_data.setdefault("model", {})["cloud_fallback_enabled"] = True
             yaml_data.setdefault("security", {})["cloud_fallback_enabled"] = True
+        # OPENAI_BASE_URL из .env / docker-compose (без префикса MODEL_) — иначе в Docker модель недоступна
+        openai_base = os.getenv("OPENAI_BASE_URL") or os.getenv("MODEL_OPENAI_BASE_URL")
+        if openai_base:
+            yaml_data.setdefault("model", {})["openai_base_url"] = openai_base.strip()
         return cls(**yaml_data)
 
 

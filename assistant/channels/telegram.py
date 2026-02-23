@@ -818,10 +818,12 @@ async def run_telegram_adapter() -> None:
             no_message_yet = s.get("message_id") is None
             has_text = bool(s["text"])
             token_has_newline = "\n" in (payload.token or "")
+        # Как v1/chat/completions: при первых токенах сразу sendMessage, далее — editMessageText того же сообщения
         now = time.monotonic()
         if payload.done:
             await _flush_stream(payload.task_id, force=True)
         elif no_message_yet:
+            # Сразу отправить сообщение (с текстом или плейсхолдером), затем дополнять через editMessageText
             await _flush_stream(payload.task_id, force=False)
         elif token_has_newline or (has_text and now - last_edit >= STREAM_EDIT_INTERVAL):
             await _flush_stream(payload.task_id, force=False)

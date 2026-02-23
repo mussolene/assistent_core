@@ -88,6 +88,14 @@ def test_config_load_cloud_fallback(monkeypatch):
     assert config.security.cloud_fallback_enabled is True
 
 
+def test_config_load_openai_base_url_from_env(monkeypatch):
+    """OPENAI_BASE_URL из .env / docker-compose подставляется в model.openai_base_url."""
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://host.docker.internal:11434/v1")
+    config = Config.load()
+    assert config.model.openai_base_url == "http://host.docker.internal:11434/v1"
+
+
 def test_config_load_env_prefix_missing_file(monkeypatch, tmp_path):
     monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("ASSISTANT_ENV_PREFIX", "staging")
