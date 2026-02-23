@@ -86,4 +86,5 @@
 - **Опционально:** vector (RAG), dashboard, индексация файлов, Qdrant, email, MCP HTTP API.  
 - **Минимальная установка:** `pip install .`; для RAG — `pip install .[vector]`; для веб-настройки — `pip install .[dashboard]`.
 
+Подробнее о том, что где хранится и как контекст подмешивается в промпт: [CONTEXT_AND_MEMORY.md](CONTEXT_AND_MEMORY.md).  
 Дорожная карта развития ядра и опциональных фич: [ROADMAP_0.2.1.md](ROADMAP_0.2.1.md), [ANALYTICS_AND_ROADMAP_2026.md](ANALYTICS_AND_ROADMAP_2026.md).
