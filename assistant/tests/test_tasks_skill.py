@@ -22,6 +22,7 @@ from assistant.skills.tasks import (
     format_tasks_for_telegram,
     format_tasks_list_readable,
     get_due_reminders_sync,
+    parse_task_phrase,
 )
 
 
@@ -813,6 +814,42 @@ def test_normalize_task_params():
         _normalize_task_params({"title": "X", "start_date": "2025-01-01"})["start_date"]
         == "2025-01-01"
     )
+
+
+def test_parse_task_phrase():
+    """Полуформализация короткой фразы в title, end_date, description."""
+    p = parse_task_phrase("завтра купить молоко")
+    assert p.get("title") == "купить молоко"
+    from datetime import date, timedelta
+    assert p.get("end_date") == (date.today() + timedelta(days=1)).isoformat()
+
+    p = parse_task_phrase("высокий приоритет позвонить маме")
+    assert p.get("title") == "позвонить маме"
+    assert "приоритет" in (p.get("description") or "").lower()
+
+    p = parse_task_phrase("просто задача")
+    assert p.get("title") == "просто задача"
+    assert p.get("end_date") is None
+
+    assert parse_task_phrase("") == {}
+    assert parse_task_phrase("   ") == {}
+
+
+async def test_tasks_create_from_phrase(skill, redis_mock):
+    """Создание задачи из фразы «завтра купить молоко» — парсер подставляет due и title."""
+    from datetime import date, timedelta
+    with patch(
+        "assistant.skills.tasks._get_redis", new_callable=AsyncMock, return_value=redis_mock
+    ):
+        out = await skill.run({
+            "action": "create_task",
+            "user_id": "u1",
+            "text": "завтра купить молоко",
+        })
+    assert out.get("ok") is True
+    task = out.get("task") or {}
+    assert task.get("title") == "купить молоко"
+    assert task.get("end_date") == (date.today() + timedelta(days=1)).isoformat()
 
 
 def test_date_to_ordinal():

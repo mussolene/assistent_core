@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from assistant.skills.base import BaseSkill
@@ -154,9 +155,76 @@ def _date_to_ordinal(iso_date: str | None) -> int | None:
 
 def _ordinal_to_date(ordinal: int) -> str:
     """Дни с эпохи -> YYYY-MM-DD."""
-    from datetime import date
-
     return date.fromordinal(ordinal).isoformat()
+
+
+def parse_task_phrase(phrase: str) -> dict[str, Any]:
+    """
+    Полуформализация короткой фразы в поля задачи: title, end_date (due), description (notes/priority).
+    Шаблоны: «завтра X», «послезавтра X», «X к 15.03», «высокий приоритет X», «X на понедельник».
+    Возвращает dict с ключами title, end_date, start_date, description (опционально).
+    """
+    if not phrase or not isinstance(phrase, str):
+        return {}
+    text = phrase.strip()
+    if not text:
+        return {}
+    out: dict[str, Any] = {}
+    today = date.today()
+
+    # «завтра купить молоко» -> due=завтра, title=купить молоко
+    m = re.match(r"^завтра\s+(.+)$", text, re.IGNORECASE)
+    if m:
+        out["end_date"] = (today + timedelta(days=1)).isoformat()
+        out["title"] = m.group(1).strip()
+        return out
+
+    m = re.match(r"^послезавтра\s+(.+)$", text, re.IGNORECASE)
+    if m:
+        out["end_date"] = (today + timedelta(days=2)).isoformat()
+        out["title"] = m.group(1).strip()
+        return out
+
+    # «высокий приоритет X» / «низкий приоритет X»
+    m = re.match(r"^(высокий|низкий|средний)\s+приоритет\s+(.+)$", text, re.IGNORECASE)
+    if m:
+        out["description"] = f"Приоритет: {m.group(1).lower()}."
+        out["title"] = m.group(2).strip()
+        return out
+
+    # «X к 15.03» или «X к 15.03.2025»
+    m = re.match(r"^(.+?)\s+к\s+(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?$", text, re.IGNORECASE)
+    if m:
+        title_part, d, mon, year = m.group(1).strip(), m.group(2), m.group(3), m.group(4)
+        try:
+            yr = int(year) if year else today.year
+            end_d = date(yr, int(mon), int(d))
+            if end_d >= today:
+                out["end_date"] = end_d.isoformat()
+                out["title"] = title_part
+                return out
+        except ValueError:
+            pass
+
+    # «X на понедельник» — следующий понедельник
+    weekdays_ru = [
+        "понедельник", "вторник", "среду", "четверг", "пятницу", "субботу", "воскресенье",
+        "пн", "вт", "ср", "чт", "пт", "сб", "вс",
+    ]
+    for i, name in enumerate(weekdays_ru[:7]):
+        day_off = (i - today.weekday() + 7) % 7
+        if day_off == 0:
+            day_off = 7
+        pat = r"^(.+?)\s+на\s+" + re.escape(name) + r"$"
+        m = re.match(pat, text, re.IGNORECASE)
+        if m:
+            out["end_date"] = (today + timedelta(days=day_off)).isoformat()
+            out["title"] = m.group(1).strip()
+            return out
+
+    # Иначе вся фраза — title
+    out["title"] = text
+    return out
 
 
 def _parse_time_spent(value: Any) -> int | None:
@@ -450,7 +518,18 @@ class TaskSkill(BaseSkill):
     async def _create(self, client, user_id: str, params: dict[str, Any]) -> dict[str, Any]:
         title = (params.get("title") or "").strip()
         if not title:
-            return {"ok": False, "error": "title обязателен"}
+            phrase = (params.get("text") or params.get("phrase") or "").strip()
+            if phrase:
+                parsed = parse_task_phrase(phrase)
+                title = (parsed.get("title") or phrase).strip()
+                if parsed.get("end_date") and not (params.get("end_date") or params.get("start_date")):
+                    params = dict(params)
+                    params["end_date"] = parsed["end_date"]
+                if parsed.get("description") and not params.get("description"):
+                    params = dict(params)
+                    params["description"] = (params.get("description") or "").strip() or parsed["description"]
+            if not title:
+                return {"ok": False, "error": "title обязателен"}
         task_id = str(uuid.uuid4())
         now = _now_iso()
         current_year = datetime.now(timezone.utc).year
