@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "assistant-core"
-version = "0.2.3"
+version = "0.2.4"
 description = "Modular personal AI assistant with Telegram, skills, and local/cloud models"
 readme = "assistant/README.md"
 requires-python = ">=3.11"
