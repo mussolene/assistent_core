@@ -101,6 +101,13 @@ def test_get_help_message_text_contains_commands():
         assert c.get("description", "") in text
 
 
+def test_get_help_message_text_has_admin_section():
+    """Справка /help содержит блок «Для админов» с /restart (ROADMAP 3.4)."""
+    text = get_help_message_text()
+    assert "Для админов" in text
+    assert "/restart" in text
+
+
 def test_get_welcome_message_text_for_new_user():
     """Приветствие по /start для пользователя не из whitelist."""
     text = get_welcome_message_text()

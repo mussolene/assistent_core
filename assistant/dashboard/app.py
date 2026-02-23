@@ -210,7 +210,7 @@ def _inject_current_user():
 def _require_auth():
     """Redirect to setup or login when needed."""
     path = request.path
-    if path in ("/login", "/logout", "/api/session"):
+    if path in ("/login", "/logout", "/api/session", "/api/health"):
         return None
     if path.startswith("/mcp/v1/"):
         return None
@@ -1764,6 +1764,12 @@ def api_cloned_repos():
         except Exception:
             pass
     return jsonify({"ok": True, "repos": repos, "workspace_dir": workspace_dir or None})
+
+
+@app.route("/api/health")
+def api_health():
+    """Эндпоинт живости для мониторинга и балансировщиков (ROADMAP 3.1). Без авторизации."""
+    return jsonify({"ok": True})
 
 
 @app.route("/api/monitor")

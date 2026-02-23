@@ -13,6 +13,7 @@
 - **Фаза 5:** Регрессия: pytest assistant/tests, покрытие ≥90%, ruff без замечаний. Приёмочный чек-лист — docs/ACCEPTANCE.md.
 - **П.5 улучшение списков:** Репо: подпись «Страница N из K» при известном total (склонированные). Функция `format_repos_reply_text(label, page, total)`; тесты в test_channels.py.
 - **4.3 аккордеон «Дополнительно»:** На странице Модель блок Fallback, облачный fallback, LM Studio native и API ключ вынесены в `<details class="card">` с заголовком «Дополнительно»; стили в layout.css (`.details-summary`). Тест: test_model_page_has_accordion.
+- **ROADMAP 3.4 справка по ролям:** В /help блок «Для админов» с /restart; в BOT_COMMANDS у команды restart поле `admin_only: True`. Тест: test_get_help_message_text_has_admin_section.
 
 ---
 

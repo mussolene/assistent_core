@@ -96,6 +96,7 @@ async def _download_telegram_attachment(
         return None
 
 
+# Команда с admin_only=True доступна только пользователям из TELEGRAM_ADMIN_IDS (ROADMAP 3.4)
 BOT_COMMANDS = [
     {"command": "start", "description": "Начать / pairing"},
     {"command": "help", "description": "Справка"},
@@ -107,6 +108,7 @@ BOT_COMMANDS = [
     {"command": "github", "description": "GitHub: репо и поиск"},
     {"command": "gitlab", "description": "GitLab: репо и поиск"},
     {"command": "dev", "description": "Обратная связь для агента (MCP)"},
+    {"command": "restart", "description": "Запрос на перезапуск (только админы)", "admin_only": True},
 ]
 
 # UX: единый тон сообщений (docs/UX_UI_ROADMAP.md)
@@ -117,12 +119,20 @@ RATE_LIMIT_MESSAGE = (
 
 
 def get_help_message_text() -> str:
-    """Текст справки /help: список команд и краткое описание (для тестов и отправки)."""
+    """Текст справки /help: список команд и краткое описание; админ-команды отдельно (ROADMAP 3.4)."""
     lines = ["<b>Справка</b>", ""]
+    admin_cmds = []
     for c in BOT_COMMANDS:
         cmd = c.get("command", "")
         desc = c.get("description", "")
-        lines.append(f"/{cmd} — {desc}")
+        if c.get("admin_only"):
+            admin_cmds.append(f"/{cmd} — {desc}")
+        else:
+            lines.append(f"/{cmd} — {desc}")
+    if admin_cmds:
+        lines.append("")
+        lines.append("<b>Для админов:</b>")
+        lines.extend(admin_cmds)
     return "\n".join(lines)
 
 

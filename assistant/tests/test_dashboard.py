@@ -125,6 +125,14 @@ def test_api_test_bot_mock(monkeypatch, client, auth_mock):
     assert j.get("username") == "test_bot"
 
 
+def test_api_health_no_auth(client):
+    """GET /api/health возвращает 200 и ok без авторизации (ROADMAP 3.1)."""
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j == {"ok": True}
+
+
 def test_api_monitor(client, auth_mock):
     """Dashboard API monitor returns redis, services, tasks, keys_by_prefix."""
     r = client.get("/api/monitor")
