@@ -14,6 +14,8 @@ MCP_SERVERS_KEY = "MCP_SERVERS"
 PAIRING_MODE_KEY = "PAIRING_MODE"
 PAIRING_CODE_PREFIX = "assistant:pairing:"
 PAIRING_CODE_TTL = 600  # 10 min
+TELEGRAM_ADMIN_IDS_KEY = "TELEGRAM_ADMIN_IDS"
+RESTART_REQUESTED_KEY = "assistant:action:restart_requested"
 
 
 def get_redis_url() -> str:
@@ -34,6 +36,11 @@ async def get_config_from_redis(redis_url: str) -> dict[str, Any]:
             val = await client.get(k)
             if val is not None:
                 if name == "TELEGRAM_ALLOWED_USER_IDS" and val:
+                    try:
+                        out[name] = [int(x.strip()) for x in val.split(",") if x.strip()]
+                    except ValueError:
+                        out[name] = val
+                elif name == TELEGRAM_ADMIN_IDS_KEY and val:
                     try:
                         out[name] = [int(x.strip()) for x in val.split(",") if x.strip()]
                     except ValueError:
@@ -66,6 +73,11 @@ def get_config_from_redis_sync(redis_url: str) -> dict[str, Any]:
             val = client.get(k)
             if val is not None:
                 if name == "TELEGRAM_ALLOWED_USER_IDS" and val:
+                    try:
+                        out[name] = [int(x.strip()) for x in val.split(",") if x.strip()]
+                    except ValueError:
+                        out[name] = val
+                elif name == TELEGRAM_ADMIN_IDS_KEY and val:
                     try:
                         out[name] = [int(x.strip()) for x in val.split(",") if x.strip()]
                     except ValueError:
@@ -167,4 +179,42 @@ def set_config_in_redis_sync(redis_url: str, key: str, value: str | list[int] | 
         client.close()
     except Exception as e:
         logger.exception("Could not save config to Redis: %s", e)
+        raise
+
+
+async def get_status_from_redis(redis_url: str) -> dict[str, Any]:
+    """Return model_name, task_count for /status command. Used by Telegram adapter."""
+    try:
+        import redis.asyncio as aioredis
+
+        cfg = await get_config_from_redis(redis_url)
+        client = aioredis.from_url(redis_url, decode_responses=True)
+        try:
+            keys = await client.keys("assistant:task:*")
+            task_count = len(keys)
+        except Exception:
+            task_count = 0
+        await client.close()
+        return {
+            "model_name": (cfg.get("MODEL_NAME") or "").strip() or "—",
+            "task_count": task_count,
+        }
+    except Exception as e:
+        logger.warning("get_status_from_redis: %s", e)
+        return {"model_name": "—", "task_count": 0}
+
+
+async def set_restart_requested(redis_url: str, user_id: int) -> None:
+    """Set restart flag in Redis (ROADMAP 3.3). External script/worker may watch this key."""
+    try:
+        import time
+
+        import redis.asyncio as aioredis
+
+        client = aioredis.from_url(redis_url, decode_responses=True)
+        payload = json.dumps({"user_id": user_id, "timestamp": time.time()})
+        await client.set(RESTART_REQUESTED_KEY, payload)
+        await client.close()
+    except Exception as e:
+        logger.exception("Could not set restart requested: %s", e)
         raise

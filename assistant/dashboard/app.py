@@ -49,6 +49,7 @@ from assistant.dashboard.config_store import (
     MCP_SERVERS_KEY,
     PAIRING_MODE_KEY,
     REDIS_PREFIX,
+    TELEGRAM_ADMIN_IDS_KEY,
     create_pairing_code,
     get_config_from_redis_sync,
     get_redis_url,
@@ -185,6 +186,10 @@ def load_config() -> dict:
         )
     else:
         data["TELEGRAM_ALLOWED_USER_IDS_STR"] = data.get("TELEGRAM_ALLOWED_USER_IDS", "") or ""
+    if TELEGRAM_ADMIN_IDS_KEY in data and isinstance(data[TELEGRAM_ADMIN_IDS_KEY], list):
+        data["TELEGRAM_ADMIN_IDS_STR"] = ",".join(str(x) for x in data[TELEGRAM_ADMIN_IDS_KEY])
+    else:
+        data["TELEGRAM_ADMIN_IDS_STR"] = data.get(TELEGRAM_ADMIN_IDS_KEY, "") or ""
     data.setdefault("PAIRING_MODE", "false")
     data.setdefault(MCP_SERVERS_KEY, [])
     return data
@@ -377,6 +382,11 @@ _TELEGRAM_BODY = """
     <p class="hint">Пусто — разрешить всех (только для разработки).</p>
   </div>
   <div class="card">
+    <label for="admin_ids">Админские User ID (для /restart)</label>
+    <input id="admin_ids" name="telegram_admin_ids" type="text" value="{{ config.get('TELEGRAM_ADMIN_IDS_STR', '') }}" placeholder="123456789">
+    <p class="hint">Через запятую. Только эти пользователи могут вызывать команду /restart в боте.</p>
+  </div>
+  <div class="card">
     <label for="dev_chat_id">Chat ID для MCP/агента (уведомления, confirm)</label>
     <input id="dev_chat_id" name="telegram_dev_chat_id" type="text" value="{{ config.get('TELEGRAM_DEV_CHAT_ID', '') }}" placeholder="123456789">
     <p class="hint">Куда слать сообщения от MCP-сервера (notify, ask_confirmation). Для личных чатов = User ID. Пусто — первый из разрешённых.</p>
@@ -453,9 +463,16 @@ def save_telegram():
     user_ids = [
         int(x.strip()) for x in re.split(r"[\s,]+", users_str) if x.strip() and x.strip().isdigit()
     ]
+    admin_str = (request.form.get("telegram_admin_ids") or "").strip()
+    admin_ids = [
+        int(x.strip())
+        for x in re.split(r"[\s,]+", admin_str)
+        if x.strip() and x.strip().isdigit()
+    ]
     pairing = request.form.get("pairing_mode") == "1"
     set_config_in_redis_sync(redis_url, "TELEGRAM_BOT_TOKEN", token)
     set_config_in_redis_sync(redis_url, "TELEGRAM_ALLOWED_USER_IDS", user_ids if user_ids else [])
+    set_config_in_redis_sync(redis_url, TELEGRAM_ADMIN_IDS_KEY, admin_ids if admin_ids else [])
     set_config_in_redis_sync(redis_url, PAIRING_MODE_KEY, "true" if pairing else "false")
     set_config_in_redis_sync(
         redis_url, "TELEGRAM_DEV_CHAT_ID", (request.form.get("telegram_dev_chat_id") or "").strip()

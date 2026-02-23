@@ -6,11 +6,15 @@ from assistant.dashboard.config_store import (
     MCP_SERVERS_KEY,
     PAIRING_CODE_PREFIX,
     PAIRING_MODE_KEY,
+    RESTART_REQUESTED_KEY,
+    TELEGRAM_ADMIN_IDS_KEY,
     add_telegram_allowed_user,
     consume_pairing_code,
     create_pairing_code,
     get_config_from_redis_sync,
+    get_status_from_redis,
     set_config_in_redis_sync,
+    set_restart_requested,
 )
 
 
@@ -285,6 +289,40 @@ def test_create_and_consume_pairing_code(redis_url):
     r.close()
 
 
+def test_config_store_telegram_admin_ids_roundtrip(redis_url):
+    """TELEGRAM_ADMIN_IDS сохраняется и читается как список ID (ROADMAP 3.3)."""
+    set_config_in_redis_sync(redis_url, TELEGRAM_ADMIN_IDS_KEY, [111, 222])
+    data = get_config_from_redis_sync(redis_url)
+    assert data.get(TELEGRAM_ADMIN_IDS_KEY) == [111, 222]
+
+
+@pytest.mark.asyncio
+async def test_get_status_from_redis(redis_url):
+    """get_status_from_redis возвращает model_name и task_count."""
+    set_config_in_redis_sync(redis_url, "MODEL_NAME", "llama3.2")
+    data = await get_status_from_redis(redis_url)
+    assert data.get("model_name") == "llama3.2"
+    assert isinstance(data.get("task_count"), int)
+    assert data["task_count"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_set_restart_requested(redis_url):
+    """set_restart_requested записывает флаг в Redis (ROADMAP 3.3)."""
+    import json
+
+    await set_restart_requested(redis_url, 12345)
+    import redis
+
+    r = redis.from_url(redis_url, decode_responses=True)
+    raw = r.get(RESTART_REQUESTED_KEY)
+    r.close()
+    assert raw is not None
+    payload = json.loads(raw)
+    assert payload.get("user_id") == 12345
+    assert "timestamp" in payload
+
+
 def test_api_pairing_code_returns_code_and_link(client, auth_mock, monkeypatch):
     monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
     monkeypatch.setattr("assistant.dashboard.app.create_pairing_code", lambda url: ("ABC123", 600))
@@ -306,6 +344,15 @@ def test_index_channels_page_renders(client, auth_mock, monkeypatch):
     assert "Telegram" in body
     assert "Email" in body
     assert "Каналы" in body or "channels" in body.lower()
+
+
+def test_index_contains_admin_ids_field(client, auth_mock, monkeypatch):
+    """Страница Каналы содержит поле «Админские User ID» для /restart (ROADMAP 3.3)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.get("/")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "admin_ids" in body or "Админские" in body or "telegram_admin" in body
 
 
 def test_layout_includes_stylesheet(client, auth_mock, monkeypatch):

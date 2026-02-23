@@ -15,6 +15,7 @@ from assistant.channels.telegram import (
     _to_telegram_html,
     chunk_text_for_telegram,
     format_repos_reply_text,
+    format_status_message,
     get_help_message_text,
     get_settings_message_text,
     get_welcome_message_text,
@@ -123,6 +124,18 @@ def test_settings_and_channels_same_message():
     t1 = get_settings_message_text(url)
     t2 = get_settings_message_text(url)
     assert t1 == t2
+
+
+def test_format_status_message():
+    """Формат ответа /status: модель и число задач (ROADMAP 3.3)."""
+    text = format_status_message("llama3.2", 2)
+    assert "Статус" in text
+    assert "llama3.2" in text
+    assert "2" in text
+    assert "Задач в очереди" in text
+    text0 = format_status_message("—", 0)
+    assert "0" in text0
+    assert "—" in text0
 
 
 def test_pairing_success_text_unified():

@@ -99,6 +99,7 @@ async def _download_telegram_attachment(
 BOT_COMMANDS = [
     {"command": "start", "description": "Начать / pairing"},
     {"command": "help", "description": "Справка"},
+    {"command": "status", "description": "Статус: модель, очередь задач"},
     {"command": "reasoning", "description": "Включить режим рассуждений"},
     {"command": "settings", "description": "Ссылка на настройки"},
     {"command": "channels", "description": "Ссылка на дашборд (каналы)"},
@@ -139,6 +140,11 @@ def get_settings_message_text(dashboard_url: str) -> str:
         f"Настройки и дашборд: {dashboard_url}\n"
         "Там можно задать токен бота, разрешённые ID, модель, MCP и т.д."
     )
+
+
+def format_status_message(model_name: str, task_count: int) -> str:
+    """Форматирование ответа на /status (для тестов и отправки)."""
+    return f"<b>Статус</b>\nМодель: {model_name}\nЗадач в очереди: {task_count}"
 
 
 def get_config() -> dict:
@@ -1290,6 +1296,72 @@ async def run_telegram_adapter() -> None:
                                 )
                         except Exception as e:
                             logger.debug("sendMessage settings/channels: %s", e)
+                        continue
+                    # /status — краткий статус: модель, очередь задач (ROADMAP 3.3)
+                    if text == "/status":
+                        try:
+                            from assistant.dashboard.config_store import get_status_from_redis
+
+                            data = await get_status_from_redis(redis_url)
+                            model_name = str(data.get("model_name", "—"))
+                            status_text = format_status_message(
+                                _escape_html(model_name),
+                                data.get("task_count", 0),
+                            )
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": status_text,
+                                        "parse_mode": PARSE_MODE,
+                                    },
+                                    timeout=5.0,
+                                )
+                        except Exception as e:
+                            logger.debug("sendMessage status: %s", e)
+                        continue
+                    # /restart — только для TELEGRAM_ADMIN_IDS (ROADMAP 3.3)
+                    if text == "/restart":
+                        from assistant.dashboard.config_store import (
+                            TELEGRAM_ADMIN_IDS_KEY,
+                            get_config_from_redis,
+                            set_restart_requested,
+                        )
+
+                        redis_cfg = await get_config_from_redis(redis_url)
+                        admin_ids = redis_cfg.get(TELEGRAM_ADMIN_IDS_KEY) or []
+                        if not isinstance(admin_ids, list):
+                            admin_ids = [int(x) for x in str(admin_ids).split(",") if str(x).strip()]
+                        if uid_int not in admin_ids:
+                            try:
+                                async with httpx.AsyncClient() as client:
+                                    await client.post(
+                                        f"{base_url}/sendMessage",
+                                        json={
+                                            "chat_id": chat_id,
+                                            "text": "Недостаточно прав.",
+                                            "parse_mode": PARSE_MODE,
+                                        },
+                                        timeout=5.0,
+                                    )
+                            except Exception as e:
+                                logger.debug("sendMessage restart denied: %s", e)
+                            continue
+                        try:
+                            await set_restart_requested(redis_url, uid_int)
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{base_url}/sendMessage",
+                                    json={
+                                        "chat_id": chat_id,
+                                        "text": "Запрос на перезапуск отправлен. Ожидайте выполнения.",
+                                        "parse_mode": PARSE_MODE,
+                                    },
+                                    timeout=5.0,
+                                )
+                        except Exception as e:
+                            logger.debug("set_restart_requested/sendMessage: %s", e)
                         continue
                     # /repos, /github, /gitlab — список репо с inline-кнопками и пагинацией (9.2)
                     if text in ("/repos", "/github", "/gitlab"):
