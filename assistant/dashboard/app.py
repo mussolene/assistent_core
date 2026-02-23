@@ -1192,7 +1192,8 @@ def _mcp_agent_base_url():
 def integrations_page():
     """Интеграции: MCP скиллы + To-Do/Calendar + MCP (агент) на одной странице."""
     from assistant.dashboard.mcp_endpoints import list_endpoints
-    from assistant.integrations.calendar import calendar_is_configured, get_oauth_url as calendar_get_oauth_url
+    from assistant.integrations.calendar import calendar_is_configured
+    from assistant.integrations.calendar import get_oauth_url as calendar_get_oauth_url
     from assistant.integrations.todo import get_oauth_url, todo_is_configured
 
     config = load_config()

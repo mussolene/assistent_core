@@ -39,8 +39,8 @@ async def run_core(config: Config) -> None:
     from assistant.skills.file_ref import FileRefSkill
     from assistant.skills.filesystem import FilesystemSkill
     from assistant.skills.git import GitSkill
-    from assistant.skills.integrations_skill import IntegrationsSkill
     from assistant.skills.index_repo_skill import IndexRepoSkill
+    from assistant.skills.integrations_skill import IntegrationsSkill
     from assistant.skills.mcp_adapter import McpAdapterSkill
     from assistant.skills.memory_control import MemoryControlSkill
     from assistant.skills.registry import SkillRegistry
