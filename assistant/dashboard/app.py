@@ -1108,10 +1108,20 @@ _INTEGRATIONS_EXTERNAL_BODY = """
 <h1>To-Do и календарь</h1>
 <p class="sub">Microsoft To-Do и Google Calendar: привязка через OAuth, создание задач и событий из ассистента.</p>
 <div class="card">
+  <h3 style="margin-top:0">Callback URL для OAuth</h3>
+  <p class="hint">Укажите эти адреса в настройках приложений (Azure AD и Google Cloud) как Redirect URI.</p>
+  <p><label>Microsoft To-Do (Azure AD)</label><br>
+  <input type="text" id="callback-todo" value="{{ redirect_uri_todo }}" readonly style="width:100%%;font-family:monospace;font-size:0.9rem">
+  <button type="button" class="btn btn-secondary" style="margin-top:0.35rem" onclick="navigator.clipboard.writeText(document.getElementById('callback-todo').value); this.textContent='Скопировано'">Копировать</button></p>
+  <p><label>Google Calendar</label><br>
+  <input type="text" id="callback-calendar" value="{{ redirect_uri_calendar }}" readonly style="width:100%%;font-family:monospace;font-size:0.9rem">
+  <button type="button" class="btn btn-secondary" style="margin-top:0.35rem" onclick="navigator.clipboard.writeText(document.getElementById('callback-calendar').value); this.textContent='Скопировано'">Копировать</button></p>
+</div>
+<div class="card">
   <h3 style="margin-top:0">Microsoft To-Do</h3>
   <p><strong>Статус:</strong> {{ 'Подключено' if todo_configured else 'Не подключено' }}</p>
   {% if not todo_configured %}
-  <p class="hint">Задайте в .env: <code>MS_TODO_CLIENT_ID</code> и <code>MS_TODO_CLIENT_SECRET</code> (приложение Azure AD с разрешением Tasks.ReadWrite). Redirect URI: <code>{{ base_url }}integrations/todo/callback</code></p>
+  <p class="hint">Задайте в .env: <code>MS_TODO_CLIENT_ID</code> и <code>MS_TODO_CLIENT_SECRET</code> (приложение Azure AD с разрешением Tasks.ReadWrite). Redirect URI — см. блок выше.</p>
   {% if todo_oauth_url %}
   <a href="{{ todo_oauth_url }}" class="btn" style="margin-top:0.5rem">Подключить To-Do (OAuth)</a>
   {% else %}
@@ -1125,7 +1135,7 @@ _INTEGRATIONS_EXTERNAL_BODY = """
   <h3 style="margin-top:0">Google Calendar</h3>
   <p><strong>Статус:</strong> {{ 'Подключено' if calendar_configured else 'Не подключено' }}</p>
   {% if not calendar_configured %}
-  <p class="hint">Задайте в .env: <code>GOOGLE_CALENDAR_CLIENT_ID</code> и <code>GOOGLE_CALENDAR_CLIENT_SECRET</code> (OAuth 2.0 в Google Cloud Console, Calendar API). Redirect URI: <code>{{ base_url }}integrations/calendar/callback</code></p>
+  <p class="hint">Задайте в .env: <code>GOOGLE_CALENDAR_CLIENT_ID</code> и <code>GOOGLE_CALENDAR_CLIENT_SECRET</code> (OAuth 2.0 в Google Cloud Console, Calendar API). Redirect URI — см. блок выше.</p>
   {% if calendar_oauth_url %}
   <a href="{{ calendar_oauth_url }}" class="btn" style="margin-top:0.5rem">Подключить Calendar (OAuth)</a>
   {% else %}
@@ -1209,6 +1219,8 @@ def integrations_page():
     part_external = render_template_string(
         _INTEGRATIONS_EXTERNAL_BODY,
         base_url=base_url,
+        redirect_uri_todo=redirect_uri_todo,
+        redirect_uri_calendar=redirect_uri_calendar,
         todo_configured=todo_configured,
         todo_oauth_url=todo_oauth_url,
         calendar_configured=calendar_configured,
