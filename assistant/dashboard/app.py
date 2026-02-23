@@ -1725,7 +1725,17 @@ _CHANGE_PASSWORD_BODY = """
 # ----- Monitor -----
 _MONITOR_BODY = """
 <h1>Мониторинг</h1>
-<p class="sub">Ресурсы Redis, ключи по типам, статус сервисов. <span id="monitor-updated" class="hint">Обновлено только что.</span></p>
+<p class="sub">Ресурсы хоста, Redis, ключи по типам, статус сервисов. <span id="monitor-updated" class="hint">Обновлено только что.</span></p>
+<h2 style="font-size:1rem; margin-top:1rem; margin-bottom:0.5rem;">Хост (машина сборки)</h2>
+<div class="monitor-grid" id="host-grid">
+  <div class="monitor-card"><div class="val" id="host-cpu">{{ (monitor.host.get('cpu_percent') ~ '%') if monitor.host.get('cpu_percent') is not none else '—' }}</div><div class="label">CPU</div></div>
+  <div class="monitor-card"><div class="val" id="host-mem">{{ monitor.host.get('memory_used_human') or '—' }}</div><div class="label">Память (используется)</div></div>
+  <div class="monitor-card"><div class="val" id="host-mem-total">{{ monitor.host.get('memory_total_human') or '—' }}</div><div class="label">Память (всего)</div></div>
+  <div class="monitor-card"><div class="val" id="host-mem-pct">{{ (monitor.host.get('memory_percent')|string ~ '%') if monitor.host.get('memory_percent') is not none else '—' }}</div><div class="label">Память %</div></div>
+  <div class="monitor-card"><div class="val" id="host-load">{{ monitor.host.get('load_avg_1') if monitor.host.get('load_avg_1') is not none else '—' }}</div><div class="label">Load (1 мин)</div></div>
+  <div class="monitor-card"><div class="val" id="host-disk">{{ (monitor.host.get('disk_percent')|string ~ '%') if monitor.host.get('disk_percent') is not none else '—' }}</div><div class="label">Диск /</div></div>
+</div>
+<h2 style="font-size:1rem; margin-top:1rem; margin-bottom:0.5rem;">Redis и сервисы</h2>
 <div class="monitor-grid">
   <div class="monitor-card"><div class="val" id="mem">{{ monitor.redis.get('used_memory_human', '—') }}</div><div class="label">Память Redis</div></div>
   <div class="monitor-card"><div class="val" id="clients">{{ monitor.redis.get('connected_clients', '—') }}</div><div class="label">Подключения</div></div>
@@ -1747,6 +1757,15 @@ _MONITOR_BODY = """
   var updatedEl = document.getElementById('monitor-updated');
   function updateDOM(data){
     if (!data) return;
+    if (data.host) {
+      var h = data.host;
+      var el = document.getElementById('host-cpu'); if (el) el.textContent = (h.cpu_percent != null) ? (h.cpu_percent + '%') : '—';
+      el = document.getElementById('host-mem'); if (el) el.textContent = h.memory_used_human || '—';
+      el = document.getElementById('host-mem-total'); if (el) el.textContent = h.memory_total_human || '—';
+      el = document.getElementById('host-mem-pct'); if (el) el.textContent = (h.memory_percent != null) ? (h.memory_percent + '%') : '—';
+      el = document.getElementById('host-load'); if (el) el.textContent = (h.load_avg_1 != null) ? String(h.load_avg_1) : '—';
+      el = document.getElementById('host-disk'); if (el) el.textContent = (h.disk_percent != null) ? (h.disk_percent + '%') : '—';
+    }
     if (data.redis) {
       document.getElementById('mem').textContent = data.redis.used_memory_human || '—';
       document.getElementById('clients').textContent = data.redis.connected_clients ?? '—';
@@ -2037,10 +2056,61 @@ def _redis_info() -> dict:
         return {}
 
 
+def _monitor_host() -> dict:
+    """Метрики хоста (CPU, память, load average, диск). Требует psutil."""
+    out = {}
+    try:
+        import psutil
+
+        # CPU: средняя загрузка за последний интервал (blocking, ~0.1s)
+        try:
+            out["cpu_percent"] = round(psutil.cpu_percent(interval=0.1), 1)
+        except Exception:
+            out["cpu_percent"] = None
+        # Память (virtual_memory)
+        try:
+            vmem = psutil.virtual_memory()
+            out["memory_total_mb"] = round(vmem.total / (1024 * 1024))
+            out["memory_used_mb"] = round(vmem.used / (1024 * 1024))
+            out["memory_percent"] = round(vmem.percent, 1)
+            out["memory_used_human"] = _format_bytes(vmem.used)
+            out["memory_total_human"] = _format_bytes(vmem.total)
+        except Exception:
+            out["memory_total_mb"] = out["memory_used_mb"] = out["memory_percent"] = None
+        # Load average (Unix; на Windows — None)
+        try:
+            load = psutil.getloadavg()
+            out["load_avg_1"] = round(load[0], 2)
+            out["load_avg_5"] = round(load[1], 2)
+            out["load_avg_15"] = round(load[2], 2)
+        except (AttributeError, OSError):
+            out["load_avg_1"] = out["load_avg_5"] = out["load_avg_15"] = None
+        # Диск по корню (или текущему разделу)
+        try:
+            disk = psutil.disk_usage("/")
+            out["disk_total_gb"] = round(disk.total / (1024**3), 1)
+            out["disk_used_gb"] = round(disk.used / (1024**3), 1)
+            out["disk_percent"] = round(disk.percent, 1)
+        except Exception:
+            out["disk_total_gb"] = out["disk_used_gb"] = out["disk_percent"] = None
+    except ImportError:
+        pass
+    return out
+
+
+def _format_bytes(n: int) -> str:
+    """Форматирование байт в человекочитаемый вид (KiB, MiB, GiB)."""
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if abs(n) < 1024:
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TiB"
+
+
 def _monitor_data() -> dict:
-    """Расширенные данные для /api/monitor: redis (в т.ч. по префиксам), services, tasks."""
+    """Расширенные данные для /api/monitor: redis, host, services, tasks."""
     redis_url = get_redis_url()
-    result = {"redis": {}, "services": {}, "tasks": {}, "keys_by_prefix": {}}
+    result = {"redis": {}, "host": {}, "services": {}, "tasks": {}, "keys_by_prefix": {}}
     try:
         import redis
 
@@ -2069,6 +2139,10 @@ def _monitor_data() -> dict:
         client.close()
     except Exception:
         result["redis"] = {"error": "no connection"}
+    try:
+        result["host"] = _monitor_host()
+    except Exception:
+        result["host"] = {}
     try:
         result["services"] = _monitor_services(redis_url)
     except Exception:

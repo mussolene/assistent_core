@@ -244,12 +244,13 @@ def test_add_user_owner_creates_and_redirects(client, redis_url, monkeypatch):
 
 
 def test_api_monitor(client, auth_mock):
-    """Dashboard API monitor returns redis, services, tasks, keys_by_prefix."""
+    """Dashboard API monitor returns redis, host, services, tasks, keys_by_prefix."""
     r = client.get("/api/monitor")
     assert r.status_code == 200
     j = r.get_json()
     assert isinstance(j, dict)
     assert "redis" in j
+    assert "host" in j
     assert "services" in j
     assert "tasks" in j
     assert "keys_by_prefix" in j
@@ -743,7 +744,7 @@ def test_system_page_renders(client, auth_mock, monkeypatch):
     monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
     monkeypatch.setattr(
         "assistant.dashboard.app._monitor_data",
-        lambda: {"redis": {}, "tasks": {}, "services": {}, "keys_by_prefix": {}},
+        lambda: {"redis": {}, "host": {}, "tasks": {}, "services": {}, "keys_by_prefix": {}},
     )
     r = client.get("/system")
     assert r.status_code == 200

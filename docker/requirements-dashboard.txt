@@ -1,6 +1,7 @@
-# Dashboard runtime deps (flask, gunicorn, redis, httpx, openai for test-model).
+# Dashboard runtime deps (flask, gunicorn, redis, httpx, openai for test-model, psutil for host metrics).
 flask>=3.0.0
 redis>=5.0.0
 httpx>=0.27.0
 openai>=1.12.0
 gunicorn>=21.0
+psutil>=5.9.0
