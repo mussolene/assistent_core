@@ -2,7 +2,7 @@
 
 Цель: **MCP как исполнитель сценариев** — любой ИИ (Cursor и др.) может создавать и просматривать задачи пользователя через MCP; плюс стабилизация и документация.
 
-Связь: [ANALYTICS_AND_ROADMAP_2025.md](ANALYTICS_AND_ROADMAP_2025.md) (Фаза 3), [ROADMAP_0.2.1.md](ROADMAP_0.2.1.md).
+Связь: [ANALYTICS_AND_ROADMAP_2026.md](ANALYTICS_AND_ROADMAP_2026.md) (Фаза 3), [ROADMAP_0.2.1.md](ROADMAP_0.2.1.md).
 
 ---
 
