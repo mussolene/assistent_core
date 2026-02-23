@@ -42,10 +42,10 @@
 
 | # | Задача | Статус | Файлы / примечания |
 |---|--------|--------|---------------------|
-| 1 | Документация: «Chat ID для MCP» в README и в дашборде | ⬜ | README: раздел про уведомления / MCP; в дашборде (Каналы → Telegram) подсказка про TELEGRAM_DEV_CHAT_ID |
-| 2 | Лог при пустом get_dev_chat_id при вызове notify | ⬜ | assistant/core/notify.py: при notify_main_channel() если chat_id нет — logger.warning с текстом «Задайте TELEGRAM_DEV_CHAT_ID или добавьте пользователя в разрешённые» |
-| 3 | В дашборде: отображать текущий «Chat ID для уведомлений MCP» (read-only) | ⬜ | Чтобы пользователь видел, куда пойдут notify |
-| 4 | Проверка подписки на CH_OUTGOING в telegram-adapter при старте | ⬜ | Лог при старте: «Subscribed to assistant:outgoing_reply» (или уже есть — проверить) |
+| 1 | Документация: «Chat ID для MCP» в README и в дашборде | ✅ | README: раздел про уведомления / MCP; в дашборде (Каналы → Telegram) подсказка про TELEGRAM_DEV_CHAT_ID |
+| 2 | Лог при пустом get_dev_chat_id при вызове notify | ✅ | assistant/core/notify.py: при notify_main_channel() если chat_id нет — logger.warning с текстом «Задайте TELEGRAM_DEV_CHAT_ID или добавьте пользователя в разрешённые» |
+| 3 | В дашборде: отображать текущий «Chat ID для уведомлений MCP» (read-only) | ✅ | Чтобы пользователь видел, куда пойдут notify |
+| 4 | Проверка подписки на CH_OUTGOING в telegram-adapter при старте | ✅ | Лог при старте: «Subscribed to assistant:outgoing_reply» (или уже есть — проверить) |
 
 **Критерий приёмки:** в README и дашборде есть явная инструкция; при вызове notify без chat_id в логах однозначное предупреждение.
 

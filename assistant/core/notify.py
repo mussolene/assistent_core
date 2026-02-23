@@ -92,7 +92,10 @@ def notify_main_channel(text: str) -> bool:
     """Отправить сообщение в основной канал (Telegram). Синхронно, для вызова из MCP."""
     chat_id = get_dev_chat_id()
     if not chat_id:
-        logger.warning("notify_main_channel: no dev chat id")
+        logger.warning(
+            "notify_main_channel: не задан Chat ID для уведомлений. "
+            "Задайте TELEGRAM_DEV_CHAT_ID в дашборде (Каналы → Telegram) или добавьте пользователя в разрешённые."
+        )
         return False
     return notify_to_chat(chat_id, text)
 

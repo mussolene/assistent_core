@@ -951,6 +951,7 @@ async def run_telegram_adapter() -> None:
 
     bus.subscribe_outgoing(on_outgoing)
     bus.subscribe_stream(on_stream)
+    logger.info("Subscribed to assistant:outgoing_reply and stream for Telegram")
 
     async def poll() -> None:
         offset = 0

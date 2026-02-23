@@ -417,6 +417,7 @@ _TELEGRAM_BODY = """
     <label for="dev_chat_id">Chat ID для MCP/агента (уведомления, confirm)</label>
     <input id="dev_chat_id" name="telegram_dev_chat_id" type="text" value="{{ config.get('TELEGRAM_DEV_CHAT_ID', '') }}" placeholder="123456789">
     <p class="hint">Куда слать сообщения от MCP-сервера (notify, ask_confirmation). Для личных чатов = User ID. Пусто — первый из разрешённых.</p>
+    <p class="hint" style="margin-top:0.25rem">Текущий Chat ID для уведомлений MCP: <strong id="effective-dev-chat">{{ config.get('TELEGRAM_DEV_CHAT_ID', '') or 'не задано (используется первый из разрешённых)' }}</strong></p>
   </div>
   <div class="card">
     <label>Быстрая привязка</label>
