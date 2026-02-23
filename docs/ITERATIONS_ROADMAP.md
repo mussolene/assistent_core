@@ -151,6 +151,15 @@
 
 ---
 
+## Блок 15: Google Calendar (полная интеграция)
+
+| Итерация | Статус | Содержание | Критерии приёмки |
+|----------|--------|------------|-------------------|
+| **15.1** | [x] | Google Calendar: OAuth2 (get_oauth_url, exchange_code_for_tokens, refresh), хранение токенов в Redis. Calendar API v3: создание события (add_calendar_event — primary calendar, title, start_iso, end_iso, description). | calendar_is_configured(), add_calendar_event() при настроенных GOOGLE_CALENDAR_*; тесты. |
+| **15.2** | [x] | Дашборд: блок Google Calendar на странице Интеграции, кнопка «Подключить Calendar (OAuth)», callback /integrations/calendar/callback. | Статус «Подключено» при наличии токенов; INTEGRATIONS_TODO_CALENDAR.md обновлён. |
+
+---
+
 ## Прочие доработки (вне нумерации блоков)
 
 | Когда | Что сделано | Коммит / примечание |
@@ -180,7 +189,7 @@
 - Блок 4 (email) и 5 (бот-настройки) независимы друг от друга.
 - Блок 7 и 8 связаны с Qdrant и RAG — имеет смысл 8.1 перед 7.2 (память разговоров как база), затем 7.1 (индекс репо), затем 7.2.
 
-**Сделано:** 1.1–10.8, **11.1** (поле priority), **12.1–12.2** (Фаза 2: To-Do, дашборд, заглушка Calendar), **13.1–13.2** (Фаза 3: MCP), **14.1** (Фаза 4: документ CONTEXT_AND_MEMORY); прочие доработки: дефолт LM Studio (1234), метрики хоста на /system. Покрытие тестами 90% (ROADMAP §0).  
-**Дальше (2026):** [docs/ANALYTICS_AND_ROADMAP_2026.md](ANALYTICS_AND_ROADMAP_2026.md) — полная интеграция Google Calendar (OAuth, события). По желанию — связи документ/задача/разговор, доработки UX, новые блоки.
+**Сделано:** 1.1–10.8, **11.1**, **12.1–12.2**, **13.1–13.2**, **14.1**, **15.1–15.2** (Google Calendar OAuth + API + дашборд); прочие доработки: дефолт LM Studio (1234), метрики хоста на /system. Покрытие тестами 90% (ROADMAP §0).  
+**Дальше (2026):** [docs/ANALYTICS_AND_ROADMAP_2026.md](ANALYTICS_AND_ROADMAP_2026.md). По желанию — связи документ/задача/разговор, доработки UX, Фаза 5 (голос), новые блоки.
 
 Детальная дорожная карта по UX/UI (Telegram-бот, дашборд, группировка настроек, тесты): **[docs/UX_UI_ROADMAP.md](UX_UI_ROADMAP.md)**.

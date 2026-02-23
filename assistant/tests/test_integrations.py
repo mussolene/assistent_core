@@ -45,10 +45,11 @@ def test_add_calendar_event_empty_title():
     assert out.get("ok") is False
 
 
-def test_add_calendar_event_stub():
+def test_add_calendar_event_not_configured():
+    """Без настройки add_calendar_event возвращает ошибку."""
     out = add_calendar_event("Meeting")
     assert out.get("ok") is False
-    assert "Calendar" in (out.get("error") or "")
+    assert "Calendar" in (out.get("error") or "") or "подключен" in (out.get("error") or "").lower()
 
 
 @pytest.mark.asyncio
@@ -63,7 +64,7 @@ async def test_integrations_skill_sync_to_todo():
 
 @pytest.mark.asyncio
 async def test_integrations_skill_add_calendar_event():
-    """Скилл integrations: add_calendar_event возвращает заглушку."""
+    """Скилл integrations: add_calendar_event без настройки Calendar возвращает ошибку."""
     from assistant.skills.integrations_skill import IntegrationsSkill
 
     skill = IntegrationsSkill()

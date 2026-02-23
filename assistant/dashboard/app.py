@@ -1123,8 +1123,17 @@ _INTEGRATIONS_EXTERNAL_BODY = """
 </div>
 <div class="card">
   <h3 style="margin-top:0">Google Calendar</h3>
-  <p><strong>Статус:</strong> Не подключено</p>
-  <p class="hint">Интеграция запланирована в следующих релизах. OAuth и создание событий — в разработке.</p>
+  <p><strong>Статус:</strong> {{ 'Подключено' if calendar_configured else 'Не подключено' }}</p>
+  {% if not calendar_configured %}
+  <p class="hint">Задайте в .env: <code>GOOGLE_CALENDAR_CLIENT_ID</code> и <code>GOOGLE_CALENDAR_CLIENT_SECRET</code> (OAuth 2.0 в Google Cloud Console, Calendar API). Redirect URI: <code>{{ base_url }}integrations/calendar/callback</code></p>
+  {% if calendar_oauth_url %}
+  <a href="{{ calendar_oauth_url }}" class="btn" style="margin-top:0.5rem">Подключить Calendar (OAuth)</a>
+  {% else %}
+  <p class="hint">После настройки GOOGLE_CALENDAR_CLIENT_ID появится кнопка «Подключить Calendar».</p>
+  {% endif %}
+  {% else %}
+  <p class="hint">Ассистент может создавать события (скилл <code>integrations</code>, действие <code>add_calendar_event</code>; MCP <code>add_calendar_event</code>).</p>
+  {% endif %}
 </div>
 """
 
@@ -1183,20 +1192,26 @@ def _mcp_agent_base_url():
 def integrations_page():
     """Интеграции: MCP скиллы + To-Do/Calendar + MCP (агент) на одной странице."""
     from assistant.dashboard.mcp_endpoints import list_endpoints
+    from assistant.integrations.calendar import calendar_is_configured, get_oauth_url as calendar_get_oauth_url
     from assistant.integrations.todo import get_oauth_url, todo_is_configured
 
     config = load_config()
     new_secret = session.pop("mcp_new_secret", None) if "mcp_new_secret" in session else None
     base_url = _mcp_agent_base_url()
-    redirect_uri = base_url + "integrations/todo/callback"
-    todo_oauth_url = get_oauth_url(redirect_uri)
+    redirect_uri_todo = base_url + "integrations/todo/callback"
+    redirect_uri_calendar = base_url + "integrations/calendar/callback"
+    todo_oauth_url = get_oauth_url(redirect_uri_todo)
     todo_configured = todo_is_configured()
+    calendar_oauth_url = calendar_get_oauth_url(redirect_uri_calendar)
+    calendar_configured = calendar_is_configured()
     part_mcp = render_template_string(_MCP_BODY, config=config)
     part_external = render_template_string(
         _INTEGRATIONS_EXTERNAL_BODY,
         base_url=base_url,
         todo_configured=todo_configured,
         todo_oauth_url=todo_oauth_url,
+        calendar_configured=calendar_configured,
+        calendar_oauth_url=calendar_oauth_url,
     )
     part_agent = render_template_string(
         _MCP_AGENT_BODY,
@@ -1225,6 +1240,21 @@ def integrations_todo_callback():
         flash("Microsoft To-Do успешно подключен.", "success")
     elif code:
         flash("Не удалось получить токены To-Do. Проверьте MS_TODO_CLIENT_SECRET и redirect URI в Azure.", "error")
+    return redirect(url_for("integrations_page"))
+
+
+@app.route("/integrations/calendar/callback")
+def integrations_calendar_callback():
+    """OAuth callback от Google: обмен code на токены и редирект на /integrations."""
+    from assistant.integrations.calendar import exchange_code_for_tokens
+
+    code = request.args.get("code")
+    base_url = _mcp_agent_base_url()
+    redirect_uri = base_url + "integrations/calendar/callback"
+    if code and exchange_code_for_tokens(code, redirect_uri):
+        flash("Google Calendar успешно подключен.", "success")
+    elif code:
+        flash("Не удалось получить токены Calendar. Проверьте GOOGLE_CALENDAR_CLIENT_SECRET и redirect URI в Google Cloud.", "error")
     return redirect(url_for("integrations_page"))
 
 

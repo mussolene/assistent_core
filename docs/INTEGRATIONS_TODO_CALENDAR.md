@@ -28,4 +28,19 @@
 
 ## Google Calendar
 
-Интеграция запланирована в следующих релизах: OAuth2, создание событий через Calendar API, скилл `integrations` с действием `add_calendar_event`. Пока действие возвращает подсказку о том, что сервис в разработке.
+### Настройка
+
+1. В [Google Cloud Console](https://console.cloud.google.com/) создать проект (или выбрать существующий), включить **Google Calendar API**.
+2. В разделе «Учётные данные» создать **OAuth 2.0 Client ID** (тип приложения: «Веб-приложение»). Указать **Authorized redirect URIs**: `https://ваш-дашборд/integrations/calendar/callback` (для локальной разработки: `http://localhost:8080/integrations/calendar/callback`).
+3. В `.env` задать:
+   - `GOOGLE_CALENDAR_CLIENT_ID` — Client ID
+   - `GOOGLE_CALENDAR_CLIENT_SECRET` — Client secret
+4. В дашборде открыть **Интеграции** → блок «Google Calendar» → нажать **Подключить Calendar (OAuth)**. Выполнить вход в Google и разрешить доступ. После редиректа токены сохраняются в Redis.
+
+Токены хранятся в Redis (`assistant:integration:calendar:tokens`); при истечении access_token используется refresh_token автоматически.
+
+### Использование
+
+- **Скилл `integrations`**, действие **add_calendar_event**: создание события в календаре (primary). Параметры: `title` (обяз.), `start_iso`, `end_iso` (ISO datetime или date YYYY-MM-DD), `description`.
+- Из диалога с ассистентом: «добавь в календарь встречу завтра в 15:00», «создай событие …» — ассистент вызовет скилл с `action=add_calendar_event`.
+- **MCP** инструмент **add_calendar_event**: те же параметры (title, start_iso, end_iso, description).
