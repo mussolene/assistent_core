@@ -303,6 +303,59 @@ def test_api_test_model_returns_json(monkeypatch, client, auth_mock):
         assert "error" in j
 
 
+def test_api_list_models_ollama(monkeypatch, client, auth_mock):
+    """api/list-models returns models from Ollama /api/tags when OpenAI /models fails."""
+    def fake_openai(*args, **kwargs):
+        return []
+
+    def fake_ollama(*args, **kwargs):
+        return ["llama3.2:latest", "mistral"]
+
+    monkeypatch.setattr("assistant.dashboard.app._fetch_models_openai", fake_openai)
+    monkeypatch.setattr("assistant.dashboard.app._fetch_models_ollama", fake_ollama)
+    r = client.post(
+        "/api/list-models",
+        json={
+            "openai_base_url": "http://localhost:11434/v1",
+            "openai_api_key": "ollama",
+            "lm_studio_native": False,
+        },
+    )
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j.get("error") is None
+    assert "models" in j
+    assert "llama3.2:latest" in j["models"]
+    assert j.get("first") == "llama3.2:latest"
+
+
+def test_api_list_models_openai(monkeypatch, client, auth_mock):
+    """api/list-models returns models from OpenAI-style /models."""
+    def fake_openai(*args, **kwargs):
+        return ["gpt-4", "gpt-3.5-turbo"]
+
+    monkeypatch.setattr("assistant.dashboard.app._fetch_models_openai", fake_openai)
+    r = client.post(
+        "/api/list-models",
+        json={"openai_base_url": "http://host:11434/v1", "openai_api_key": "ollama"},
+    )
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j.get("error") is None
+    assert j.get("models") == ["gpt-4", "gpt-3.5-turbo"]
+    assert j.get("first") == "gpt-4"
+
+
+def test_api_list_models_empty(monkeypatch, client, auth_mock):
+    """api/list-models returns error when no models can be fetched."""
+    monkeypatch.setattr("assistant.dashboard.app.httpx.get", lambda url, **kwargs: type("R", (), {"status_code": 404, "json": lambda: {}})())
+    r = client.post("/api/list-models", json={"openai_base_url": "http://localhost:9999/v1"})
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j.get("error")
+    assert j.get("models") == []
+
+
 def test_save_model_redirect(monkeypatch, client, auth_mock):
     """save-model redirects to model and saves config."""
     set_calls = []
@@ -606,13 +659,16 @@ def test_model_page_has_accordion(client, auth_mock, monkeypatch):
 
 
 def test_model_page_has_fetch_form(client, auth_mock, monkeypatch):
-    """Страница Модель содержит form-model и btn-save-model для отправки через fetch (3.2)."""
+    """Страница Модель: form-model, кнопки сохранения и загрузки моделей, URL и API key в одном блоке."""
     monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
     r = client.get("/model")
     assert r.status_code == 200
     body = r.data.decode("utf-8", errors="replace")
     assert "form-model" in body
     assert "btn-save-model" in body
+    assert "btn-load-models" in body
+    assert "model_select" in body
+    assert "api_key" in body or "openai_api_key" in body
 
 
 def test_save_email_returns_json_when_xhr(client, auth_mock, monkeypatch):

@@ -620,16 +620,29 @@ def save_telegram():
 # ----- Model -----
 _MODEL_BODY = """
 <h1>Модель</h1>
-<p class="sub">Подключение к API (Ollama / OpenAI-совместимый).</p>
+<p class="sub">Подключение к API (Ollama / OpenAI-совместимый). URL и ключ — затем загрузка списка моделей и выбор. Настройки применяются в дашборде и в Telegram.</p>
 <form method="post" action="/save-model" id="form-model">
   <div class="card">
     <label for="base_url">URL API</label>
     <input id="base_url" name="openai_base_url" type="url" value="{{ config.get('OPENAI_BASE_URL', '') }}" placeholder="http://host.docker.internal:11434/v1">
-    <p class="hint">Для Docker: host.docker.internal:11434. Локально: localhost:11434.</p>
+    <p class="hint">Для Docker: host.docker.internal:11434. Локально: localhost:11434. Ollama: …/v1, LM Studio: часто …:1234/v1.</p>
   </div>
   <div class="card">
-    <label for="model_name">Имя модели</label>
-    <input id="model_name" name="model_name" type="text" value="{{ config.get('MODEL_NAME', '') }}" placeholder="llama3.2">
+    <label for="api_key">API ключ</label>
+    <input id="api_key" name="openai_api_key" type="password" value="{{ config.get('OPENAI_API_KEY', '') }}" placeholder="ollama или sk-..." autocomplete="off">
+    <p class="hint">Для Ollama можно оставить «ollama» или пустым.</p>
+  </div>
+  <div class="card">
+    <label for="model_select">Модель</label>
+    <div class="row" style="flex-wrap:wrap;align-items:center;gap:0.5rem">
+      <select id="model_select" style="min-width:12rem">
+        <option value="{{ config.get('MODEL_NAME', '') or '' }}">{{ config.get('MODEL_NAME', '') or '— загрузите список —' }}</option>
+      </select>
+      <input type="hidden" id="model_name" name="model_name" value="{{ config.get('MODEL_NAME', '') or '' }}">
+      <button type="button" id="btn-load-models" class="btn btn-secondary">Загрузить модели</button>
+      <span id="model-load-status" style="font-size:0.9rem;color:var(--muted)"></span>
+    </div>
+    <p class="hint">Укажите URL и ключ выше, нажмите «Загрузить модели» — подставится первая модель из API. Выбор модели действует и в Telegram.</p>
   </div>
   <details class="card" style="margin-bottom:1rem">
     <summary class="details-summary">Дополнительно</summary>
@@ -650,10 +663,6 @@ _MODEL_BODY = """
       </div>
       <p class="hint">Стриминг по <a href="https://lmstudio.ai/docs/developer/rest/streaming-events" target="_blank" rel="noopener">SSE</a>: размышления (reasoning) скрыты, в чат дописывается только итоговый ответ.</p>
     </div>
-    <div class="card">
-      <label for="api_key">API ключ</label>
-      <input id="api_key" name="openai_api_key" type="password" value="{{ config.get('OPENAI_API_KEY', '') }}" placeholder="sk-... или ollama" autocomplete="off">
-    </div>
   </details>
   <button type="submit" class="btn" id="btn-save-model">Сохранить</button>
   <button type="button" id="btn-test-model" class="btn btn-secondary" style="margin-left:0.5rem" onclick="testModel()">Проверить подключение</button>
@@ -662,14 +671,75 @@ _MODEL_BODY = """
 <script>
 (function() {
   var form = document.getElementById('form-model');
+  var select = document.getElementById('model_select');
+  var hidden = document.getElementById('model_name');
+  var loadBtn = document.getElementById('btn-load-models');
+  var loadStatus = document.getElementById('model-load-status');
+  function syncModelToHidden() {
+    if (select && hidden) hidden.value = (select.value || '').trim();
+  }
+  if (select) select.addEventListener('change', syncModelToHidden);
+
+  if (loadBtn && form) {
+    loadBtn.addEventListener('click', function() {
+      loadStatus.textContent = 'Загрузка…';
+      if (loadBtn.disabled === false) loadBtn.disabled = true;
+      var fd = new FormData(form);
+      var body = {
+        openai_base_url: fd.get('openai_base_url') || '',
+        openai_api_key: fd.get('openai_api_key') || '',
+        lm_studio_native: fd.get('lm_studio_native') === '1'
+      };
+      fetch('/api/list-models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+        .then(function(res) { return res.json(); })
+        .then(function(d) {
+          if (d.error) {
+            loadStatus.textContent = d.error;
+            return;
+          }
+          var models = d.models || [];
+          if (models.length === 0) {
+            loadStatus.textContent = 'Модели не найдены';
+            return;
+          }
+          select.innerHTML = '';
+          var current = (hidden && hidden.value) ? hidden.value : '';
+          var first = d.first || models[0];
+          models.forEach(function(m) {
+            var opt = document.createElement('option');
+            opt.value = m;
+            opt.textContent = m;
+            if (m === current) opt.selected = true;
+            select.appendChild(opt);
+          });
+          if (!current || models.indexOf(current) === -1) {
+            select.value = first;
+            if (hidden) hidden.value = first;
+          } else {
+            syncModelToHidden();
+          }
+          loadStatus.textContent = 'Загружено: ' + models.length + (first ? ', выбрана: ' + (select.value || first) : '');
+        })
+        .catch(function(e) {
+          loadStatus.textContent = 'Ошибка: ' + (e.message || 'сеть');
+        })
+        .finally(function() { loadBtn.disabled = false; });
+    });
+  }
+
   if (form && window.apiPostForm && window.showToast) {
     form.addEventListener('submit', function(e) {
       e.preventDefault();
+      syncModelToHidden();
       var btn = document.getElementById('btn-save-model');
       if (btn) btn.disabled = true;
       window.apiPostForm('/save-model', form)
         .then(function(d) {
-          if (d.success) { window.showToast('Сохранено.', 'success'); }
+          if (d.success) { window.showToast('Сохранено. Модель используется в дашборде и в Telegram.', 'success'); }
           else { window.showToast(d.error || 'Ошибка', 'error'); }
         })
         .catch(function(err) { window.showToast(err.message || 'Ошибка', 'error'); })
@@ -1920,6 +1990,77 @@ def _normalize_base_url(base_url: str, for_lm_studio_native: bool) -> str:
     if not u.endswith("/v1"):
         u = u + "/v1"
     return u
+
+
+def _fetch_models_openai(base_url: str, api_key: str, timeout: float = 10.0) -> list[str]:
+    """GET /v1/models (OpenAI-compatible). Returns list of model ids."""
+    url = (base_url.rstrip("/") + "/models") if base_url else ""
+    if not url:
+        return []
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    try:
+        r = httpx.get(url, headers=headers, timeout=timeout)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        out = []
+        for item in (data.get("data") or data.get("models")) or []:
+            if isinstance(item, dict):
+                mid = item.get("id") or item.get("name")
+                if mid and isinstance(mid, str):
+                    out.append(mid)
+        return out
+    except Exception:
+        return []
+
+
+def _fetch_models_ollama(root_url: str, timeout: float = 10.0) -> list[str]:
+    """GET /api/tags (Ollama). root_url without /v1. Returns list of model names."""
+    u = (root_url or "").strip().rstrip("/") or "http://localhost:11434"
+    if u.endswith("/v1"):
+        u = u[:-3].rstrip("/")
+    url = u + "/api/tags"
+    try:
+        r = httpx.get(url, timeout=timeout)
+        if r.status_code != 200:
+            return []
+        data = r.json()
+        out = []
+        for item in (data.get("models") or []):
+            if isinstance(item, dict):
+                name = item.get("name")
+                if name and isinstance(name, str):
+                    out.append(name)
+        return out
+    except Exception:
+        return []
+
+
+@app.route("/api/list-models", methods=["POST"])
+def api_list_models():
+    """Return list of model ids/names for given API URL and key. Uses OpenAI /models then Ollama /api/tags."""
+    if request.is_json:
+        body = request.get_json() or {}
+        base_url = (body.get("openai_base_url") or "").strip() or "http://localhost:11434/v1"
+        api_key = (body.get("openai_api_key") or "").strip() or "ollama"
+        lm_native = (body.get("lm_studio_native") or "").lower() in ("true", "1", "yes")
+    else:
+        base_url = (request.form.get("openai_base_url") or "").strip() or "http://localhost:11434/v1"
+        api_key = (request.form.get("openai_api_key") or "").strip() or "ollama"
+        lm_native = (request.form.get("lm_studio_native") or "").lower() in ("true", "1", "yes")
+
+    normalized = _normalize_base_url(base_url, for_lm_studio_native=lm_native)
+    if lm_native:
+        openai_base = normalized + "/v1" if not normalized.endswith("/v1") else normalized
+        models = _fetch_models_openai(openai_base, api_key)
+    else:
+        models = _fetch_models_openai(normalized, api_key)
+        if not models:
+            root = normalized[:-3].rstrip("/") if normalized.endswith("/v1") else normalized
+            models = _fetch_models_ollama(root)
+    if models:
+        return jsonify({"models": models, "first": models[0], "error": None})
+    return jsonify({"models": [], "first": None, "error": "Не удалось получить список моделей. Проверьте URL и доступность API."})
 
 
 @app.route("/api/test-model", methods=["POST"])
