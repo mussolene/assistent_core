@@ -99,6 +99,8 @@ INDEX_HTML = """
     {% endwith %}
     {% block content %}{% endblock %}
   </div>
+  <div id="toast-container"></div>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
 """
@@ -360,7 +362,7 @@ def setup():
 _TELEGRAM_BODY = """
 <h1>Telegram</h1>
 <p class="sub">Токен бота и pairing. Разрешённые ID можно задать вручную или через pairing.</p>
-<form method="post" action="/save-telegram">
+<form method="post" action="/save-telegram" id="form-telegram">
   <div class="card">
     <label for="token">Bot Token</label>
     <input id="token" name="telegram_bot_token" type="password" value="{{ config.get('TELEGRAM_BOT_TOKEN', '') }}" placeholder="123456:ABC..." autocomplete="off">
@@ -401,9 +403,26 @@ _TELEGRAM_BODY = """
       <p class="hint">Ссылка: <a id="pairing-link" href="#" target="_blank" rel="noopener"></a></p>
     </div>
   </div>
-  <button type="submit" class="btn">Сохранить</button>
+  <button type="submit" class="btn" id="btn-save-telegram">Сохранить</button>
 </form>
 <script>
+(function() {
+  var form = document.getElementById('form-telegram');
+  if (form && window.apiPostForm && window.showToast) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('btn-save-telegram');
+      if (btn) btn.disabled = true;
+      window.apiPostForm('/save-telegram', form)
+        .then(function(d) {
+          if (d.success) { window.showToast('Сохранено.', 'success'); }
+          else { window.showToast(d.error || 'Ошибка', 'error'); }
+        })
+        .catch(function(err) { window.showToast(err.message || 'Ошибка', 'error'); })
+        .finally(function() { if (btn) btn.disabled = false; });
+    });
+  }
+})();
 function testBot() {
   var r = document.getElementById('bot-result');
   var btn = document.getElementById('btn-test-bot');
@@ -452,11 +471,21 @@ def index():
     )
 
 
+def _wants_json() -> bool:
+    """True if client expects JSON (fetch with Accept or X-Requested-With)."""
+    return (
+        request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in (request.headers.get("Accept") or "")
+    )
+
+
 @app.route("/save-telegram", methods=["POST"])
 def save_telegram():
     redis_url = get_redis_url()
     token = (request.form.get("telegram_bot_token") or "").strip()
     if not token:
+        if _wants_json():
+            return jsonify({"success": False, "error": "Укажите токен бота."}), 400
         flash("Укажите токен бота.", "error")
         return redirect(url_for("index"))
     users_str = (request.form.get("telegram_allowed_user_ids") or "").strip()
@@ -477,6 +506,8 @@ def save_telegram():
     set_config_in_redis_sync(
         redis_url, "TELEGRAM_DEV_CHAT_ID", (request.form.get("telegram_dev_chat_id") or "").strip()
     )
+    if _wants_json():
+        return jsonify({"success": True})
     flash("Сохранено. Настройки применяются автоматически.", "success")
     return redirect(url_for("index"))
 

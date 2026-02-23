@@ -355,6 +355,40 @@ def test_index_contains_admin_ids_field(client, auth_mock, monkeypatch):
     assert "admin_ids" in body or "Админские" in body or "telegram_admin" in body
 
 
+def test_save_telegram_returns_json_when_xhr(client, auth_mock, monkeypatch):
+    """save-telegram при X-Requested-With: XMLHttpRequest возвращает JSON (ROADMAP 3.2)."""
+    set_calls = []
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
+    monkeypatch.setattr(
+        "assistant.dashboard.app.set_config_in_redis_sync",
+        lambda url, key, val: set_calls.append((key, val)),
+    )
+    r = client.post(
+        "/save-telegram",
+        data={"telegram_bot_token": "123:ABC", "telegram_allowed_user_ids": ""},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j is not None
+    assert j.get("success") is True
+
+
+def test_save_telegram_returns_400_json_when_no_token(client, auth_mock, monkeypatch):
+    """save-telegram без токена при Accept: application/json возвращает 400 и error."""
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
+    r = client.post(
+        "/save-telegram",
+        data={},
+        headers={"Accept": "application/json"},
+    )
+    assert r.status_code == 400
+    j = r.get_json()
+    assert j is not None
+    assert j.get("success") is False
+    assert "error" in j
+
+
 def test_layout_includes_stylesheet(client, auth_mock, monkeypatch):
     """Страницы подключают layout.css из static (UX_UI_ROADMAP 4.1)."""
     monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
@@ -362,6 +396,17 @@ def test_layout_includes_stylesheet(client, auth_mock, monkeypatch):
     assert r.status_code == 200
     body = r.data.decode("utf-8", errors="replace")
     assert "css/layout.css" in body or "layout.css" in body
+
+
+def test_layout_includes_app_js(client, auth_mock, monkeypatch):
+    """Главная подключает app.js для fetch и toast (ROADMAP 3.2)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.get("/")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "app.js" in body
+    assert "form-telegram" in body
+    assert "btn-save-telegram" in body
 
 
 def test_test_bot_button_has_id_for_loading(client, auth_mock, monkeypatch):
