@@ -10,7 +10,11 @@ from assistant.channels.telegram import (
     PAIRING_SUCCESS_TEXT,
     PARSE_MODE,
     RATE_LIMIT_MESSAGE,
+    REPOS_CALLBACK_PREFIX,
     RateLimiter,
+    _build_repos_inline_keyboard,
+    _is_telegram_acceptable_url,
+    _repos_setup_hint,
     _strip_think_blocks,
     _to_telegram_html,
     chunk_text_for_telegram,
@@ -196,6 +200,80 @@ def test_format_repos_reply_text_total_zero():
     text = format_repos_reply_text("Склонированные", page=0, total=0)
     assert "страница 1" in text
     assert "Склонированные" in text
+
+
+def test_is_telegram_acceptable_url():
+    """Telegram не принимает localhost в URL кнопок — проверка фильтра."""
+    assert _is_telegram_acceptable_url("http://localhost:8080/repos") is False
+    assert _is_telegram_acceptable_url("https://localhost/repos") is False
+    assert _is_telegram_acceptable_url("http://127.0.0.1:8080/repos") is False
+    assert _is_telegram_acceptable_url("http://something.localhost/repos") is False
+    assert _is_telegram_acceptable_url("") is False
+    assert _is_telegram_acceptable_url("https://example.com/dashboard") is True
+    assert _is_telegram_acceptable_url("http://my-server.com/repos") is True
+
+
+def test_repos_setup_hint():
+    """Подсказки для github/gitlab/repos содержат токен и ссылку на дашборд."""
+    h = _repos_setup_hint("github", "https://dash.example.com")
+    assert "GITHUB_TOKEN" in h
+    assert "github" in h.lower()
+    assert "dash.example.com/repos" in h
+    h = _repos_setup_hint("gitlab", "https://dash.example.com")
+    assert "GITLAB_TOKEN" in h
+    assert "dash.example.com/repos" in h
+    h = _repos_setup_hint("repos", "https://dash.example.com")
+    assert "GIT_WORKSPACE" in h or "GITHUB" in h or "GITLAB" in h
+    assert "dash.example.com/repos" in h
+
+
+def test_build_repos_inline_keyboard_localhost_no_url():
+    """При localhost в клавиатуре нет кнопок с url (Telegram их отклоняет)."""
+    keyboard = _build_repos_inline_keyboard(
+        "cloned",
+        [{"path": "/tmp/repo1", "remote_url": "https://git.example.com/r"}],
+        page=0,
+        has_next_page=False,
+        dashboard_url="http://localhost:8080",
+    )
+    for row in keyboard:
+        for btn in row:
+            if "url" in btn:
+                assert _is_telegram_acceptable_url(btn.get("url", ""))
+    urls = [b.get("url") for row in keyboard for b in row if "url" in b]
+    assert not any(u and "localhost" in (u or "") for u in urls)
+    callbacks = [b.get("callback_data") for row in keyboard for b in row]
+    assert any(c and c.startswith(REPOS_CALLBACK_PREFIX) for c in callbacks)
+
+
+def test_build_repos_inline_keyboard_public_url_has_button():
+    """При публичном URL в клавиатуре есть кнопка «Открыть дашборд» с url."""
+    keyboard = _build_repos_inline_keyboard(
+        "github",
+        [],
+        page=0,
+        has_next_page=False,
+        dashboard_url="https://dash.example.com",
+    )
+    urls = [b.get("url") for row in keyboard for b in row if "url" in b]
+    assert any(u and "dash.example.com/repos" in (u or "") for u in urls)
+    open_btn = [b for row in keyboard for b in row if b.get("text") == "Открыть дашборд"]
+    assert len(open_btn) == 1
+    assert open_btn[0].get("url") == "https://dash.example.com/repos"
+
+
+def test_build_repos_inline_keyboard_nav_callback_data():
+    """Навигация Назад/Вперёд использует callback_data."""
+    keyboard = _build_repos_inline_keyboard(
+        "gitlab",
+        [{"full_name": "o/r", "html_url": "https://gitlab.com/o/r"}],
+        page=1,
+        has_next_page=True,
+        dashboard_url="https://dash.example.com",
+    )
+    callbacks = [b.get("callback_data") for row in keyboard for b in row]
+    assert f"{REPOS_CALLBACK_PREFIX}gitlab:0" in callbacks
+    assert f"{REPOS_CALLBACK_PREFIX}gitlab:2" in callbacks
 
 
 def test_bot_commands_include_repos_github_gitlab():

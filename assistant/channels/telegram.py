@@ -353,6 +353,18 @@ def format_repos_reply_text(label: str, page: int, total: Optional[int] = None) 
     return f"Репозитории ({label}): страница {page + 1}."
 
 
+def _is_telegram_acceptable_url(url: str) -> bool:
+    """Telegram не принимает localhost/127.0.0.1 в URL кнопок. True только для публичных URL."""
+    if not url or not isinstance(url, str):
+        return False
+    u = url.strip().lower()
+    if u.startswith("http://localhost") or u.startswith("https://localhost"):
+        return False
+    if "127.0.0.1" in u or "localhost" in u:
+        return False
+    return u.startswith("https://") or u.startswith("http://")
+
+
 def _repos_setup_hint(kind: str, dashboard_url: str) -> str:
     """Текст-подсказка: как настроить доступ к GitHub/GitLab или репо (для отправки пользователю)."""
     if kind == "github":
@@ -430,19 +442,20 @@ def _build_repos_inline_keyboard(
     has_next_page: bool,
     dashboard_url: str,
 ) -> list[list[dict]]:
-    """Собрать inline_keyboard: кнопки репо (url или callback) + Назад/Вперёд."""
+    """Собрать inline_keyboard: кнопки репо (url или callback) + Назад/Вперёд. URL дашборда не используется для localhost (Telegram их отклоняет)."""
+    dashboard_repos_url = f"{dashboard_url.rstrip('/')}/repos"
+    use_dashboard_url = _is_telegram_acceptable_url(dashboard_repos_url)
     rows: list[list[dict]] = []
     for it in items:
         if kind == "cloned":
             path = it.get("path") or it.get("remote_url") or "—"
-            rows.append(
-                [
-                    {
-                        "text": (path[:40] + "…" if len(path) > 40 else path),
-                        "url": f"{dashboard_url.rstrip('/')}/repos",
-                    }
-                ]
-            )
+            text = path[:40] + "…" if len(path) > 40 else path
+            if use_dashboard_url:
+                rows.append([{"text": text, "url": dashboard_repos_url}])
+            else:
+                rows.append(
+                    [{"text": text, "callback_data": f"{REPOS_CALLBACK_PREFIX}{kind}:{page}"}]
+                )
         else:
             name = (it.get("full_name") or "")[:35]
             url = it.get("html_url") or it.get("web_url") or ""
@@ -459,7 +472,8 @@ def _build_repos_inline_keyboard(
         )
     if nav:
         rows.append(nav)
-    rows.append([{"text": "Открыть дашборд", "url": f"{dashboard_url.rstrip('/')}/repos"}])
+    if use_dashboard_url:
+        rows.append([{"text": "Открыть дашборд", "url": dashboard_repos_url}])
     return rows
 
 
@@ -1546,22 +1560,23 @@ async def run_telegram_adapter() -> None:
                                         r.text[:500] if r.text else "",
                                     )
                                     hint = _repos_setup_hint(kind, dashboard_url)
+                                    payload: dict = {"chat_id": chat_id, "text": hint}
+                                    if _is_telegram_acceptable_url(
+                                        f"{dashboard_url.rstrip('/')}/repos"
+                                    ):
+                                        payload["reply_markup"] = {
+                                            "inline_keyboard": [
+                                                [
+                                                    {
+                                                        "text": "Открыть дашборд → Репозитории",
+                                                        "url": f"{dashboard_url.rstrip('/')}/repos",
+                                                    }
+                                                ]
+                                            ]
+                                        }
                                     r2 = await client.post(
                                         f"{base_url}/sendMessage",
-                                        json={
-                                            "chat_id": chat_id,
-                                            "text": hint,
-                                            "reply_markup": {
-                                                "inline_keyboard": [
-                                                    [
-                                                        {
-                                                            "text": "Открыть дашборд → Репозитории",
-                                                            "url": f"{dashboard_url}/repos",
-                                                        }
-                                                    ]
-                                                ]
-                                            },
-                                        },
+                                        json=payload,
                                         timeout=5.0,
                                     )
                                     if r2.status_code != 200:
@@ -1577,23 +1592,24 @@ async def run_telegram_adapter() -> None:
                             logger.warning("sendMessage repos list: %s", e)
                             try:
                                 hint = _repos_setup_hint(kind, dashboard_url)
+                                payload = {"chat_id": chat_id, "text": hint}
+                                if _is_telegram_acceptable_url(
+                                    f"{dashboard_url.rstrip('/')}/repos"
+                                ):
+                                    payload["reply_markup"] = {
+                                        "inline_keyboard": [
+                                            [
+                                                {
+                                                    "text": "Открыть дашборд → Репозитории",
+                                                    "url": f"{dashboard_url.rstrip('/')}/repos",
+                                                }
+                                            ]
+                                        ]
+                                    }
                                 async with httpx.AsyncClient() as client:
                                     await client.post(
                                         f"{base_url}/sendMessage",
-                                        json={
-                                            "chat_id": chat_id,
-                                            "text": hint,
-                                            "reply_markup": {
-                                                "inline_keyboard": [
-                                                    [
-                                                        {
-                                                            "text": "Открыть дашборд → Репозитории",
-                                                            "url": f"{dashboard_url.rstrip('/')}/repos",
-                                                        }
-                                                    ]
-                                                ]
-                                            },
-                                        },
+                                        json=payload,
                                         timeout=5.0,
                                     )
                             except Exception as e2:
