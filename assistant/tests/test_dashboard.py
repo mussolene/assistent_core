@@ -389,6 +389,26 @@ def test_save_telegram_returns_400_json_when_no_token(client, auth_mock, monkeyp
     assert "error" in j
 
 
+def test_save_model_returns_json_when_xhr(client, auth_mock, monkeypatch):
+    """save-model при X-Requested-With: XMLHttpRequest возвращает JSON success (ROADMAP 3.2)."""
+    set_calls = []
+    monkeypatch.setattr("assistant.dashboard.app.get_redis_url", lambda: "redis://localhost:6379/0")
+    monkeypatch.setattr(
+        "assistant.dashboard.app.set_config_in_redis_sync",
+        lambda url, key, val: set_calls.append((key, val)),
+    )
+    r = client.post(
+        "/save-model",
+        data={"openai_base_url": "http://localhost:11434/v1", "model_name": "llama3.2"},
+        headers={"X-Requested-With": "XMLHttpRequest"},
+    )
+    assert r.status_code == 200
+    j = r.get_json()
+    assert j is not None
+    assert j.get("success") is True
+    assert any(c[0] == "MODEL_NAME" for c in set_calls)
+
+
 def test_layout_includes_stylesheet(client, auth_mock, monkeypatch):
     """Страницы подключают layout.css из static (UX_UI_ROADMAP 4.1)."""
     monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
@@ -428,6 +448,16 @@ def test_model_page_has_accordion(client, auth_mock, monkeypatch):
     assert "Дополнительно" in body
     assert "<details" in body
     assert "details-summary" in body
+
+
+def test_model_page_has_fetch_form(client, auth_mock, monkeypatch):
+    """Страница Модель содержит form-model и btn-save-model для отправки через fetch (3.2)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.get("/model")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "form-model" in body
+    assert "btn-save-model" in body
 
 
 def test_data_page_renders(client, auth_mock, monkeypatch):

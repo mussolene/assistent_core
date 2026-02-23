@@ -176,7 +176,7 @@
 
 ### 3.2 Более асинхронный и динамичный интерфейс
 
-**Реализовано (3.2):** общий JS `static/js/app.js` (showToast, apiPostForm); форма Telegram отправляется через fetch при наличии app.js, ответ JSON (success/error), toast при успехе/ошибке, кнопка «Сохранить» блокируется на время запроса. POST /save-telegram при заголовках Accept: application/json или X-Requested-With: XMLHttpRequest возвращает JSON вместо редиректа.
+**Реализовано (3.2):** общий JS `static/js/app.js` (showToast, apiPostForm); формы **Telegram** и **Модель** отправляются через fetch при наличии app.js, ответ JSON (success/error), toast при успехе/ошибке, кнопка «Сохранить» блокируется на время запроса. POST /save-telegram и POST /save-model при заголовках Accept: application/json или X-Requested-With: XMLHttpRequest возвращают JSON вместо редиректа.
 
 **Цель:** страницы обновляются без полной перезагрузки, есть индикаторы загрузки и плавные обновления данных.
 

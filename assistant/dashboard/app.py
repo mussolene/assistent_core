@@ -516,7 +516,7 @@ def save_telegram():
 _MODEL_BODY = """
 <h1>Модель</h1>
 <p class="sub">Подключение к API (Ollama / OpenAI-совместимый).</p>
-<form method="post" action="/save-model">
+<form method="post" action="/save-model" id="form-model">
   <div class="card">
     <label for="base_url">URL API</label>
     <input id="base_url" name="openai_base_url" type="url" value="{{ config.get('OPENAI_BASE_URL', '') }}" placeholder="http://host.docker.internal:11434/v1">
@@ -550,11 +550,28 @@ _MODEL_BODY = """
       <input id="api_key" name="openai_api_key" type="password" value="{{ config.get('OPENAI_API_KEY', '') }}" placeholder="sk-... или ollama" autocomplete="off">
     </div>
   </details>
-  <button type="submit" class="btn">Сохранить</button>
+  <button type="submit" class="btn" id="btn-save-model">Сохранить</button>
   <button type="button" id="btn-test-model" class="btn btn-secondary" style="margin-left:0.5rem" onclick="testModel()">Проверить подключение</button>
   <span id="model-result" style="margin-left:0.5rem;font-size:0.9rem"></span>
 </form>
 <script>
+(function() {
+  var form = document.getElementById('form-model');
+  if (form && window.apiPostForm && window.showToast) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = document.getElementById('btn-save-model');
+      if (btn) btn.disabled = true;
+      window.apiPostForm('/save-model', form)
+        .then(function(d) {
+          if (d.success) { window.showToast('Сохранено.', 'success'); }
+          else { window.showToast(d.error || 'Ошибка', 'error'); }
+        })
+        .catch(function(err) { window.showToast(err.message || 'Ошибка', 'error'); })
+        .finally(function() { if (btn) btn.disabled = false; });
+    });
+  }
+})();
 function testModel() {
   var r = document.getElementById('model-result');
   var btn = document.getElementById('btn-test-model');
@@ -605,6 +622,8 @@ def save_model():
     set_config_in_redis_sync(
         redis_url, "OPENAI_API_KEY", (request.form.get("openai_api_key") or "").strip()
     )
+    if _wants_json():
+        return jsonify({"success": True})
     flash("Сохранено. Настройки модели применяются автоматически.", "success")
     return redirect(url_for("model"))
 
