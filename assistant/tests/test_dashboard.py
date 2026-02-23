@@ -327,6 +327,17 @@ def test_test_bot_button_has_id_for_loading(client, auth_mock, monkeypatch):
     assert "btn.disabled" in body or "disabled" in body
 
 
+def test_model_page_has_accordion(client, auth_mock, monkeypatch):
+    """Страница Модель содержит блок «Дополнительно» (UX_UI 4.3)."""
+    monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})
+    r = client.get("/model")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "Дополнительно" in body
+    assert "<details" in body
+    assert "details-summary" in body
+
+
 def test_data_page_renders(client, auth_mock, monkeypatch):
     """Страница Данные: Qdrant URL, ссылки на Репо и Память."""
     monkeypatch.setattr("assistant.dashboard.app.get_config_from_redis_sync", lambda url: {})

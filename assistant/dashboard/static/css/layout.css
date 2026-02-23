@@ -68,6 +68,25 @@ h1 {
   margin-bottom: 1rem;
 }
 
+details.card .details-summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--muted);
+  list-style: none;
+  padding: 0;
+  margin: -0.25rem 0 0;
+}
+details.card .details-summary::-webkit-details-marker {
+  display: none;
+}
+details.card[open] .details-summary {
+  margin-bottom: 0.5rem;
+  color: var(--text);
+}
+details.card > *:not(.details-summary) {
+  margin-top: 0.5rem;
+}
+
 label {
   display: block;
   font-size: 0.85rem;

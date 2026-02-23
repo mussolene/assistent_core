@@ -478,27 +478,30 @@ _MODEL_BODY = """
     <label for="model_name">Имя модели</label>
     <input id="model_name" name="model_name" type="text" value="{{ config.get('MODEL_NAME', '') }}" placeholder="llama3.2">
   </div>
-  <div class="card">
-    <label for="fallback_name">Fallback (облако)</label>
-    <input id="fallback_name" name="model_fallback_name" type="text" value="{{ config.get('MODEL_FALLBACK_NAME', '') }}" placeholder="gpt-4">
-  </div>
-  <div class="card">
-    <div class="row">
-      <input type="checkbox" id="cloud" name="cloud_fallback_enabled" value="1" {{ 'checked' if config.get('CLOUD_FALLBACK_ENABLED') == 'true' else '' }}>
-      <label for="cloud" style="margin-bottom:0">Облачный fallback</label>
+  <details class="card" style="margin-bottom:1rem">
+    <summary class="details-summary">Дополнительно</summary>
+    <div class="card">
+      <label for="fallback_name">Fallback (облако)</label>
+      <input id="fallback_name" name="model_fallback_name" type="text" value="{{ config.get('MODEL_FALLBACK_NAME', '') }}" placeholder="gpt-4">
     </div>
-  </div>
-  <div class="card">
-    <div class="row">
-      <input type="checkbox" id="lm_native" name="lm_studio_native" value="1" {{ 'checked' if config.get('LM_STUDIO_NATIVE') == 'true' else '' }}>
-      <label for="lm_native" style="margin-bottom:0">LM Studio native API</label>
+    <div class="card">
+      <div class="row">
+        <input type="checkbox" id="cloud" name="cloud_fallback_enabled" value="1" {{ 'checked' if config.get('CLOUD_FALLBACK_ENABLED') == 'true' else '' }}>
+        <label for="cloud" style="margin-bottom:0">Облачный fallback</label>
+      </div>
     </div>
-    <p class="hint">Стриминг по <a href="https://lmstudio.ai/docs/developer/rest/streaming-events" target="_blank" rel="noopener">SSE</a>: размышления (reasoning) скрыты, в чат дописывается только итоговый ответ.</p>
-  </div>
-  <div class="card">
-    <label for="api_key">API ключ</label>
-    <input id="api_key" name="openai_api_key" type="password" value="{{ config.get('OPENAI_API_KEY', '') }}" placeholder="sk-... или ollama" autocomplete="off">
-  </div>
+    <div class="card">
+      <div class="row">
+        <input type="checkbox" id="lm_native" name="lm_studio_native" value="1" {{ 'checked' if config.get('LM_STUDIO_NATIVE') == 'true' else '' }}>
+        <label for="lm_native" style="margin-bottom:0">LM Studio native API</label>
+      </div>
+      <p class="hint">Стриминг по <a href="https://lmstudio.ai/docs/developer/rest/streaming-events" target="_blank" rel="noopener">SSE</a>: размышления (reasoning) скрыты, в чат дописывается только итоговый ответ.</p>
+    </div>
+    <div class="card">
+      <label for="api_key">API ключ</label>
+      <input id="api_key" name="openai_api_key" type="password" value="{{ config.get('OPENAI_API_KEY', '') }}" placeholder="sk-... или ollama" autocomplete="off">
+    </div>
+  </details>
   <button type="submit" class="btn">Сохранить</button>
   <button type="button" id="btn-test-model" class="btn btn-secondary" style="margin-left:0.5rem" onclick="testModel()">Проверить подключение</button>
   <span id="model-result" style="margin-left:0.5rem;font-size:0.9rem"></span>

@@ -12,6 +12,7 @@
 - **Фаза 4:** CSS вынесен в `static/css/layout.css`, подключение через `<link>` в layout; добавлены стили `.btn:disabled`. Индикатор загрузки при «Проверить бота» и «Проверить подключение»: кнопки с id `btn-test-bot` и `btn-test-model`, отключение на время fetch и включение в `finally`. Тесты: test_layout_includes_stylesheet, test_test_bot_button_has_id_for_loading.
 - **Фаза 5:** Регрессия: pytest assistant/tests, покрытие ≥90%, ruff без замечаний. Приёмочный чек-лист — docs/ACCEPTANCE.md.
 - **П.5 улучшение списков:** Репо: подпись «Страница N из K» при известном total (склонированные). Функция `format_repos_reply_text(label, page, total)`; тесты в test_channels.py.
+- **4.3 аккордеон «Дополнительно»:** На странице Модель блок Fallback, облачный fallback, LM Studio native и API ключ вынесены в `<details class="card">` с заголовком «Дополнительно»; стили в layout.css (`.details-summary`). Тест: test_model_page_has_accordion.
 
 ---
 
