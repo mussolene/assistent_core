@@ -57,8 +57,8 @@
 
 | # | Задача | Статус | Файлы / примечания |
 |---|--------|--------|---------------------|
-| 1 | Создать docs/CORE_PRODUCT.md | ⬜ | Содержание: определение ядра (Telegram, ИИ, задачи, short_term/summary память, MCP); опциональные модули (vector_rag, file_indexing, dashboard, email, Qdrant); команды запуска минимального контура (redis + core + telegram-adapter, опционально MCP) |
-| 2 | Ссылка на CORE_PRODUCT из README и ROADMAP | ⬜ | Одна строка в README; в ROADMAP.md или ANALYTICS — ссылка |
+| 1 | Создать docs/CORE_PRODUCT.md | ✅ | Содержание: определение ядра (Telegram, ИИ, задачи, short_term/summary память, MCP); опциональные модули (vector_rag, file_indexing, dashboard, email, Qdrant); команды запуска минимального контура (redis + core + telegram-adapter, опционально MCP) |
+| 2 | Ссылка на CORE_PRODUCT из README и ROADMAP | ✅ | Одна строка в README; в ROADMAP.md или ANALYTICS — ссылка |
 
 **Критерий приёмки:** по документу можно понять минимальный набор компонентов и как его собрать.
 
