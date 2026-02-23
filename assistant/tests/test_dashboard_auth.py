@@ -20,6 +20,7 @@ from assistant.dashboard.auth import (
     get_user,
     list_users,
     setup_done,
+    update_password,
     verify_password,
     verify_user,
 )
@@ -120,6 +121,43 @@ def test_list_users(redis_url):
             client.delete(key)
         client.delete(USERS_SET_KEY)
         client.close()
+
+
+def test_update_password(redis_url):
+    """update_password меняет пароль; верификация по новому паролю (ROADMAP §1)."""
+    try:
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        client.ping()
+    except Exception:
+        pytest.skip("Redis not available")
+    client.delete(USER_PREFIX + "pw_user")
+    client.srem(USERS_SET_KEY, "pw_user")
+    try:
+        create_user(client, "pw_user", "old_pass", role="viewer")
+        assert verify_user(client, "pw_user", "old_pass") is not None
+        assert verify_user(client, "pw_user", "new_pass") is None
+        update_password(client, "pw_user", "new_pass")
+        assert verify_user(client, "pw_user", "old_pass") is None
+        assert verify_user(client, "pw_user", "new_pass") is not None
+    finally:
+        client.delete(USER_PREFIX + "pw_user")
+        client.srem(USERS_SET_KEY, "pw_user")
+        client.close()
+
+
+def test_update_password_unknown_user_raises(redis_url):
+    """update_password для несуществующего логина raises ValueError."""
+    try:
+        import redis
+
+        client = redis.from_url(redis_url, decode_responses=True)
+        client.ping()
+    except Exception:
+        pytest.skip("Redis not available")
+    with pytest.raises(ValueError, match="not found"):
+        update_password(client, "nonexistent_user_xyz", "any")
 
 
 def test_create_user_duplicate_raises(redis_url):

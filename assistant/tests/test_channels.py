@@ -145,6 +145,14 @@ def test_format_status_message():
     assert "—" in text0
 
 
+def test_format_status_message_with_dashboard_url():
+    """С ссылкой на дашборд в ответе /status есть пояснение и URL."""
+    text = format_status_message("x", 1, "http://localhost:8080/system")
+    assert "Задачи" in text
+    assert "Подробнее" in text
+    assert "http://localhost:8080/system" in text
+
+
 def test_pairing_success_text_unified():
     """Единый тон: одна фраза для привязки по коду и для глобального pairing."""
     assert "Привязка выполнена" in PAIRING_SUCCESS_TEXT

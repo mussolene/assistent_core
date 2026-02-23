@@ -9,7 +9,7 @@
 | Раздел | Статус | Примечание |
 |--------|--------|------------|
 | **§0 Покрытие тестами** | ✅ Готово | 90% достигнуто, `fail_under = 90`. T1–T9 по сути закрыты. |
-| **§1 Многопользовательский режим** | ✅ Частично | Модель, сессии, роли, /login, /setup (A, B). Добавлено: страница «Пользователи» (/users), добавление пользователя (POST /add-user) — только owner; list_users в auth. |
+| **§1 Многопользовательский режим** | ✅ Готово | Модель, сессии, роли, /login, /setup, /users, add-user, list_users. Смена пароля: update_password в auth; страница /change-password (свой пароль), форма на /users для owner (сброс пароля пользователю). |
 | **§2 Спаривание Telegram (этап C)** | ✅ Готово | Код + magic-ссылка, API /api/pairing-code, /start &lt;code&gt; и /pair &lt;code&gt; в боте, блок в дашборде. |
 | **§3.1 Мониторинг** | ✅ Готово | /api/monitor: redis, services, tasks, keys_by_prefix; автообновление раз в 10 с. Добавлен GET /api/health без авторизации. |
 | **§3.2 Формы через fetch + toast** | ✅ Готово | Telegram, Модель, Email, Данные — fetch, JSON, toast, app.js. |

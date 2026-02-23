@@ -152,9 +152,17 @@ def get_settings_message_text(dashboard_url: str) -> str:
     )
 
 
-def format_status_message(model_name: str, task_count: int) -> str:
-    """Форматирование ответа на /status (для тестов и отправки)."""
-    return f"<b>Статус</b>\nМодель: {model_name}\nЗадач в очереди: {task_count}"
+def format_status_message(
+    model_name: str, task_count: int, dashboard_system_url: str | None = None
+) -> str:
+    """Форматирование ответа на /status (для тестов и отправки). Если передан dashboard_system_url — добавляем пояснение про задачи."""
+    msg = f"<b>Статус</b>\nМодель: {model_name}\nЗадач в очереди: {task_count}"
+    if dashboard_system_url:
+        msg += (
+            "\n\n<i>Задачи — запросы к ассистенту в обработке. "
+            f"Подробнее: {_escape_html(dashboard_system_url)}</i>"
+        )
+    return msg
 
 
 def get_config() -> dict:
@@ -1111,6 +1119,12 @@ async def run_telegram_adapter() -> None:
                     chat_id = str(msg["chat"]["id"])
                     message_id = str(msg.get("message_id", ""))
                     text = (msg.get("text") or msg.get("caption") or "").strip()
+                    # Нормализация команд: Telegram может присылать /help@BotName — оставляем только /command
+                    if text.startswith("/") and "@" in text:
+                        text = text.split("@", 1)[0]
+                    # Алиас опечатки (gitab → gitlab)
+                    if text == "/gitab":
+                        text = "/gitlab"
                     # Вложения: документ или фото — передаём в core для индексации в вектор и хранения ссылки
                     attachments: list[dict] = []
                     if msg.get("document"):
@@ -1314,9 +1328,13 @@ async def run_telegram_adapter() -> None:
 
                             data = await get_status_from_redis(redis_url)
                             model_name = str(data.get("model_name", "—"))
+                            dashboard_url = os.getenv(
+                                "DASHBOARD_URL", "http://localhost:8080"
+                            ).rstrip("/")
                             status_text = format_status_message(
                                 _escape_html(model_name),
                                 data.get("task_count", 0),
+                                f"{dashboard_url}/system",
                             )
                             async with httpx.AsyncClient() as client:
                                 await client.post(
@@ -1344,13 +1362,20 @@ async def run_telegram_adapter() -> None:
                         if not isinstance(admin_ids, list):
                             admin_ids = [int(x) for x in str(admin_ids).split(",") if str(x).strip()]
                         if uid_int not in admin_ids:
+                            dashboard_url = os.getenv(
+                                "DASHBOARD_URL", "http://localhost:8080"
+                            ).rstrip("/")
+                            deny_msg = (
+                                "Недостаточно прав. Добавьте свой Telegram ID в список "
+                                f"админов в дашборде: {dashboard_url} → Каналы → Telegram → ID администраторов."
+                            )
                             try:
                                 async with httpx.AsyncClient() as client:
                                     await client.post(
                                         f"{base_url}/sendMessage",
                                         json={
                                             "chat_id": chat_id,
-                                            "text": "Недостаточно прав.",
+                                            "text": _escape_html(deny_msg),
                                             "parse_mode": PARSE_MODE,
                                         },
                                         timeout=5.0,
@@ -1373,7 +1398,7 @@ async def run_telegram_adapter() -> None:
                         except Exception as e:
                             logger.debug("set_restart_requested/sendMessage: %s", e)
                         continue
-                    # /repos, /github, /gitlab — список репо с inline-кнопками и пагинацией (9.2)
+                    # /repos, /github, /gitlab (и алиас /gitab) — список репо с inline-кнопками и пагинацией (9.2)
                     if text in ("/repos", "/github", "/gitlab"):
                         dashboard_url = (
                             os.getenv("DASHBOARD_URL", "http://localhost:8080")

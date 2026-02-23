@@ -15,6 +15,7 @@
 - **4.3 аккордеон «Дополнительно»:** На странице Модель блок Fallback, облачный fallback, LM Studio native и API ключ вынесены в `<details class="card">` с заголовком «Дополнительно»; стили в layout.css (`.details-summary`). Тест: test_model_page_has_accordion.
 - **ROADMAP 3.4 справка по ролям:** В /help блок «Для админов» с /restart; в BOT_COMMANDS у команды restart поле `admin_only: True`. Тест: test_get_help_message_text_has_admin_section.
 - **ROADMAP §1 управление пользователями:** Страница «Пользователи» (/users) для владельца: список пользователей, форма добавления (логин, пароль, роль). POST /add-user (только owner). В навбаре ссылка «Пользователи» только при role=owner. Тесты: test_list_users, test_users_page_owner_200, test_users_page_viewer_403, test_add_user_owner_creates_and_redirects.
+- **ROADMAP §1 смена пароля:** auth.update_password; страница /change-password (текущий + новый пароль), ссылка «Сменить пароль» в шапке; на /users форма «Сменить пароль пользователя» (owner). Тесты: test_update_password, test_change_password_page_*.
 
 ---
 

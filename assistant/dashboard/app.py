@@ -45,6 +45,7 @@ from assistant.dashboard.auth import (
     list_users,
     require_role,
     setup_done,
+    update_password,
     verify_user,
 )
 from assistant.dashboard.config_store import (
@@ -91,6 +92,7 @@ INDEX_HTML = """
     {% endif %}
     {% if current_user %}
     <span style="margin-left:auto;color:var(--muted);font-size:0.9rem">{{ current_user.display_name or current_user.login }} ({{ current_user.role }})</span>
+    <a href="{{ url_for('change_password_page') }}" style="margin-left:0.5rem">Сменить пароль</a>
     <a href="{{ url_for('logout') }}" style="margin-left:0.5rem">Выйти</a>
     {% endif %}
   </nav>
@@ -1415,6 +1417,37 @@ _USERS_BODY = """
   </div>
   <button type="submit" class="btn">Добавить пользователя</button>
 </form>
+<h2 style="margin-top:1.5rem;">Сменить пароль пользователя</h2>
+<p class="hint">Владелец может сбросить пароль любому пользователю (без ввода текущего пароля).</p>
+<form method="post" action="{{ url_for('change_user_password') }}" style="margin-top:0.5rem;">
+  <div class="card">
+    <label for="ch-user-login">Логин</label>
+    <select id="ch-user-login" name="login" required>
+      {% for u in users %}
+      <option value="{{ u.login }}">{{ u.login }} ({{ u.role }})</option>
+      {% endfor %}
+    </select>
+    <label for="ch-user-new-password">Новый пароль</label>
+    <input type="password" id="ch-user-new-password" name="new_password" required minlength="1" placeholder="новый пароль">
+  </div>
+  <button type="submit" class="btn">Сменить пароль</button>
+</form>
+"""
+
+_CHANGE_PASSWORD_BODY = """
+<h1>Сменить пароль</h1>
+<p class="sub">Укажите текущий пароль и новый пароль (ROADMAP §1).</p>
+<form method="post" action="{{ url_for('change_password_page') }}">
+  <div class="card">
+    <label for="current-password">Текущий пароль</label>
+    <input type="password" id="current-password" name="current_password" required placeholder="текущий пароль">
+    <label for="new-password">Новый пароль</label>
+    <input type="password" id="new-password" name="new_password" required minlength="1" placeholder="новый пароль">
+    <label for="new-password2">Повторите новый пароль</label>
+    <input type="password" id="new-password2" name="new_password2" required minlength="1" placeholder="повторите">
+  </div>
+  <button type="submit" class="btn">Сменить пароль</button>
+</form>
 """
 
 # ----- Monitor -----
@@ -1601,6 +1634,60 @@ def add_user():
     try:
         create_user(r, login_name, password, role=role)
         flash(f"Пользователь «{login_name}» создан.", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("users_page"))
+
+
+@app.route("/change-password", methods=["GET", "POST"])
+def change_password_page():
+    """Страница смены своего пароля (текущий + новый). ROADMAP §1."""
+    if request.method == "GET":
+        config = load_config()
+        return render_template_string(
+            INDEX_HTML.replace("{% block content %}{% endblock %}", _CHANGE_PASSWORD_BODY),
+            config=config,
+            section="change_password",
+        )
+    # POST
+    current = request.form.get("current_password") or ""
+    new1 = request.form.get("new_password") or ""
+    new2 = request.form.get("new_password2") or ""
+    if not current or not new1:
+        flash("Укажите текущий и новый пароль.", "error")
+        return redirect(url_for("change_password_page"))
+    if new1 != new2:
+        flash("Новый пароль и повтор не совпадают.", "error")
+        return redirect(url_for("change_password_page"))
+    r = get_redis()
+    user = get_current_user(r)
+    if not user:
+        flash("Сессия не найдена. Войдите снова.", "error")
+        return redirect(url_for("login"))
+    if not verify_user(r, user["login"], current):
+        flash("Неверный текущий пароль.", "error")
+        return redirect(url_for("change_password_page"))
+    try:
+        update_password(r, user["login"], new1)
+        flash("Пароль изменён.", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("change_password_page"))
+
+
+@app.route("/change-user-password", methods=["POST"])
+@require_role("owner")
+def change_user_password():
+    """Сменить пароль пользователю (только owner, без текущего пароля)."""
+    login_name = (request.form.get("login") or "").strip()
+    new_password = request.form.get("new_password") or ""
+    if not login_name or not new_password:
+        flash("Укажите логин и новый пароль.", "error")
+        return redirect(url_for("users_page"))
+    r = get_redis()
+    try:
+        update_password(r, login_name, new_password)
+        flash(f"Пароль для «{login_name}» изменён.", "success")
     except ValueError as e:
         flash(str(e), "error")
     return redirect(url_for("users_page"))

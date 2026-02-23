@@ -194,6 +194,27 @@ def test_users_page_viewer_403(client, redis_url, monkeypatch):
     assert r.status_code == 403
 
 
+def test_change_password_page_requires_auth(client, monkeypatch):
+    """GET /change-password без авторизации редиректит на логин (ROADMAP §1)."""
+    from unittest.mock import MagicMock
+
+    monkeypatch.setattr("assistant.dashboard.app.get_redis", MagicMock())
+    monkeypatch.setattr("assistant.dashboard.app.setup_done", lambda r: True)
+    monkeypatch.setattr("assistant.dashboard.app.get_current_user", lambda r: None)
+    r = client.get("/change-password")
+    assert r.status_code == 302
+    assert "login" in (r.headers.get("Location") or "")
+
+
+def test_change_password_page_200_when_logged_in(client, auth_mock, monkeypatch):
+    """GET /change-password для авторизованного пользователя возвращает 200 (ROADMAP §1)."""
+    r = client.get("/change-password")
+    assert r.status_code == 200
+    body = r.data.decode("utf-8", errors="replace")
+    assert "Сменить пароль" in body
+    assert "Текущий пароль" in body or "текущий" in body
+
+
 def test_add_user_owner_creates_and_redirects(client, redis_url, monkeypatch):
     """POST /add-user от owner создаёт пользователя и редирект на /users (ROADMAP §1)."""
     from assistant.dashboard.auth import list_users

@@ -111,6 +111,18 @@ def verify_user(redis_client: Any, login: str, password: str) -> dict[str, Any] 
     return {k: v for k, v in data.items() if k not in ("password_hash", "salt")}
 
 
+def update_password(redis_client: Any, login: str, new_password: str) -> None:
+    """Set new password for user. Raises ValueError if user not found. ROADMAP §1."""
+    data = get_user(redis_client, login)
+    if not data:
+        raise ValueError("User not found")
+    password_hash, salt_hex = _hash_password(new_password)
+    data["password_hash"] = password_hash
+    data["salt"] = salt_hex
+    key = USER_PREFIX + login
+    redis_client.set(key, json.dumps(data))
+
+
 def create_session(redis_client: Any, login: str) -> str:
     """Create session for login. Returns session_id."""
     sid = secrets.token_urlsafe(32)
