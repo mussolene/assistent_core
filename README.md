@@ -100,6 +100,8 @@ docker compose up --build
 
 **Обновление кода без пересборки:** монтирование репо с хоста (volume) + `git pull` и перезапуск контейнеров; при необходимости — проверка каждые N минут через cron. Подробно: [docs/DOCKER_UPDATE_WITHOUT_REBUILD.md](docs/DOCKER_UPDATE_WITHOUT_REBUILD.md).
 
+**Установка без Docker (pip):** по умолчанию ставится ядро без векторной памяти (минимальный профиль). Для RAG и эмбеддингов: `pip install .[vector]`. Опциональные группы: `vector`, `dashboard`, `files`, `archives`, `ocr` (см. pyproject.toml).
+
 Подробная настройка и запуск без Docker — в [assistant/README.md](assistant/README.md).
 
 ### Конфигурация (приоритет)

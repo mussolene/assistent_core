@@ -26,11 +26,11 @@
 
 | # | Задача | Статус | Файлы / примечания |
 |---|--------|--------|---------------------|
-| 1 | Вынести `sentence-transformers` в optional `vector` | ⬜ | pyproject.toml: убрать из `dependencies`, добавить `[project.optional-dependencies].vector` |
-| 2 | Сделать импорт vector_rag/эмбеддингов опциональным | ⬜ | В коде: при отсутствии sentence_transformers — заглушка или отключение RAG в memory/skills |
-| 3 | Добавить профиль `minimal` в optional-dependencies | ⬜ | minimal = только core deps (redis, httpx, openai, pydantic, pydantic-settings, pyyaml); без dashboard, files, archives, ocr, vector |
-| 4 | Обновить README: установка minimal vs full | ⬜ | Раздел установки: `pip install .` (full) vs `pip install .[minimal]` |
-| 5 | Проверить: docker образ или CI с minimal не падает | ⬜ | Опционально отдельный Dockerfile.minimal или шаг в CI |
+| 1 | Вынести `sentence-transformers` в optional `vector` | ✅ | pyproject.toml: убрать из `dependencies`, добавить `[project.optional-dependencies].vector` |
+| 2 | Сделать импорт vector_rag/эмбеддингов опциональным | ✅ | В коде: при отсутствии sentence_transformers — заглушка или отключение RAG в memory/skills |
+| 3 | Добавить профиль `minimal` в optional-dependencies | ✅ | minimal = только core deps (redis, httpx, openai, pydantic, pydantic-settings, pyyaml); без dashboard, files, archives, ocr, vector |
+| 4 | Обновить README: установка minimal vs full | ✅ | Раздел установки: `pip install .` (full) vs `pip install .[minimal]` |
+| 5 | Проверить: docker образ или CI с minimal не падает | — | Опционально отдельный Dockerfile.minimal или шаг в CI |
 
 **Критерий приёмки:** `pip install .[minimal]` успешен; запуск assistant-core + telegram-adapter без vector_rag не падает (RAG отключён или заглушка).
 
